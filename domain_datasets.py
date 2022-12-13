@@ -1,5 +1,6 @@
 import os
 import json
+import torch
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,12 +36,19 @@ class NICODataset(data.Dataset):
         return label_index
 
 
-def build_dataset(use_track, root, val_ratio, train_transform, val_transform, seed=0):
+    def fetch_model(self):
+        """
+        :return: trained classifier, pytorch lightning
+        """
+        pass
+
+
+def build_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
     if use_track == 1:
         track_data_dir = os.path.join(root, "track_1")
         data_dir = os.path.join(track_data_dir, "public_dg_0416", "train")
         label_map_json = os.path.join(track_data_dir, "dg_label_id_mapping.json")
-        image_path_list = glob(f"{data_dir}/*/*/*.jpg")
+        image_path_list = glob(f"{data_dir}/{context}/*/*.jpg")
     else:
         track_data_dir = os.path.join(root, "track_2")
         data_dir = os.path.join(
@@ -77,10 +85,9 @@ class NICOTestDataset(data.Dataset):
 
 
 if __name__ == '__main__':
-    trans = [transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
                                               transforms.Resize(512),
-                                              transforms.ToTensor(),]
-    for x, y in build_dataset(1, "datasets/NICO++", 0, trans, trans,0)[0]:
-        plt.imshow(x)
-        plt.show()
+                                              transforms.ToTensor(),])
+    for x, y, context in build_dataset(1, "../../Datasets/NICO++", 0, trans, trans, context="autumn", seed=0)[0]:
+        print(context)

@@ -1,3 +1,5 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -9,8 +11,72 @@ from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
+import torchvision.transforms as transforms
 from tqdm import tqdm
 import pickle as pkl
+from domain_datasets import build_dataset
+
+class robustSD:
+    def __init__(self, rep_model, classifier, config):
+        self.rep_model = rep_model
+        self.classifier = classifier
+        self.config = config
+        self.pca = PCA(2)
+
+
+    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, sample_size):
+        sample_size = min(sample_size, len(ood_dataset))
+        ind_dataset_name = ""
+        ood_dataset_name = ""
+        fname_encodings = f"robustSD_{ind_dataset_name}_enodings"
+        fname_losses = f"robustSD_{ind_dataset_name}_losses"
+
+        try:
+            latents = pkl.load(open(fname_encodings, "rb"))
+            losses = pkl.load(open(fname_losses, "rb"))
+        except FileNotFoundError:
+            latents = np.zeros((len(ind_dataset), self.rep_model.latent_dim))
+            losses = np.zeros(len(ind_dataset))
+
+            for i, (x, y, _) in ind_dataset:
+                latents[i] = self.rep_model.encode(x.to(self.config["device"])).cpu().numpy()
+                losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
+            pkl.dump(latents, open(fname_encodings, "wb"))
+            pkl.dump(losses, open(fname_losses, "wb"))
+
+        ood_latents = np.zeros((len(ood_dataset), self.rep_model.latent_dim))
+        ood_losses = np.zeros(len(ood_dataset))
+        for i, (x, y, _) in ood_dataset:
+            ood_latents[i] = self.rep_model.encode(x.to(self.config["device"])).cpu().numpy()
+            ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
+                                                     y.to(self.config["device"])).cpu().numpy()
+
+        self.pca.fit(np.vstack(latents, ood_latents))
+        latents = self.pca.transform(latents)
+        ood_latents = self.pca.transform(ood_latents)
+
+        k_n_indx = [np.argmin(np.sum((np.expand_dims(i, 0) - latents) ** 2, axis=-1)) for i in ood_latents]
+        k_nearest = latents[k_n_indx]
+
+        p_vals_kn = []
+        # p_vals_basic = []
+        for i in range(1000):
+            sample_idx = np.random.choice(range(len(ood_latents)), sample_size)
+            p_vals_kn.append(
+                min(np.min([ks_2samp(k_nearest[sample_idx, i], ood_latents[sample_idx, i]) for i in range(2)]) * 2, 1)
+            )
+            # p_vals_basic.append(
+            #     min(np.min([ks_2samp(latents[:, i], ood_latents[sample_idx, i]) for i in range(2)]) * 2, 1)
+            # )
+        return np.array(p_vals_kn), (losses, ood_losses)
+
+
+    def bootstrap_severity_estimation(self):
+        pass
+
+    def eval_given_transforms(self, dataset, transforms):
+        for transform in transforms:
+            pass
 
 
 def generate_plot(dataloaders, fold_names):
@@ -19,7 +85,7 @@ def generate_plot(dataloaders, fold_names):
     config = yaml.safe_load("configs/vae.yaml")
     vae_exp = VAEXperiment(model, config)
     vae_exp.load_state_dict(
-        torch.load("/home/birk/BatchDiversitySampling/logs/VanillaVAE/version_0/checkpoints/epoch=16-step=31109.ckpt")[
+        torch.load("lightning_logs/version_1/checkpoints/epoch=42-step=2752215.ckpt")[
             "state_dict"])
     try:
         ind_latents = pkl.load(open("latents_vis_ind.pkl", "rb"))
@@ -132,44 +198,17 @@ def sample_p_vals(dataloaders, fold_names, n_samples, test_samples):
 
 if __name__ == '__main__':
     # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
-    datasets = create_datasets_by_fold()
-    kn_acc=[]
-    basic_acc=[]
-    kn_dr = []
-    v_dr = []
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                        transforms.Resize((512,512)),
+                        transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+
+
+
     sample_range = range(100, 2500, 100)
     for sample_size in sample_range:
-        kn_tpn = 0
-        basic_tpn = 0
-        total = 3000
-        kn_fold_prec = [0, 0, 0]
-        basic_fold_prec = [0, 0, 0]
         for i, fold in enumerate(["ind_val", "ood", "test_val"]):
             kn_pval, basic_pval = sample_p_vals(datasets, ["ind", fold], 1000, sample_size)
-            if fold == "ind_val":
-                kn_tpn += (kn_pval > 0.05).astype(int).sum()
-                kn_fold_prec[i] = (kn_pval > 0.05).astype(int).mean()
-                basic_fold_prec[i] = (basic_pval > 0.05).astype(int).mean()
-                basic_tpn += (basic_pval > 0.05).astype(int).sum()
-            else:
-                kn_tpn += (kn_pval < 0.05).astype(int).sum()
-                kn_fold_prec[i] = (kn_pval < 0.05).astype(int).mean()
-                basic_fold_prec[i] = (basic_pval < 0.05).astype(int).mean()
-                basic_tpn += (basic_pval < 0.05).astype(int).sum()
-        kn_dr.append(kn_fold_prec)
-        v_dr.append(basic_fold_prec)
-        kn_acc.append(kn_tpn / total)
-        basic_acc.append(basic_tpn / total)
-    kn_dr = np.array(kn_dr)
-    v_dr = np.array(v_dr)
-    plt.rcParams["figure.figsize"] = (10, 4)
 
-    for i, fold in enumerate(["ind_val", "ood", "test_val"]):
-        plt.plot(sample_range, kn_dr[:, i], label=fold)
-    plt.plot(sample_range, kn_acc, label="Total Accuracy")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-    print("acc")
-    print(kn_acc)
-    print(basic_acc)
+

@@ -36,6 +36,7 @@ class VAEDataset(LightningDataModule):
         patch_size: Union[int, Sequence[int]] = (256, 256),
         num_workers: int = 0,
         pin_memory: bool = False,
+        context="dim",
         **kwargs,
     ):
         super().__init__()
@@ -48,6 +49,7 @@ class VAEDataset(LightningDataModule):
             self.patch_size = patch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.context=context
 
     def setup(self, stage: Optional[str] = None) -> None:
         train_transforms = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -60,9 +62,7 @@ class VAEDataset(LightningDataModule):
                                             transforms.Resize(self.patch_size),
                                             transforms.ToTensor(),])
 
-        self.train_dataset, self.val_dataset = build_dataset(1, "datasets/NICO++", 0, train_transforms, val_transforms,0)
-        print(len(self.train_dataset))
-        print(len(self.val_dataset))
+        self.train_dataset, self.val_dataset = build_dataset(1, "../../Datasets/NICO++", 0.1, train_transforms, val_transforms, context=self.context, seed=0)
         
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
