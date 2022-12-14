@@ -1,6 +1,6 @@
 from pytorch_lightning import Trainer
 from torchvision.models import resnet34
-from domain_datasets import build_dataset
+from domain_datasets import build_nico_dataset
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
@@ -30,7 +30,7 @@ def train_inferredclassifier():
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
-    train_set = build_dataset(1, "datasets/NICO++", 0, trans, trans,0)[0]
+    train_set = build_nico_dataset(1, "datasets/NICO++", 0, trans, trans, 0)[0]
     splitter = FeatureOODSplitter(train_set, split=(80,10,10))
     train_loader = splitter.get_trainloader()
     val_loader = splitter.get_valloader()

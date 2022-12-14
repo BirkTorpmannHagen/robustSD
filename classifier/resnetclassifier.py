@@ -1,6 +1,6 @@
 from pytorch_lightning import Trainer
 from torchvision.models import resnet34
-from domain_datasets import build_dataset
+from domain_datasets import build_nico_dataset
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
@@ -57,6 +57,9 @@ class ResNetClassifier(pl.LightningModule):
     def forward(self, X):
         return self.resnet_model(X)
 
+    def encode(self, X):
+        return [torch.nn.Sequential(*self.children()[:n]) for n in range(len(self.children()))]
+
     def compute_loss(self, x, y):
         return self.criterion(self(x), y)
 
@@ -71,7 +74,7 @@ class ResNetClassifier(pl.LightningModule):
             transforms.RandomVerticalFlip(0.3),
             transforms.ToTensor()
         ])
-        img_train= build_dataset(1, "datasets/NICO++", 0.1, transform, transform, 0)[0]
+        img_train= build_nico_dataset(1, "datasets/NICO++", 0.1, transform, transform, 0)[0]
         return DataLoader(img_train, batch_size=self.batch_size, shuffle=True)
 
     def training_step(self, batch, batch_idx):
@@ -95,7 +98,7 @@ class ResNetClassifier(pl.LightningModule):
             transforms.ToTensor(),
         ])
 
-        img_val = build_dataset(1, "datasets/NICO++", 0.1, transform, transform, 0)[1]
+        img_val = build_nico_dataset(1, "datasets/NICO++", 0.1, transform, transform, 0)[1]
 
         return DataLoader(img_val, batch_size=1, shuffle=False)
 

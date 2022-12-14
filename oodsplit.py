@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from domain_datasets import build_dataset
+from domain_datasets import build_nico_dataset
 from torch.utils.data import DataLoader
 from vae.models.vanilla_vae import VanillaVAE
 from vae.vae_experiment import VAEXperiment
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
-    train_set = build_dataset(1, "datasets/NICO++", 0, trans, trans,0)[0]
+    train_set = build_nico_dataset(1, "datasets/NICO++", 0, trans, trans, 0)[0]
     # splitter = VAEOODSplitter(dloader)
     splitter = FeatureOODSplitter(train_set)
     for x,y,context in splitter.get_trainloader():

@@ -43,7 +43,7 @@ class NICODataset(data.Dataset):
         pass
 
 
-def build_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
+def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
     if use_track == 1:
         track_data_dir = os.path.join(root, "track_1")
         data_dir = os.path.join(track_data_dir, "public_dg_0416", "train")
@@ -65,7 +65,49 @@ def build_dataset(use_track, root, val_ratio, train_transform, val_transform, co
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
+def build_polyp_dataset(root, val_ratio, train_transform, val_transform, fold, seed=0):
+    pass
 
+class KvasirSegmentationDataset(data.Dataset):
+    """
+        Dataset class that fetches images with the associated segmentation mask.
+    """
+    def __init__(self, path, split="train"):
+        super(KvasirSegmentationDataset, self).__init__()
+        self.path = join(path, "segmented-images/")
+        self.fnames = listdir(join(self.path, "images"))
+        self.common_transforms = pipeline_tranforms()
+        self.split = split
+        train_size = int(len(self.fnames) * 0.8)
+        val_size = (len(self.fnames) - train_size) // 2
+        test_size = len(self.fnames) - train_size - val_size
+        self.fnames_train = self.fnames[:train_size]
+        self.fnames_val = self.fnames[train_size:train_size + val_size]
+        self.fnames_test = self.fnames[train_size + val_size:]
+        self.split_fnames = None  # iterable for selected split
+        if self.split == "train":
+            self.size = train_size
+            self.split_fnames = self.fnames_train
+        elif self.split == "val":
+            self.size = val_size
+            self.split_fnames = self.fnames_val
+        elif self.split == "test":
+            self.size = test_size
+            self.split_fnames = self.fnames_test
+        else:
+            raise ValueError("Choices are train/val/test")
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, index):
+
+        image = np.array(open(join(self.path, "images/", self.split_fnames[index])).convert("RGB"))
+        mask = np.array(open(join(self.path, "masks/", self.split_fnames[index])).convert("L"))
+        image = self.common_transforms(PIL.Image.fromarray(image))
+        mask = self.common_transforms(PIL.Image.fromarray(mask))
+        mask = (mask > 0.5).float()
+        return image, mask, self.split_fnames[index]
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):
         super().__init__()
@@ -89,5 +131,5 @@ if __name__ == '__main__':
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
                                               transforms.Resize(512),
                                               transforms.ToTensor(),])
-    for x, y, context in build_dataset(1, "../../Datasets/NICO++", 0, trans, trans, context="autumn", seed=0)[0]:
+    for x, y, context in build_nico_dataset(1, "../../Datasets/NICO++", 0, trans, trans, context="autumn", seed=0)[0]:
         print(context)
