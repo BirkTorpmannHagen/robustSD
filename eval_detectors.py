@@ -42,7 +42,7 @@ class robustSD:
 
             for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_dataset)),total=len(ind_dataset)):
                 with torch.no_grad():
-                    latents[i] = self.rep_model.encode(x.to(self.config["device"]))[-2].cpu().numpy()
+                    latents[i] = self.rep_model.encode(x.to(self.config["device"])).cpu().numpy()
                     losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
             pkl.dump(latents, open(fname_encodings, "wb"))
             pkl.dump(losses, open(fname_losses, "wb"))
@@ -51,13 +51,13 @@ class robustSD:
         ood_losses = np.zeros(len(ood_dataset))
         for i, (x, y, _) in tqdm(enumerate(DataLoader(ood_dataset)), total=len(ood_dataset)):
             with torch.no_grad():
-                ood_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[-2].cpu().numpy()
+                ood_latents[i] = self.rep_model.encode(x.to(self.config["device"])).cpu().numpy()
                 ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
                                                          y.to(self.config["device"])).cpu().numpy()
 
-        self.pca.fit(np.vstack((latents, ood_latents)))
-        latents = self.pca.transform(latents)
-        ood_latents = self.pca.transform(ood_latents)
+        # self.pca.fit(np.vstack((latents, ood_latents)))
+        # latents = self.pca.transform(latents)
+        # ood_latents = self.pca.transform(ood_latents)
 
         k_n_indx = [np.argmin(np.sum((np.expand_dims(i, 0) - latents) ** 2, axis=-1)) for i in ood_latents]
         k_nearest = latents[k_n_indx]
@@ -82,7 +82,7 @@ class robustSD:
             plt.title(str(j))
             plt.show()
             p_vals_kn.append(
-                min(np.min([ks_2samp(subsample_ind[:,i], subsample_ood[:, i])[-1] for i in range(2)]) * 2, 1)
+                min(np.min([ks_2samp(subsample_ind[:,i], subsample_ood[:, i])[-1] for i in range(512)]) * 512, 1)
             )
             # p_vals_basic.append(
             #     min(np.min([ks_2samp(latents[:, i], ood_latents[sample_idx, i]) for i in range(2)]) * 2, 1)
@@ -224,9 +224,9 @@ if __name__ == '__main__':
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
     # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
 
-    ind = build_nico_dataset(1, "../../Datasets/NICO++", 0, trans, trans, context="dim", seed=0)[0]
-    ood = build_nico_dataset(1, "../../Datasets/NICO++", 0, trans, trans, context="rock", seed=0)[0]
-    # ood = build_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="dim", seed=0)[1]
+    ind = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="dim", seed=0)[0]
+    ood = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="rock", seed=0)[1]
+    ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="dim", seed=0)[1]
 
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
     model = VanillaVAE(3, config["model_params"]["latent_dim"]).to("cuda")
@@ -235,8 +235,10 @@ if __name__ == '__main__':
         torch.load("VAEs/nico_dim/version_0/checkpoints/last.ckpt")[
             "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_2/checkpoints/epoch=55-step=559496.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
     aconfig = {"device":"cuda"}
-    ds = robustSD(model, classifier, aconfig)
-    ds.compute_pvals_and_loss(ind, ood, 2500)
+    ds = robustSD(classifier, classifier, aconfig)
+    ds.compute_pvals_and_loss(ind, ood, 500)
+    ds.compute_pvals_and_loss(ind, ind_val, 500)
+
 

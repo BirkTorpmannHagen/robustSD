@@ -26,7 +26,7 @@ import pytorch_lightning as pl
 class ResNetClassifier(pl.LightningModule):
     def __init__(self, num_classes, resnet_version,
                  optimizer='adam', lr=1e-3, batch_size=16,
-                 transfer=True, tune_fc_only=True):
+                 transfer=False, tune_fc_only=False):
         super().__init__()
 
         self.__dict__.update(locals())
@@ -51,14 +51,22 @@ class ResNetClassifier(pl.LightningModule):
             for child in list(self.resnet_model.children())[:-1]:
                 for param in child.parameters():
                     param.requires_grad = False
+        self.latent_dim = self.get_encoding_size(-2)
 
 
 
     def forward(self, X):
         return self.resnet_model(X)
 
-    def encode(self, X):
-        return [torch.nn.Sequential(*self.children()[:n]) for n in range(len(self.children()))]
+    def get_encoding_size(self, depth):
+        dummy = torch.zeros((1,3,512,512))
+        print(list(self.resnet_model.children())[-1])
+        print(
+            torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).shape
+        )
+        return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).flatten(1).shape[-1]
+    def encode(self, X, depth=-2):
+        return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(X).flatten(1)
 
     def compute_loss(self, x, y):
         return self.criterion(self(x), y)

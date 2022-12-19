@@ -15,7 +15,7 @@ class KvasirSegmentationDataset(data.Dataset):
     """
         Dataset class that fetches images with the associated segmentation mask.
     """
-    def __init__(self, path, train_transform, val_transform,split="train",):
+    def __init__(self, path, train_transform, val_transform,split="train"):
         super(KvasirSegmentationDataset, self).__init__()
         self.path = path
         self.fnames = listdir(join(self.path, "images"))
@@ -104,8 +104,13 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
-def build_polyp_dataset(root, val_ratio, train_transform, val_transform, fold, seed=0):
-    pass
+def build_polyp_dataset(root, train_transform, val_transform, fold, seed=0):
+    if fold=="Kvasir":
+        train_set = KvasirSegmentationDataset(root, train_transform, val_transform, split = "train")
+        val_set = KvasirSegmentationDataset(root, train_transform, val_transform, split = "val")
+    else:
+        raise NotImplementedError
+    return train_set, val_set
 
 
 class NICOTestDataset(data.Dataset):

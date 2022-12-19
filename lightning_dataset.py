@@ -11,7 +11,7 @@ from torchvision.datasets import CelebA
 from torchvision.datasets import ImageFolder
 import zipfile
 from vae.utils.general import check_dataset, colorstr
-from domain_datasets import build_nico_dataset
+from domain_datasets import *
 
 class VAEDataset(LightningDataModule):
     """
@@ -62,8 +62,8 @@ class VAEDataset(LightningDataModule):
                                             transforms.Resize(self.patch_size),
                                             transforms.ToTensor(),])
 
-        # self.train_dataset, self.val_dataset = build_dataset(1, "../../Datasets/NICO++", 0.2, train_transforms, val_transforms, context=self.context, seed=0)
         self.train_dataset, self.val_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, train_transforms, val_transforms, context=self.context, seed=0)
+        self.train_dataset, self.val_dataset = build_polyp_dataset("../../Datasets/Kvasir-SEG", train_transforms, val_transforms, fold="Kvasir", seed=0)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
