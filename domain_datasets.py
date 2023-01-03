@@ -121,6 +121,8 @@ def build_polyp_dataset(root, fold, seed=0):
         raise NotImplementedError
     return train_set, val_set
 
+def build_njord_dataset():
+    pass
 
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):

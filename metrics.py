@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.metrics import RocCurveDisplay
-
+import seaborn as sns
+from scipy.stats import spearmanr
 def fprat95tpr(ood_dataframe, ind_dataframe):
     """
     :param ood_dataframe
@@ -33,17 +35,14 @@ def aupr(ood_dataframe, ind_dataframe):
     auc = average_precision_score(true, probs)
     return auc
 
-def sample_sensitivity():
-    """
-    Quantifies the sensitivity of a given method to sample size.
-    Essentially: area under the detection-error v sample size curve.
-    :return:
-    """
+# def sample_sensitivity():
+#     """
+#     Quantifies the sensitivity of a given method to sample size.
+#     Essentially: area under the detection-error v sample size curve.
+#     :return:
+#     """
 
-def correlation(p_values, performance_drops):
-    """
-
-    :param p_values: p-values as returned from the tests at a given sample size
-    :param performance_drops: percentage drops relative to InD, as quantified by the loss value
-    :return:
-    """
+def correlation(ood_dataframe, ind_dataframe):
+    merged = pd.concat((ood_dataframe, ind_dataframe), axis=0)
+    # sns.regplot(data=merged, x="P", y="loss")
+    return spearmanr(merged["P"], merged["loss"])
