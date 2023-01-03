@@ -2,6 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from vae.vae_experiment import VAEXperiment
 from vae.models.vanilla_vae import VanillaVAE
@@ -15,8 +16,9 @@ from scipy.stats import ks_2samp
 import torchvision.transforms as transforms
 from tqdm import tqdm
 import pickle as pkl
-from domain_datasets import build_nico_dataset
+from domain_datasets import build_nico_dataset, build_polyp_dataset
 from classifier.resnetclassifier import ResNetClassifier
+from segmentor.deeplab import SegmentationModel
 from scipy.stats import wasserstein_distance
 class robustSD:
     def __init__(self, rep_model, classifier, config):
@@ -26,12 +28,11 @@ class robustSD:
         self.pca = PCA(2)
 
 
-    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, sample_size, plot=False):
+    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, sample_size, plot=False, ind_dataset_name=""):
         sample_size = min(sample_size, len(ood_dataset))
-        ind_dataset_name = ""
         ood_dataset_name = ""
-        fname_encodings = f"robustSD_{ind_dataset_name}_enodings"
-        fname_losses = f"robustSD_{ind_dataset_name}_losses"
+        fname_encodings = f"robustSD_{ind_dataset_name}_enodings.pkl"
+        fname_losses = f"robustSD_{ind_dataset_name}_losses.pkl"
 
         try:
             latents = pkl.load(open(fname_encodings, "rb"))
@@ -42,7 +43,7 @@ class robustSD:
 
             for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_dataset)),total=len(ind_dataset)):
                 with torch.no_grad():
-                    latents[i] = self.rep_model.encode(x.to(self.config["device"])).cpu().numpy()
+                    latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
                     losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
             pkl.dump(latents, open(fname_encodings, "wb"))
             pkl.dump(losses, open(fname_losses, "wb"))
@@ -51,13 +52,8 @@ class robustSD:
         ood_losses = np.zeros(len(ood_dataset))
         for i, (x, y, _) in tqdm(enumerate(DataLoader(ood_dataset)), total=len(ood_dataset)):
             with torch.no_grad():
-                ood_latents[i] = self.rep_model.encode(x.to(self.config["device"])).cpu().numpy()
-                # TODO there exists duplicate images in separate contexts. fix?
-                # if ood_latents[i].tolist() in latents.tolist():
-                #
-                #     plt.imshow(x[0].T.cpu().numpy())
-                #     print(y)
-                #     plt.show()
+                ood_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
+
                 ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
                                                          y.to(self.config["device"])).cpu().numpy()
 
@@ -76,11 +72,9 @@ class robustSD:
             plt.show()
 
         p_vals_kn = []
-        # p_vals_basic = []
-        print(wasserstein_distance(ood_latents[:,0], k_nearest[:,0]))
-        print(wasserstein_distance(ood_latents[:,1], k_nearest[:,1]))
+        p_vals_basic = []
 
-        for j in range(25):
+        for j in range(100):
             sample_idx = np.random.choice(range(len(ood_latents)), sample_size)
             subsample_ind = k_nearest[sample_idx,:]
             subsample_ood = ood_latents[sample_idx,:]
@@ -91,13 +85,14 @@ class robustSD:
                 plt.title(str(j))
                 plt.show()
             p_vals_kn.append(
-                min(np.min([ks_2samp(subsample_ind[:,i], subsample_ood[:, i])[-1] for i in range(512)]) * 512, 1)
+                min(np.min([ks_2samp(subsample_ind[:,i], subsample_ood[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
             )
-            # p_vals_basic.append(
-            #     min(np.min([ks_2samp(latents[:, i], ood_latents[sample_idx, i]) for i in range(2)]) * 2, 1)
-            # )
-        print(p_vals_kn)
-        return np.array(p_vals_kn), (losses, ood_losses)
+            p_vals_basic.append(
+                min(np.min([ks_2samp(latents[:, i], ood_latents[sample_idx, i]) for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
+            )
+        print("knn: ", p_vals_kn)
+        print("baseline: ", p_vals_basic)
+        return p_vals_kn, p_vals_basic, losses, ood_losses
 
 
     def bootstrap_severity_estimation(self):
@@ -123,22 +118,37 @@ if __name__ == '__main__':
     ood_2 = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="autumn", seed=0)[1]
     ood_3 = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="water", seed=0)[1]
 
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
     model = VanillaVAE(3, config["model_params"]["latent_dim"]).to("cuda")
     vae_exp = VAEXperiment(model, config)
     vae_exp.load_state_dict(
-        torch.load("VAEs/nico_dim/version_0/checkpoints/last.ckpt")[
+        torch.load("vae_logs/nico_dim/version_0/checkpoints/last.ckpt")[
             "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_2/checkpoints/epoch=55-step=559496.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
     aconfig = {"device":"cuda"}
     ds = robustSD(classifier, classifier, aconfig)
-    print(set(ind_val.image_path_list).intersection(ind.image_path_list))
     # print("ood")
-    ds.compute_pvals_and_loss(ind, ood_1, 500)
-    ds.compute_pvals_and_loss(ind, ood_2, 500)
-    ds.compute_pvals_and_loss(ind, ood_3, 500)
-    print("ind")
-    ds.compute_pvals_and_loss(ind, ind_val, 500)
-
+    ind_dataset_name = "nico"
+    columns=["Feature Extractor", "Dataset", "Method", "Fold", "Sample Size", "P", "loss"]
+    kn_data = []
+    vanilla_data = []
+    for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
+    # for sample_size in [10]:
+        for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
+            test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
+            kn_ps, ps, loss, test_loss = ds.compute_pvals_and_loss(ind, test_dataset, sample_size, ind_dataset_name= ind_dataset_name)
+            kn_data.append(dict(zip(columns,
+                            ["ResNet34", "NICO++", "KN", context, sample_size, kn_ps, np.mean(test_loss)])))
+            vanilla_data.append(dict(zip(columns,
+                            ["ResNet34", "NICO++", "Vanilla", context, sample_size, ps, np.mean(test_loss)])))
+    kn_df = pd.DataFrame(kn_data, columns=columns)
+    v_df = pd.DataFrame(vanilla_data, columns=columns)
+    merged = pd.concat((kn_df, v_df))
+    final = merged.explode(["P"])
+    final.to_csv("data.csv")
+    print(final.head(10))
 

@@ -131,3 +131,5 @@ dmypy.json
 #Project stuff
 VAEs/
 lightning_logs/
+*.pkl
+vae_logs/

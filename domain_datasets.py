@@ -10,18 +10,19 @@ from torch.utils import data
 import torchvision.transforms as transforms
 from os import listdir
 from os.path import join
+import albumentations as alb
 
 class KvasirSegmentationDataset(data.Dataset):
     """
         Dataset class that fetches images with the associated segmentation mask.
     """
-    def __init__(self, path, train_transform, val_transform,split="train"):
+    def __init__(self, path, split="train"):
         super(KvasirSegmentationDataset, self).__init__()
         self.path = path
-        self.fnames = listdir(join(self.path, "images"))
+        self.fnames = listdir(join(self.path,"segmented-images", "images"))
         self.split = split
-        self.train_tansforms = train_transform
-        self.val_transforms = val_transform
+        self.train_transforms = alb.Compose([alb.Flip(), alb.Resize(512,512)])
+        self.val_transforms = alb.Compose([alb.Resize(512,512)])
         train_size = int(len(self.fnames) * 0.8)
         val_size = (len(self.fnames) - train_size) // 2
         test_size = len(self.fnames) - train_size - val_size
@@ -45,10 +46,18 @@ class KvasirSegmentationDataset(data.Dataset):
         return self.size
 
     def __getitem__(self, index):
+        # img = Image.open(join(self.path, "segmented-images", "images/", self.split_fnames[index]))
+        # mask = Image.open(join(self.path, "segmented-images", "masks/", self.split_fnames[index]))
 
-        image = Image.open(join(self.path, "images/", self.split_fnames[index]))
-        image = self.train_tansforms(image)
-        return image, 0, "Kvasir"
+        image = np.asarray(Image.open(join(self.path, "segmented-images", "images/", self.split_fnames[index])))
+        mask =  np.asarray(Image.open(join(self.path, "segmented-images", "masks/", self.split_fnames[index])))
+        if self.split=="train":
+            image, mask = self.train_transforms(image=image, mask=mask).values()
+        else:
+            image, mask = self.val_transforms(image=image, mask=mask).values()
+        image, mask = transforms.ToTensor()(Image.fromarray(image)), transforms.ToTensor()(Image.fromarray(mask))
+        mask = torch.mean(mask,dim=0,keepdim=True).int()
+        return image,mask, "Kvasir"
 class NICODataset(data.Dataset):
     def __init__(self, image_path_list, label_map_json, transform):
         super().__init__()
@@ -104,10 +113,10 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
-def build_polyp_dataset(root, train_transform, val_transform, fold, seed=0):
+def build_polyp_dataset(root, fold, seed=0):
     if fold=="Kvasir":
-        train_set = KvasirSegmentationDataset(root, train_transform, val_transform, split = "train")
-        val_set = KvasirSegmentationDataset(root, train_transform, val_transform, split = "val")
+        train_set = KvasirSegmentationDataset(root, split="train")
+        val_set = KvasirSegmentationDataset(root, split="val")
     else:
         raise NotImplementedError
     return train_set, val_set

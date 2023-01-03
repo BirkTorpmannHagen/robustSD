@@ -24,6 +24,6 @@ trainer_params:
   max_epochs: 200
 
 logging_params:
-  save_dir: "VAEs/"
+  save_dir: "vae_logs/"
   name: "nico_dim"
   
