@@ -123,7 +123,22 @@ class NjordVideoBiasDataset(data.Dataset):
     def __len__(self):
         pass
 
+# write a function which takes a dataset and a transform as parameters and returns a new dataset class that performs the transformation
+def transform_dataset(dataset, transform):
+    class NewDataset(data.Dataset):
+        def __init__(self, dataset):
+            super().__init__()
+            self.dataset = dataset
 
+        def __getitem__(self, index):
+            image, label, context = self.dataset[index]
+            image = transform(image)
+            return image, label, context
+
+        def __len__(self):
+            return len(self.dataset)
+
+    return NewDataset(dataset)
 
 
 def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, biased=False, seed=0):

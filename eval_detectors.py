@@ -16,16 +16,42 @@ from scipy.stats import ks_2samp
 import torchvision.transforms as transforms
 from tqdm import tqdm
 import pickle as pkl
+import torch.utils.data as data
 from domain_datasets import build_nico_dataset, build_polyp_dataset
 from classifier.resnetclassifier import ResNetClassifier
-from segmentor.deeplab import SegmentationModel
-from scipy.stats import wasserstein_distance
+
+def transform_dataset(dataset, transform):
+    class NewDataset(data.Dataset):
+        def __init__(self, dataset):
+            super().__init__()
+            self.dataset = dataset
+
+        def __getitem__(self, index):
+            image, label, context = self.dataset[index]
+            image = transform(image)
+            return image, label, context
+
+        def __len__(self):
+            return len(self.dataset)
+
+    return NewDataset(dataset)
+
+def get_results(organic_benches, synthetic_benches):
+    noise = [lambda x: x+torch.randn_like(x)*i for i in np.linspace(0, 0.5, 10)]
+    for dataset in organic_benches:
+        for x,y,_ in dataset:
+            pass
+    for synthetic_dataset in synthetic_benches:
+        for noise_transform in noise:
+            bench = transform_dataset(synthetic_dataset, noise_transform)
+            for x,y,_ in bench:
+                bench.eval_sample(x,y)
+
 class robustSD:
     def __init__(self, rep_model, classifier, config):
         self.rep_model = rep_model
         self.classifier = classifier
         self.config = config
-        self.pca = PCA(2)
 
 
     def compute_pvals_and_loss(self, ind_dataset, ood_dataset, sample_size, plot=False, ind_dataset_name=""):
@@ -98,9 +124,13 @@ class robustSD:
     def bootstrap_severity_estimation(self):
         pass
 
-    def eval_given_transforms(self, dataset, transforms):
-        for transform in transforms:
-            pass
+    def eval_synthetic(self, ind_dataset, transforms, sample_size, plot=False):
+        datasets = [transform_dataset(ind_dataset, transform) for transform in transforms]
+        results = []
+        for dataset in datasets:
+            results.append(list(self.compute_pvals_and_loss(ind_dataset, dataset, sample_size, plot=plot)))
+        return results
+
 
 
 
