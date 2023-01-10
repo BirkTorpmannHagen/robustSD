@@ -31,8 +31,8 @@ class robustSD:
     def compute_pvals_and_loss(self, ind_dataset, ood_dataset, sample_size, plot=False, ind_dataset_name=""):
         sample_size = min(sample_size, len(ood_dataset))
         ood_dataset_name = ""
-        fname_encodings = f"robustSD_{ind_dataset_name}_enodings.pkl"
-        fname_losses = f"robustSD_{ind_dataset_name}_losses.pkl"
+        fname_encodings = f"robustSD_{ind_dataset_name}_enodings_vae.pkl"
+        fname_losses = f"robustSD_{ind_dataset_name}_losses_vae.pkl"
 
         try:
             latents = pkl.load(open(fname_encodings, "rb"))
@@ -74,7 +74,7 @@ class robustSD:
         p_vals_kn = []
         p_vals_basic = []
 
-        for j in range(100):
+        for j in range(10):
             sample_idx = np.random.choice(range(len(ood_latents)), sample_size)
             subsample_ind = k_nearest[sample_idx,:]
             subsample_ood = ood_latents[sample_idx,:]
@@ -88,7 +88,7 @@ class robustSD:
                 min(np.min([ks_2samp(subsample_ind[:,i], subsample_ood[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
             )
             p_vals_basic.append(
-                min(np.min([ks_2samp(latents[:, i], ood_latents[sample_idx, i]) for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
+                min(np.min([ks_2samp(latents[:, i], subsample_ood[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
             )
         print("knn: ", p_vals_kn)
         print("baseline: ", p_vals_basic)
@@ -131,6 +131,8 @@ if __name__ == '__main__':
 
     aconfig = {"device":"cuda"}
     ds = robustSD(classifier, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
     # print("ood")
     ind_dataset_name = "nico"
     columns=["Feature Extractor", "Dataset", "Method", "Fold", "Sample Size", "P", "loss"]

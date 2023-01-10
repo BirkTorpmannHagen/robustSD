@@ -2,7 +2,7 @@ import os
 import yaml
 import argparse
 from pathlib import Path
-from models.vanilla_vae import VanillaVAE
+from models.vanilla_vae import VanillaVAE, ResNetVAE
 from vae_experiment import VAEXperiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -32,8 +32,9 @@ tb_logger =  TensorBoardLogger(save_dir=config['logging_params']['save_dir'],
 
 # For reproducibility
 seed_everything(config['exp_params']['manual_seed'], True)
-vae_models = {'VanillaVAE':VanillaVAE}
-model = vae_models[config['model_params']['name']](**config['model_params'])
+# vae_models = {'VanillaVAE':VanillaVAE}
+# model = vae_models[config['model_params']['name']](**config['model_params'])
+model = ResNetVAE()
 experiment = VAEXperiment(model,
                           config['exp_params'])
 

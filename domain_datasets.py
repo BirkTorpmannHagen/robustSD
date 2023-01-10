@@ -63,6 +63,8 @@ class NICODataset(data.Dataset):
         super().__init__()
         self.image_path_list = image_path_list
         self.transform = transform
+        self.num_classes = len(os.listdir(os.path.join(*image_path_list[0].split("/")[:-2])))
+        self.classes = os.listdir(os.path.join(*image_path_list[0].split("/")[:-2]))
         with open(label_map_json, "r") as f:
             self.label_map = json.load(f)
         context_path = os.path.join(*image_path_list[0].split("/")[:-3])
@@ -90,8 +92,41 @@ class NICODataset(data.Dataset):
         """
         pass
 
+class NicoClassBiasedDataset(NICODataset):
+    """
+        Fetches samples from one given class
+    """
+    def __init__(self, image_path_list, label_map_json, transform, class_index):
+        super().__init__(image_path_list, label_map_json, transform)
+        class_weights = [len(list(filter(lambda x: x.split("/")[-2]==j, image_path_list)))/len(self) for j in self.classes]
+        classwise_paths = [list(filter(lambda x: x.split("/")[-2]==j, image_path_list)) for j in self.classes]
+        # self.classwise_paths_flat = sum(classwise_paths, []) #if iterative bias
+        self.classwise_paths_flat = classwise_paths[class_index]
+        print(self.classwise_paths_flat)
 
-def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
+    def __getitem__(self, item):
+        return self.classwise_paths_flat[item]
+
+    def __len__(self):
+        return len(self.classwise_paths_flat)
+
+class NjordVideoBiasDataset(data.Dataset):
+    """
+    Samples selected according to recency wrt frames
+    """
+    def __init__(self):
+        super().__init__()
+
+    def __getitem__(self, item):
+        pass
+
+    def __len__(self):
+        pass
+
+
+
+
+def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, biased=False, seed=0):
     if use_track == 1:
         track_data_dir = os.path.join(root, "track_1")
         data_dir = os.path.join(track_data_dir, "public_dg_0416", "train")
@@ -107,10 +142,15 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     if val_ratio==0:
         return NICODataset(image_path_list, label_map_json, train_transform), NICODataset(image_path_list, label_map_json, train_transform)
 
-    np.random.RandomState(seed).shuffle(image_path_list)
+    np.random.RandomState(seed).shuffle(image_path_list) # shuffles. Perhaps a bad idea to do at dataset level
     n = round((len(image_path_list) * val_ratio) / 2) * 2
-    train_dataset = NICODataset(image_path_list[n:], label_map_json, train_transform)
-    val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
+    if not biased:
+        train_dataset = NICODataset(image_path_list[n:], label_map_json, train_transform)
+        val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
+    else:
+        print("biased!")
+        train_dataset = NicoClassBiasedDataset(image_path_list[n:], label_map_json, train_transform)
+        val_dataset = NicoClassBiasedDataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
 def build_polyp_dataset(root, fold, seed=0):
@@ -147,5 +187,4 @@ if __name__ == '__main__':
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
                                               transforms.Resize(512),
                                               transforms.ToTensor(),])
-    for x, y, context in build_nico_dataset(1, "../../Datasets/NICO++", 0, trans, trans, context="autumn", seed=0)[0]:
-        print(context)
+    build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="autumn", biased=True, seed=0)[0]

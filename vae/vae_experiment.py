@@ -36,7 +36,7 @@ class VAEXperiment(pl.LightningModule):
         real_img, labels, _ = batch
         self.curr_device = real_img.device
 
-        results = self.forward(real_img, labels = labels)
+        results = self.forward(real_img)
         train_loss = self.model.loss_function(*results,
                                               M_N = self.params['kld_weight'], #al_img.shape[0]/ self.num_train_imgs,
                                               optimizer_idx=optimizer_idx,
@@ -49,7 +49,7 @@ class VAEXperiment(pl.LightningModule):
     def validation_step(self, batch, batch_idx, optimizer_idx = 0):
         real_img, labels, _ = batch
         self.curr_device = real_img.device
-        results = self.forward(real_img, labels = labels)
+        results = self.forward(real_img)
         val_loss = self.model.loss_function(*results,
                                             M_N = 1.0, #real_img.shape[0]/ self.num_val_imgs,
                                             optimizer_idx = optimizer_idx,
@@ -68,7 +68,7 @@ class VAEXperiment(pl.LightningModule):
         test_label = test_label.to(self.curr_device)
 
 #         test_input, test_label, _ = batch
-        recons = self.model.generate(test_input, labels = test_label)
+        recons = self.model.generate(test_input)
         vutils.save_image(recons.data,
                           os.path.join(self.logger.log_dir , 
                                        "Reconstructions", 
