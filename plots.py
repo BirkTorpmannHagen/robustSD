@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
 from bias_samplers import *
+
 def plot_nico_class_bias():
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
     model = VanillaVAE(3, config["model_params"]["latent_dim"]).to("cuda")
@@ -41,17 +42,15 @@ def plot_nico_class_bias():
     transformed_ind = pca.transform(ind_encodings)
     transformed_val = pca.transform(val_encodings)
 
-    for i,j in zip(np.linspace(0,int(.9*len(transformed_val)),10), np.linspace(int(0.1*len(transformed_val)), len(transformed_val), 10)):
+    for idx, (i,j) in enumerate(zip(np.linspace(0,int(.9*len(transformed_val)),10), np.linspace(int(0.1*len(transformed_val)), len(transformed_val), 10))):
         i = int(i)
         j = int(j)
-        print(f"{i}->{j}")
-        input()
         plt.scatter(transformed_ind[:,0], transformed_ind[:,1], label=f"InD")
         plt.scatter(transformed_val[i:j, 0],
                     transformed_val[i:j, 1], label=f"Biased")
         plt.legend()
+        plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
         plt.show()
-
 
 
 

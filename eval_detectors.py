@@ -54,71 +54,45 @@ class robustSD:
         self.config = config
 
 
-    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, sample_size, plot=False, ind_dataset_name=""):
+    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, ood_dataset_name, plot=False):
+        # todo make this neater by incorporating the Bench classes
         sample_size = min(sample_size, len(ood_dataset))
-        ood_dataset_name = ""
-        fname_encodings = f"robustSD_{ind_dataset_name}_enodings_vae.pkl"
-        fname_losses = f"robustSD_{ind_dataset_name}_losses_vae.pkl"
-
+        fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{self.rep_model.__name__}.pkl"
+        fname_losses = f"robustSD_{ind_dataset_name}_losses_{self.rep_model.__name__}.pkl"
         try:
-            latents = pkl.load(open(fname_encodings, "rb"))
+            ind_latents = pkl.load(open(fname_encodings, "rb"))
             losses = pkl.load(open(fname_losses, "rb"))
         except FileNotFoundError:
-            latents = np.zeros((len(ind_dataset), self.rep_model.latent_dim))
+            ind_latents = np.zeros((len(ind_dataset), self.rep_model.latent_dim))
             losses = np.zeros(len(ind_dataset))
-
             for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_dataset)),total=len(ind_dataset)):
                 with torch.no_grad():
-                    latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
+                    ind_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
                     losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
-            pkl.dump(latents, open(fname_encodings, "wb"))
+            pkl.dump(ind_latents, open(fname_encodings, "wb"))
             pkl.dump(losses, open(fname_losses, "wb"))
 
         ood_latents = np.zeros((len(ood_dataset), self.rep_model.latent_dim))
         ood_losses = np.zeros(len(ood_dataset))
-        for i, (x, y, _) in tqdm(enumerate(DataLoader(ood_dataset)), total=len(ood_dataset)):
+        for i, (x, y, _) in tqdm(enumerate(DataLoader(ood_dataset, sampler=ood_sampler)), total=len(ood_dataset)):
             with torch.no_grad():
                 ood_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
 
                 ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
                                                          y.to(self.config["device"])).cpu().numpy()
+        cols = ["ind_dataset", "ood_dataset", "vanilla_p", "kn_p", "loss"]
+        dataframe = pd.DataFrame(columns=cols)
 
-        # self.pca.fit(np.vstack((latents, ood_latents)))
-        # latents = self.pca.transform(latents)
-        # ood_latents = self.pca.transform(ood_latents)
+        for i, j in zip(range(0, len(ind_dataset), sample_size), range(sample_size, len(ind_dataset)+sample_size, sample_size))[:-1]: #perform tests
+            sample_idx = range(i,j)
+            ood_samples = ood_latents[sample_idx]
 
-        k_n_indx = [np.argmin(np.sum((np.expand_dims(i, 0) - latents) ** 2, axis=-1)) for i in ood_latents]
-        k_n_dists = [np.min(np.sum((np.expand_dims(i, 0) - latents) ** 2, axis=-1)) for i in ood_latents]
-        k_nearest = latents[k_n_indx]
-        # plt.scatter(latents[:, 0], latents[:, 1], label="ind")
-        if plot:
-            plt.scatter(ood_latents[:, 0], ood_latents[:, 1], label="ood")
-            plt.scatter(k_nearest[:, 0], k_nearest[:, 1], label="kn")
-            plt.legend()
-            plt.show()
+            vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
 
-        p_vals_kn = []
-        p_vals_basic = []
-
-        for j in range(10):
-            sample_idx = np.random.choice(range(len(ood_latents)), sample_size)
-            subsample_ind = k_nearest[sample_idx,:]
-            subsample_ood = ood_latents[sample_idx,:]
-            if plot:
-                plt.scatter(subsample_ood[:,0],subsample_ood[:,1],label="ood")
-                plt.scatter(subsample_ind[:, 0], subsample_ind[:, 1], label="ind")
-                plt.legend()
-                plt.title(str(j))
-                plt.show()
-            p_vals_kn.append(
-                min(np.min([ks_2samp(subsample_ind[:,i], subsample_ood[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
-            )
-            p_vals_basic.append(
-                min(np.min([ks_2samp(latents[:, i], subsample_ood[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
-            )
-        print("knn: ", p_vals_kn)
-        print("baseline: ", p_vals_basic)
-        return p_vals_kn, p_vals_basic, losses, ood_losses
+            k_nearest_ind = [np.argmin(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1)) for i in ood_samples]
+            kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
+            dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])), ignore_index=True)
+        return dataframe
 
 
     def bootstrap_severity_estimation(self):
@@ -128,7 +102,7 @@ class robustSD:
         datasets = [transform_dataset(ind_dataset, transform) for transform in transforms]
         results = []
         for dataset in datasets:
-            results.append(list(self.compute_pvals_and_loss(ind_dataset, dataset, sample_size, plot=plot)))
+            results.append(self.compute_pvals_and_loss(ind_dataset, dataset, sample_size, plot=plot))
         return results
 
 
