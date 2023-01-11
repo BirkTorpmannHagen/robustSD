@@ -45,9 +45,10 @@ class ClusterSampler(Sampler):
         self.data_source = data_source
         self.rep_model = rep_model
         self.reps = np.zeros((len(data_source), rep_model.latent_dim))
-        for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
-            x=x.to("cuda")
-            self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
+        with torch.no_grad():
+            for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
+                x=x.to("cuda")
+                self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
         self.kmeans = KMeans(n_clusters=10, random_state=0).fit_predict(self.reps)
 
 

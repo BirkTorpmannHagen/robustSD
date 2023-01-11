@@ -13,6 +13,7 @@ from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
+from bias_samplers import ClusterSampler
 import torchvision.transforms as transforms
 from tqdm import tqdm
 import pickle as pkl
@@ -57,8 +58,8 @@ class robustSD:
     def compute_pvals_and_loss(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, ood_dataset_name, plot=False):
         # todo make this neater by incorporating the Bench classes
         sample_size = min(sample_size, len(ood_dataset))
-        fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{self.rep_model.__name__}.pkl"
-        fname_losses = f"robustSD_{ind_dataset_name}_losses_{self.rep_model.__name__}.pkl"
+        fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{type(self.rep_model).__name__}.pkl"
+        fname_losses = f"robustSD_{ind_dataset_name}_losses_{type(self.rep_model).__name__}.pkl"
         try:
             ind_latents = pkl.load(open(fname_encodings, "rb"))
             losses = pkl.load(open(fname_losses, "rb"))
@@ -80,21 +81,20 @@ class robustSD:
 
                 ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
                                                          y.to(self.config["device"])).cpu().numpy()
-        cols = ["ind_dataset", "ood_dataset", "vanilla_p", "kn_p", "loss"]
-        dataframe = pd.DataFrame(columns=cols)
+        cols = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+        dataframe = []
 
-        for i, j in zip(range(0, len(ind_dataset), sample_size), range(sample_size, len(ind_dataset)+sample_size, sample_size))[:-1]: #perform tests
-            sample_idx = range(i,j)
+        for start, stop in list(zip(range(0, len(ood_dataset), sample_size), range(sample_size, len(ood_dataset)+sample_size, sample_size)))[:-1]: #perform tests
+            sample_idx = range(start,stop)
             ood_samples = ood_latents[sample_idx]
-
             vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
-
-            k_nearest_ind = [np.argmin(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1)) for i in ood_samples]
+            k_nearest_idx = [np.argmin(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1)) for i in ood_samples]
+            k_nearest_ind = ind_latents[k_nearest_idx]
             kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
-            dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])), ignore_index=True)
-        return dataframe
-
-
+            dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, type(self.rep_model).__name__, sample_size, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])))
+        final = pd.DataFrame(data=dataframe, columns=cols)
+        print(final.head())
+        return final
     def bootstrap_severity_estimation(self):
         pass
 
@@ -118,10 +118,6 @@ if __name__ == '__main__':
     # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
 
     ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
-    ood_1 = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="rock", seed=0)[1]
-    ood_2 = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="autumn", seed=0)[1]
-    ood_3 = build_nico_dataset(1, "../../Datasets/NICO++", 0.1, trans, trans, context="water", seed=0)[1]
-
     # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
     model = VanillaVAE(3, config["model_params"]["latent_dim"]).to("cuda")
@@ -139,22 +135,15 @@ if __name__ == '__main__':
 
     # print("ood")
     ind_dataset_name = "nico"
-    columns=["Feature Extractor", "Dataset", "Method", "Fold", "Sample Size", "P", "loss"]
-    kn_data = []
-    vanilla_data = []
-    for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-    # for sample_size in [10]:
-        for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
-            test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
-            kn_ps, ps, loss, test_loss = ds.compute_pvals_and_loss(ind, test_dataset, sample_size, ind_dataset_name= ind_dataset_name)
-            kn_data.append(dict(zip(columns,
-                            ["ResNet34", "NICO++", "KN", context, sample_size, kn_ps, np.mean(test_loss)])))
-            vanilla_data.append(dict(zip(columns,
-                            ["ResNet34", "NICO++", "Vanilla", context, sample_size, ps, np.mean(test_loss)])))
-    kn_df = pd.DataFrame(kn_data, columns=columns)
-    v_df = pd.DataFrame(vanilla_data, columns=columns)
-    merged = pd.concat((kn_df, v_df))
-    final = merged.explode(["P"])
+    columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
+        test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
+        for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
+            data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset, classifier),
+                                             sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}")
+            merged.append(data)
+    final = pd.concat(merged)
     final.to_csv("data.csv")
     print(final.head(10))
 

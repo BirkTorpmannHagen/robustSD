@@ -231,6 +231,7 @@ class ResNetVAE(BaseVAE):
             nn.Sigmoid()  # y = (y1, y2, y3) \in [0 ,1]^3
         )
 
+
     def encode(self, x):
         x = self.resnet(x)  # ResNet
         x = x.view(x.size(0), -1)  # flatten output of conv
@@ -258,15 +259,20 @@ class ResNetVAE(BaseVAE):
         x = self.convTrans6(x)
         x = self.convTrans7(x)
         x = self.convTrans8(x)
-        x = F.interpolate(x, size=(224, 224), mode='bilinear')
+        x = F.interpolate(x, size=(512, 512), mode='bilinear')
         return x
 
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
-        x_reconst = self.decode(z)
+    # def forward(self, x):
+    #     mu, logvar = self.encode(x)
+    #     z = self.reparameterize(mu, logvar)
+    #     x_reconst = self.decode(z)
+    #
+    #     return x_reconst, z, mu, logvar
 
-        return x_reconst, z, mu, logvar
+    def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
+        mu, log_var = self.encode(input)
+        z = self.reparameterize(mu, log_var)
+        return  [self.decode(z), input, mu, log_var]
 
     def loss_function(self,
                       *args,
@@ -285,7 +291,6 @@ class ResNetVAE(BaseVAE):
 
         kld_weight = kwargs['M_N'] # Account for the minibatch samples from the dataset
         recons_loss =F.mse_loss(recons, input)
-
 
         kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
 

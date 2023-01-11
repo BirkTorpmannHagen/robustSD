@@ -1,15 +1,15 @@
 model_params:
   name: 'VanillaVAE'
   in_channels: 3
-  latent_dim: 8000
+  latent_dim: 256
 
 
 data_params:
   data_path: "folds/ind_fold.yaml"
-  train_batch_size: 16
-  val_batch_size:  16
+  train_batch_size: 4
+  val_batch_size:  1
   patch_size: 512
-  num_workers: 4
+  num_workers: 1
 
 
 exp_params:

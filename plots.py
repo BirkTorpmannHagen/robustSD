@@ -21,7 +21,7 @@ def plot_nico_class_bias():
     model = VanillaVAE(3, config["model_params"]["latent_dim"]).to("cuda")
     vae_exp = VAEXperiment(model, config)
     vae_exp.load_state_dict(
-        torch.load("VAEs/nico_dim/version_0/checkpoints/last.ckpt")[
+        torch.load("vae_logs/nico_dim/version_0/checkpoints/last.ckpt")[
             "state_dict"])
     model.eval()
     pca = PCA(n_components=2)
@@ -52,45 +52,34 @@ def plot_nico_class_bias():
         plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
         plt.show()
 
+def get_metrics():
+    dataset = pd.read_csv("data.csv")
+    for sample_size in np.unique(dataset["sample_size"]):
+        subset = dataset[dataset["sample_size"] == sample_size]
+        ood = subset[subset["ood_dataset"] != "nico_dim"]
+        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
+        fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+        # print("vanilla: ", fpr_van)
+        # print("kn:", fpr_kn)
+        aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
+        aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
+        # print("vanilla: ", aupr_van)
+        # print("kn:", aupr_kn)
+        auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
+        auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
+        # print("vanilla: ", auroc_van)
+        # print("kn:", auroc_kn)
+        corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
+        corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
+        # print("vanilla: ", corr_van)
+        # print("kn: ", corr_kn)
+        dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+        dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+        print("vanilla: ", dr_van)
+        print("kn: ", dr_kn)
 
 
 if __name__ == '__main__':
-    plot_nico_class_bias()
-    # dataset = pd.read_csv("data.csv")
-    # for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-    #     subset = dataset[dataset["Sample Size"]==sample_size]
-    #     kn = subset[subset["Method"]!="Vanilla"]
-    #     vanilla = subset[subset["Method"]=="Vanilla"]
-    #     kn_ind = kn[kn["Fold"]=="dim"]
-    #     vanilla_ind = vanilla[vanilla["Fold"]=="dim"]
-    #     kn_ood = kn[kn["Fold"]!="dim"]
-    #     vanilla_ood = vanilla[vanilla["Fold"]!="dim"]
-    #     sns.boxplot(data=kn,x="Fold", y="P")
-    #     plt.show()
-    #     # vanilla_ood.loc[:, "P"]*=256
-    #     # vanilla_ind.loc[:,"P"]*=256
-    #
-    #     # input()
-    #     # print(sample_size)
-    #     fpr_van = fprat95tpr(vanilla_ood, vanilla_ind)
-    #     fpr_kn = fprat95tpr(kn_ood, kn_ind)
-    #     print("fpr95tpr vanilla: ", fpr_van)
-    #     print("fpr95tpr kn: ", fpr_kn)
-    #     # # plt.hist(kn_ood["P"], label="ood")
-    #     # # plt.hist(kn_ind["P"], label="ind")
-    #     # # plt.title("kn")
-    #     # # plt.legend()
-    #     # # plt.show()
-    #     # # plt.hist(vanilla_ood["P"], label="ood")
-    #     # # plt.hist(vanilla_ind["P"], label="ind")
-    #     # # plt.title("vanilla")
-    #     # # plt.legend()
-    #     # # plt.show()
-    #     # auc_van = auroc(vanilla_ood, vanilla_ind)
-    #     # print("vanilla auc: ", auc_van)
-    #     # auc_kn = auroc(kn_ood, kn_ind)
-    #     # print("kn auc: ", auc_kn)
-    #     # auc_van = aupr(vanilla_ood, vanilla_ind)
-    #     # print("vanilla aupr: ", auc_van)
-    #     # auc_kn = aupr(kn_ood, kn_ind)
-    #     # print("kn aupr: ", auc_kn)
+   # plot_nico_class_bias()
+  get_metrics()
