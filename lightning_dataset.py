@@ -30,7 +30,8 @@ class VAEDataset(LightningDataModule):
 
     def __init__(
         self,
-        data_path: str,
+        train_dataset,
+        val_dataset,
         train_batch_size: int = 8,
         val_batch_size: int = 8,
         patch_size: Union[int, Sequence[int]] = (256, 256),
@@ -50,8 +51,9 @@ class VAEDataset(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.context=context
-
-    def setup(self, stage: Optional[str] = None) -> None:
+        self.train_dataset=train_dataset
+        self.val_dataset = val_dataset
+    def setup(self,  stage: Optional[str] = None) -> None:
         train_transforms = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
                                               transforms.Resize(self.patch_size),
@@ -62,7 +64,6 @@ class VAEDataset(LightningDataModule):
                                             transforms.Resize(self.patch_size),
                                             transforms.ToTensor(),])
 
-        self.train_dataset, self.val_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, train_transforms, val_transforms, context=self.context, seed=0)
         # self.train_dataset, self.val_dataset = build_polyp_dataset("../../Datasets/Kvasir-SEG", fold="Kvasir", seed=0)
 
     def train_dataloader(self) -> DataLoader:
@@ -86,7 +87,7 @@ class VAEDataset(LightningDataModule):
     def test_dataloader(self) -> Union[DataLoader, List[DataLoader]]:
         return DataLoader(
             self.val_dataset,
-            batch_size=144,
+            batch_size=8,
             num_workers=self.num_workers,
             shuffle=True,
             pin_memory=self.pin_memory,

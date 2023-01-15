@@ -184,7 +184,7 @@ class ResNetVAE(BaseVAE):
         super(ResNetVAE, self).__init__()
 
         self.fc_hidden1, self.fc_hidden2, self.CNN_embed_dim = fc_hidden1, fc_hidden2, CNN_embed_dim
-
+        self.latent_dim = CNN_embed_dim
         # CNN architechtures
         self.ch1, self.ch2, self.ch3, self.ch4 = 16, 32, 64, 128
         self.k1, self.k2, self.k3, self.k4 = (5, 5), (3, 3), (3, 3), (3, 3)  # 2d kernal size

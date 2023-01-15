@@ -40,7 +40,7 @@ class ClusterSampler(Sampler):
     Returns indices corresponding to a KMeans-clustering of the latent representations.
     (Artificial) selection bias
     """
-    def __init__(self, data_source, rep_model):
+    def __init__(self, data_source, rep_model, sample_size=10):
         super(ClusterSampler, self).__init__(data_source)
         self.data_source = data_source
         self.rep_model = rep_model
@@ -49,7 +49,8 @@ class ClusterSampler(Sampler):
             for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
                 x=x.to("cuda")
                 self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
-        self.kmeans = KMeans(n_clusters=10, random_state=0).fit_predict(self.reps)
+        self.num_clusters = len(data_source)//sample_size
+        self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
 
 
     def __iter__(self):

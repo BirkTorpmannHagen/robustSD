@@ -38,7 +38,7 @@ model = ResNetVAE()
 experiment = VAEXperiment(model,
                           config['exp_params'])
 
-data = VAEDataset(**config["data_params"], pin_memory=len(config['trainer_params']['gpus']) != 0, context="dim")
+data = VAEDataset(**config["data_params"], context="dim")
 
 data.setup()
 runner = Trainer(logger=tb_logger,

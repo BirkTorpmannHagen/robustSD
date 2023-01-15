@@ -3,15 +3,14 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
+from yellowbrick.features import PCA
 from vae.vae_experiment import VAEXperiment
-from vae.models.vanilla_vae import VanillaVAE
+from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
 import yaml
 import torch
 from torch.utils.data import DataLoader
 from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
-from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
 from bias_samplers import ClusterSampler
 import torchvision.transforms as transforms
@@ -55,8 +54,7 @@ class robustSD:
         self.config = config
 
 
-    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, ood_dataset_name, plot=False):
-        # todo make this neater by incorporating the Bench classes
+    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, ood_dataset_name, k=20, plot=False):
         sample_size = min(sample_size, len(ood_dataset))
         fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{type(self.rep_model).__name__}.pkl"
         fname_losses = f"robustSD_{ind_dataset_name}_losses_{type(self.rep_model).__name__}.pkl"
@@ -87,10 +85,13 @@ class robustSD:
         for start, stop in list(zip(range(0, len(ood_dataset), sample_size), range(sample_size, len(ood_dataset)+sample_size, sample_size)))[:-1]: #perform tests
             sample_idx = range(start,stop)
             ood_samples = ood_latents[sample_idx]
-            vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
-            k_nearest_idx = [np.argmin(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1)) for i in ood_samples]
+            vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
+            k_nearest_idx = np.concatenate([np.argpartition(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1), k)[:k] for i in ood_samples])
             k_nearest_ind = ind_latents[k_nearest_idx]
-            kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]) * self.rep_model.latent_dim, 1)
+            viz = PCA()
+            viz.fit_transform(X=np.concatenate((ind_latents, ood_samples, k_nearest_ind)), y=[0]*len(ind_latents)+[1]*len(ood_samples)+[2]*len(k_nearest_ind))
+            viz.show()
+            kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
             dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, type(self.rep_model).__name__, sample_size, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])))
         final = pd.DataFrame(data=dataframe, columns=cols)
         print(final.head())
@@ -120,17 +121,17 @@ if __name__ == '__main__':
     ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
     # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
-    model = VanillaVAE(3, config["model_params"]["latent_dim"]).to("cuda")
+    model = ResNetVAE().to("cuda").eval()
     vae_exp = VAEXperiment(model, config)
     vae_exp.load_state_dict(
-        torch.load("vae_logs/nico_dim/version_0/checkpoints/last.ckpt")[
+        torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
             "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
     classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
     # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
 
     aconfig = {"device":"cuda"}
-    ds = robustSD(classifier, classifier, aconfig)
+    ds = robustSD(model, classifier, aconfig)
     # ds = robustSD(model, classifier, aconfig)
 
     # print("ood")
@@ -144,6 +145,6 @@ if __name__ == '__main__':
                                              sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}")
             merged.append(data)
     final = pd.concat(merged)
-    final.to_csv("data.csv")
+    final.to_csv(f"vae_data_nico.csv")
     print(final.head(10))
 

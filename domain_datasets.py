@@ -1,7 +1,7 @@
 import os
 import json
 import torch
-
+from  torchvision.datasets import MNIST,CIFAR10,CIFAR100
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -92,25 +92,7 @@ class NICODataset(data.Dataset):
         """
         pass
 
-class NicoClassBiasedDataset(NICODataset):
-    """
-        Fetches samples from one given class
-    """
-    def __init__(self, image_path_list, label_map_json, transform, class_index):
-        super().__init__(image_path_list, label_map_json, transform)
-        class_weights = [len(list(filter(lambda x: x.split("/")[-2]==j, image_path_list)))/len(self) for j in self.classes]
-        classwise_paths = [list(filter(lambda x: x.split("/")[-2]==j, image_path_list)) for j in self.classes]
-        # self.classwise_paths_flat = sum(classwise_paths, []) #if iterative bias
-        self.classwise_paths_flat = classwise_paths[class_index]
-        print(self.classwise_paths_flat)
-
-    def __getitem__(self, item):
-        return self.classwise_paths_flat[item]
-
-    def __len__(self):
-        return len(self.classwise_paths_flat)
-
-class NjordVideoBiasDataset(data.Dataset):
+class NjordVid(data.Dataset):
     """
     Samples selected according to recency wrt frames
     """
@@ -123,6 +105,26 @@ class NjordVideoBiasDataset(data.Dataset):
     def __len__(self):
         pass
 
+def wrap_dataset(dataset):
+    """
+    dumb utility function to make testing easier. get just returns an extra 0.
+    :param dataset:
+    :return:
+    """
+    class NewDataset(data.Dataset):
+        def __init__(self, dataset):
+            super().__init__()
+            self.dataset = dataset
+
+        def __getitem__(self, index):
+            image, label = self.dataset[index]
+            return image, label, 0
+
+        def __len__(self):
+            return len(self.dataset)
+
+    return NewDataset(dataset)
+
 # write a function which takes a dataset and a transform as parameters and returns a new dataset class that performs the transformation
 def transform_dataset(dataset, transform):
     class NewDataset(data.Dataset):
@@ -131,9 +133,9 @@ def transform_dataset(dataset, transform):
             self.dataset = dataset
 
         def __getitem__(self, index):
-            image, label, context = self.dataset[index]
+            image, label, _ = self.dataset[index]
             image = transform(image)
-            return image, label, context
+            return image, label, 0
 
         def __len__(self):
             return len(self.dataset)
@@ -157,15 +159,9 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     if val_ratio==0:
         return NICODataset(image_path_list, label_map_json, train_transform), NICODataset(image_path_list, label_map_json, train_transform)
 
-    np.random.RandomState(seed).shuffle(image_path_list) # shuffles. Perhaps a bad idea to do at dataset level
     n = round((len(image_path_list) * val_ratio) / 2) * 2
-    if not biased:
-        train_dataset = NICODataset(image_path_list[n:], label_map_json, train_transform)
-        val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
-    else:
-        print("biased!")
-        train_dataset = NicoClassBiasedDataset(image_path_list[n:], label_map_json, train_transform)
-        val_dataset = NicoClassBiasedDataset(image_path_list[:n], label_map_json, val_transform)
+    train_dataset = NICODataset(image_path_list[n:], label_map_json, train_transform)
+    val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
 def build_polyp_dataset(root, fold, seed=0):

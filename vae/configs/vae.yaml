@@ -7,9 +7,9 @@ model_params:
 data_params:
   data_path: "folds/ind_fold.yaml"
   train_batch_size: 4
-  val_batch_size:  1
+  val_batch_size:  4
   patch_size: 512
-  num_workers: 1
+  num_workers: 4
 
 
 exp_params:
