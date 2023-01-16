@@ -133,3 +133,6 @@ VAEs/
 lightning_logs/
 *.pkl
 vae_logs/
+njord/vanilla_*/
+njord/Njord/
+*.pt

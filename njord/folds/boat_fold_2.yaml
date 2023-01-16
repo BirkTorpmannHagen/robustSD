@@ -1,0 +1,62 @@
+train: [
+  NjordYolo/00_hermes_dag1,
+  NjordYolo/00_hermes_dag2,
+  NjordYolo/00_hermes_dag3,
+  NjordYolo/00_hermes_dag6,
+  NjordYolo/00_hermes_dag7,
+  NjordYolo/00_hermes_dag9,
+  NjordYolo/00_hermes_dag12,
+  NjordYolo/00_hermes_dag14,
+  NjordYolo/00_hermes_dag16,
+  NjordYolo/00_hermes_dag17,
+  NjordYolo/00_hermes_dag18,
+  NjordYolo/00_hermes_dag19,
+  NjordYolo/00_hermes_dag20,
+  NjordYolo/00_hermes_dag22,
+  NjordYolo/00_hermes_dag23,
+  NjordYolo/00_hermes_dag24,
+  NjordYolo/00_hermes_dag25,
+  NjordYolo/00_hermes_dag26,
+  NjordYolo/00_hermes_dag27,
+  NjordYolo/00_hermes_dag28,
+  NjordYolo/00_hermes_dag34,
+  NjordYolo/01_hermes_dag1,
+  NjordYolo/01_hermes_dag2,
+  NjordYolo/01_hermes_dag3,
+  NjordYolo/01_hermes_dag6,
+  NjordYolo/01_hermes_dag7,
+  NjordYolo/01_hermes_dag8,
+  NjordYolo/01_hermes_dag9,
+  NjordYolo/01_hermes_dag12,
+  NjordYolo/01_hermes_dag14,
+  NjordYolo/01_hermes_dag16,
+  NjordYolo/01_hermes_dag17,
+  NjordYolo/01_hermes_dag18,
+  NjordYolo/01_hermes_dag19,
+  NjordYolo/01_hermes_dag20,
+  NjordYolo/01_hermes_dag23,
+  NjordYolo/05_hermes_dag1,
+  NjordYolo/05_hermes_dag3,
+  NjordYolo/05_hermes_dag7,
+  NjordYolo/05_hermes_dag26,
+  NjordYolo/06_hermes_dag7,
+  NjordYolo/06_hermes_dag28,
+  NjordYolo/06_hermes_dag29,
+  NjordYolo/06_hermes_dag33,
+  NjordYolo/06_hermes_dag34
+]
+
+val: [
+  NjordYolo/02_hermes_dag1,
+  NjordYolo/02_hermes_dag2,
+  NjordYolo/02_hermes_dag31,
+  NjordYolo/02_hermes_dag32,
+  NjordYolo/02_hermes_dag33,
+  NjordYolo/04_hermes_dag1,
+  NjordYolo/04_hermes_dag3,
+  NjordYolo/04_hermes_dag7
+]
+
+nc: 4
+
+names: [ "Boat", "Person", "Net", "Fish"]

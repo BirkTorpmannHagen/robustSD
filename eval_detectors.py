@@ -99,19 +99,12 @@ class robustSD:
     def bootstrap_severity_estimation(self):
         pass
 
-    def eval_synthetic(self, ind_dataset, transforms, sample_size, plot=False):
-        datasets = [transform_dataset(ind_dataset, transform) for transform in transforms]
-        results = []
-        for dataset in datasets:
-            results.append(self.compute_pvals_and_loss(ind_dataset, dataset, sample_size, plot=plot))
-        return results
+    def eval_synthetic(self, ind_dataset, ind_val, trans_fn, sampler, sample_size, ind_dataset_name, ood_dataset_name, plot=False):
+        dataset = transform_dataset(ind_val, trans_fn)
+        return self.compute_pvals_and_loss(ind_dataset, dataset, ood_sampler=sampler,sample_size=sample_size, ind_dataset_name=ind_dataset_name, ood_dataset_name=ood_dataset_name, plot=plot)
 
 
-
-
-
-if __name__ == '__main__':
-    # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
+def eval_nico():
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
@@ -147,4 +140,46 @@ if __name__ == '__main__':
     final = pd.concat(merged)
     final.to_csv(f"vae_data_nico.csv")
     print(final.head(10))
+
+def nico_correlation():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                        transforms.Resize((512,512)),
+                        transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+
+    ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    # config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    # model = ResNetVAE().to("cuda").eval()
+    # vae_exp = VAEXperiment(model, config)
+    # vae_exp.load_state_dict(
+    #     torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+    #         "state_dict"])
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
+    aconfig = {"device":"cuda"}
+    ds = robustSD(classifier, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
+    # print("ood")
+    ind_dataset_name = "nico"
+    columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    for noise_val in [0.001, 0.005, 0.01, 0.05, 0.1, 0.15, 0.25]:
+        for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
+            data = ds.eval_synthetic(ind, ind_val, sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
+                                             sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{noise_val}")
+            merged.append(data)
+    final = pd.concat(merged)
+    final.to_csv(f"lp_data_nico_noise.csv")
+    print(final.head(10))
+
+
+
+if __name__ == '__main__':
+    # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
+    nico_correlation()
 

@@ -677,7 +677,7 @@ class LoadImagesAndLabels(Dataset):
         #
 
         # self.p2pmodel = networks.define_G(3,3,64,'resnet_9blocks',gpu_ids=[0])
-        # state_dict = torch.load("/home/birk/BatchDiversitySampling/day2night_pretrained/latest_net_G.pth")
+        # state_dict = torch.load("/home/birk/njord/day2night_pretrained/latest_net_G.pth")
         # from collections import OrderedDict
         #
         # new_dict = OrderedDict()

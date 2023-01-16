@@ -1,0 +1,1 @@
+python ../train_diverse.py --img 512 --batch 16 --epochs 300 --patience 50 --data $1 --weights yolov5m.pt

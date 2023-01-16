@@ -12,6 +12,11 @@ from os import listdir
 from os.path import join
 import albumentations as alb
 
+from njord.utils.general import check_dataset
+from njord.utils.dataloaders import create_dataloader
+
+
+
 class KvasirSegmentationDataset(data.Dataset):
     """
         Dataset class that fetches images with the associated segmentation mask.
@@ -92,18 +97,35 @@ class NICODataset(data.Dataset):
         """
         pass
 
-class NjordVid(data.Dataset):
-    """
-    Samples selected according to recency wrt frames
-    """
-    def __init__(self):
-        super().__init__()
+# class NjordVid(data.Dataset):
+#     """
+#     Samples selected according to recency wrt frames
+#     """
+#     def __init__(self):
+#         super().__init__()
+#
+#
+#     def __getitem__(self, item):
+#         pass
+#
+#     def __len__(self):
+#         pass
 
-    def __getitem__(self, item):
-        pass
+def get_njordvid_datasets():
+    ind_data_dict = check_dataset("folds/ind_fold.yaml")
+    ind_train_path, ind_val_path = ind_data_dict['train'], ind_data_dict['val']
+    ind_dataloader, _ = create_dataloader(ind_train_path, 512,1,32)
+    ind_val_dataloader = create_dataloader(ind_val_path, 512,1,32)
 
-    def __len__(self):
-        pass
+    ood_data_dict = check_dataset("folds/ood_fold.yaml")
+    _, ood_val_path = ood_data_dict['train'], ood_data_dict['val']
+    ood_dataloader, _= create_dataloader(ood_val_path, 512, 1, 32)
+
+    test_data_dict = check_dataset("folds/test_fold.yaml")
+    _, test_val_path = test_data_dict['train'], test_data_dict['val']
+    test_dataloader, _ = create_dataloader(test_val_path, 512, 1, 32)
+
+    return [ind_dataloader, ind_val_dataloader, ood_dataloader, test_dataloader]
 
 def wrap_dataset(dataset):
     """
@@ -143,7 +165,7 @@ def transform_dataset(dataset, transform):
     return NewDataset(dataset)
 
 
-def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, biased=False, seed=0):
+def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
     if use_track == 1:
         track_data_dir = os.path.join(root, "track_1")
         data_dir = os.path.join(track_data_dir, "public_dg_0416", "train")
