@@ -176,9 +176,9 @@ def nico_correlation():
     ind_dataset_name = "nico"
     columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
-    for noise_val in [0.001, 0.005, 0.01, 0.05, 0.1, 0.15, 0.25]:
+    for noise_val in [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.15, 0.25, 0.50, 0.75]:
         for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-            data = ds.eval_synthetic(ind, ind_val, sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
+            data = ds.eval_synthetic(ind, ind_val,lambda x: x+torch.randn_like(x)*noise_val, sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
                                              sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{noise_val}")
             merged.append(data)
     final = pd.concat(merged)

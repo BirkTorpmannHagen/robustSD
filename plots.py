@@ -53,8 +53,8 @@ def plot_nico_clustering_bias():
         plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
         plt.show()
 
-def get_metrics():
-    dataset = pd.read_csv("new_data_nico.csv")
+def get_classification_metrics(filename):
+    dataset = pd.read_csv(filename)
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
         ood = subset[subset["ood_dataset"] != "nico_dim"]
@@ -96,6 +96,16 @@ def get_metrics():
         # print("kn: ", dr_kn)
 
 
+def get_corrrelation_metrics(filename):
+    dataset = pd.read_csv(filename)
+    for sample_size in np.unique(dataset["sample_size"]):
+        subset = dataset[dataset["sample_size"] == sample_size]
+        ood = subset[subset["ood_dataset"] != "nico_dim"]
+        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
+        corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
+        
+
 if __name__ == '__main__':
   # plot_nico_clustering_bias()
-  get_metrics()
+  get_classification_metrics()
