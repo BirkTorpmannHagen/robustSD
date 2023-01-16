@@ -54,7 +54,7 @@ def plot_nico_clustering_bias():
         plt.show()
 
 def get_metrics():
-    dataset = pd.read_csv("new_data_nico.csv")
+    dataset = pd.read_csv("lp_nico_datak6.csv")
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
         ood = subset[subset["ood_dataset"] != "nico_dim"]
@@ -64,22 +64,23 @@ def get_metrics():
         # print(subset.groupby(["ood_dataset"])["vanilla_p"].mean())
         # print(subset.groupby(["ood_dataset"])["kn_p"].mean())
         # input()
+        print("sample size ",sample_size)
         fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
         fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", fpr_van)
-        # print("kn:", fpr_kn)
+        print("vanilla FPR: ", fpr_van)
+        print("kn FPR:", fpr_kn)
         aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
         aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
-        print("vanilla: ", aupr_van)
-        print("kn:", aupr_kn)
+        print("vanilla AUPR: ", aupr_van)
+        print("kn AUPR:", aupr_kn)
         auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
         auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", auroc_van)
-        # print("kn:", auroc_kn)
+        print("vanilla AUROC: ", auroc_van)
+        print("kn AUROC:", auroc_kn)
         corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
         corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
-     #   print("vanilla: ", corr_van)
-#        print("kn: ", corr_kn)
+        # print("vanilla: ", corr_van)
+        # print("kn: ", corr_kn)
         # f, ax = plt.subplots(figsize=(7, 7))
         # ax.set(yscale="log")
         # sns.regplot(np.concatenate((ood["loss"], ind["loss"])), np.concatenate((ood["kn_p"], ind["kn_p"])), ax=ax, color="blue")
@@ -90,10 +91,10 @@ def get_metrics():
         # plt.legend()
         # plt.title(f"{corr_kn} at n={sample_size}")
         # plt.show()
-        # dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
-        # dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", dr_van)
-        # print("kn: ", dr_kn)
+        dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+        dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+        print("vanilla DR: ", dr_van)
+        print("kn DR: ", dr_kn)
 
 
 if __name__ == '__main__':
