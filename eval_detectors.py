@@ -54,7 +54,7 @@ class robustSD:
         self.config = config
 
 
-    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, ood_dataset_name, k=20, plot=False):
+    def compute_pvals_and_loss(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, ood_dataset_name, k=5, plot=False):
         sample_size = min(sample_size, len(ood_dataset))
         fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{type(self.rep_model).__name__}.pkl"
         fname_losses = f"robustSD_{ind_dataset_name}_losses_{type(self.rep_model).__name__}.pkl"
@@ -79,6 +79,12 @@ class robustSD:
 
                 ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
                                                          y.to(self.config["device"])).cpu().numpy()
+                # if ood_losses[i]<0.01:
+                #     print(torch.argmax(self.classifier(x.to(self.config["device"])).sigmoid()))
+                #     print(y)
+                #     print("huh")
+                #     plt.imshow(x[0].cpu().numpy().T)
+                #     plt.show()
         cols = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
         dataframe = []
 
@@ -88,9 +94,11 @@ class robustSD:
             vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
             k_nearest_idx = np.concatenate([np.argpartition(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1), k)[:k] for i in ood_samples])
             k_nearest_ind = ind_latents[k_nearest_idx]
-            viz = PCA()
-            viz.fit_transform(X=np.concatenate((ind_latents, ood_samples, k_nearest_ind)), y=[0]*len(ind_latents)+[1]*len(ood_samples)+[2]*len(k_nearest_ind))
-            viz.show()
+            # k_nearest_idx = [np.argmin(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1)) for i in ood_samples]
+            # k_nearest_ind = ind_latents[k_nearest_idx]
+            # viz = PCA()
+            # viz.fit_transform(X=np.concatenate((ind_latents, ood_samples, k_nearest_ind)), y=[0]*len(ind_latents)+[1]*len(ood_samples)+[2]*len(k_nearest_ind))
+            # viz.show()
             kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
             dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, type(self.rep_model).__name__, sample_size, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])))
         final = pd.DataFrame(data=dataframe, columns=cols)
@@ -117,14 +125,14 @@ def eval_nico():
     model = ResNetVAE().to("cuda").eval()
     vae_exp = VAEXperiment(model, config)
     vae_exp.load_state_dict(
-        torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+        torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_40/checkpoints/epoch=8-step=22482.ckpt")[
             "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
     classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
     # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
 
     aconfig = {"device":"cuda"}
-    ds = robustSD(model, classifier, aconfig)
+    ds = robustSD(classifier, classifier, aconfig)
     # ds = robustSD(model, classifier, aconfig)
 
     # print("ood")
@@ -134,11 +142,11 @@ def eval_nico():
     for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
         test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
         for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-            data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset, classifier),
+            data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset, classifier, sample_size=sample_size),
                                              sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}")
             merged.append(data)
     final = pd.concat(merged)
-    final.to_csv(f"vae_data_nico.csv")
+    final.to_csv(f"lp_nico_datak6  .csv")
     print(final.head(10))
 
 def nico_correlation():

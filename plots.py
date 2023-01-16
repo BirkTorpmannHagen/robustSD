@@ -54,28 +54,28 @@ def plot_nico_clustering_bias():
         plt.show()
 
 def get_metrics():
-    dataset = pd.read_csv("vae_data_nico.csv")
+    dataset = pd.read_csv("new_data_nico.csv")
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
         ood = subset[subset["ood_dataset"] != "nico_dim"]
         ind = subset[subset["ood_dataset"] == "nico_dim"]
-        plt.hist(ind["vanilla_p"], label="vanilla")
-        plt.hist(ind["kn_p"], label="kn")
-        print(subset.groupby(["ood_dataset"])["vanilla_p"].mean())
-        print(subset.groupby(["ood_dataset"])["kn_p"].mean())
-        input()
+        # plt.hist(ind["vanilla_p"], label="vanilla")
+        # plt.hist(ind["kn_p"], label="kn")
+        # print(subset.groupby(["ood_dataset"])["vanilla_p"].mean())
+        # print(subset.groupby(["ood_dataset"])["kn_p"].mean())
+        # input()
         fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
         fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
-        print("vanilla: ", fpr_van)
-        print("kn:", fpr_kn)
+        # print("vanilla: ", fpr_van)
+        # print("kn:", fpr_kn)
         aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
         aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", aupr_van)
-        # print("kn:", aupr_kn)
+        print("vanilla: ", aupr_van)
+        print("kn:", aupr_kn)
         auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
         auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
-        print("vanilla: ", auroc_van)
-        print("kn:", auroc_kn)
+        # print("vanilla: ", auroc_van)
+        # print("kn:", auroc_kn)
         corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
         corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
      #   print("vanilla: ", corr_van)
@@ -97,5 +97,5 @@ def get_metrics():
 
 
 if __name__ == '__main__':
-  plot_nico_clustering_bias()
-  # get_metrics()
+  # plot_nico_clustering_bias()
+  get_metrics()
