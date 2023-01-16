@@ -30,7 +30,7 @@ from classifier.resnetclassifier import ResNetClassifier
 
 def train_classifier():
     import os
-    model = ResNetClassifier(len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/autumn")), 34, transfer=False, tune_fc_only=False)
+    model = ResNetClassifier(len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/autumn")), 34, transfer=False)
     trainer = Trainer(gpus=[0], max_epochs=200)
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                         transforms.Resize((512,512)),

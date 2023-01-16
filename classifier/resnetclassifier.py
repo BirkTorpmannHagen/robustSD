@@ -26,7 +26,7 @@ import pytorch_lightning as pl
 class ResNetClassifier(pl.LightningModule):
     def __init__(self, num_classes, resnet_version,
                  optimizer='adam', lr=1e-3, batch_size=16,
-                 transfer=False, tune_fc_only=False):
+                 transfer=False):
         super().__init__()
 
         self.__dict__.update(locals())
@@ -47,10 +47,6 @@ class ResNetClassifier(pl.LightningModule):
         # replace final layer for fine tuning
         self.resnet_model.fc = nn.Linear(linear_size, num_classes)
 
-        if tune_fc_only:  # option to only tune the fully-connected layers
-            for child in list(self.resnet_model.children())[:-1]:
-                for param in child.parameters():
-                    param.requires_grad = False
         self.latent_dim = self.get_encoding_size(-2)
 
 

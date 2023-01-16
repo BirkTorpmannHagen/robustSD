@@ -3,6 +3,7 @@ from torch.utils.data import Sampler, DataLoader
 from sklearn.cluster import KMeans
 import numpy as np
 from tqdm import tqdm
+from yellowbrick.features import PCA
 
 class ClassOrderSampler(Sampler):
     """
@@ -49,9 +50,11 @@ class ClusterSampler(Sampler):
             for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
                 x=x.to("cuda")
                 self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
-        self.num_clusters = len(data_source)//sample_size
+        self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
+        pca =PCA()
+        pca.fit_transform_show(X=self.reps, y=self.kmeans)
 
 
     def __iter__(self):
-        return iter(np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(10)], axis=0))
+        return iter(np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(self.num_clusters)], axis=0))
