@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
 from scipy.stats import ks_2samp
-from bias_samplers import ClusterSampler
+from bias_samplers import ClusterSampler, ClassOrderSampler
 import torchvision.transforms as transforms
 from tqdm import tqdm
 import pickle as pkl
@@ -122,14 +122,14 @@ def eval_nico():
     ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
     # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
-    model = ResNetVAE().to("cuda").eval()
-    vae_exp = VAEXperiment(model, config)
-    vae_exp.load_state_dict(
-        torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_40/checkpoints/epoch=8-step=22482.ckpt")[
-            "state_dict"])
+    # model = ResNetVAE().to("cuda").eval()
+    # vae_exp = VAEXperiment(model, config)
+    # vae_exp.load_state_dict(
+    #     torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_40/checkpoints/epoch=8-step=22482.ckpt")[
+    #         "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
-    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+    classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    # classifier = SegmentationnicoModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
 
     aconfig = {"device":"cuda"}
     ds = robustSD(classifier, classifier, aconfig)
@@ -142,11 +142,11 @@ def eval_nico():
     for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
         test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
         for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-            data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset, classifier, sample_size=sample_size),
+            data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClassOrderSampler(test_dataset),
                                              sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}")
             merged.append(data)
     final = pd.concat(merged)
-    final.to_csv(f"lp_nico_datak6  .csv")
+    final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{5}_ClassOrderSampler.csv")
     print(final.head(10))
 
 def nico_correlation():
@@ -176,18 +176,20 @@ def nico_correlation():
     ind_dataset_name = "nico"
     columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
-    for noise_val in [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.15, 0.25, 0.50, 0.75]:
+    for noise_val in np.linspace(0,1,25):
         for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
             data = ds.eval_synthetic(ind, ind_val,lambda x: x+torch.randn_like(x)*noise_val, sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
                                              sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{noise_val}")
             merged.append(data)
     final = pd.concat(merged)
-    final.to_csv(f"lp_data_nico_noise.csv")
+    final.to_csv(f"lp_data_nico_noise_25.csv")
     print(final.head(10))
 
 
 
 if __name__ == '__main__':
     # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
-    nico_correlation()
+    # nico_correlation()
+    eval_nico()
+
 

@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.metrics import RocCurveDisplay
 import seaborn as sns
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, pearsonr
 import numpy as np
 def fprat95tpr(ood_ps, ind_ps):
     """
@@ -55,8 +55,34 @@ def aupr(ood_ps, ind_ps):
 #     :return:
 #     """
 
-def correlation(ood_ps, ind_ps, ood_loss, ind_loss):
+def correlation_split(ood_ps, ind_ps, ood_loss, ind_loss):
     merged_p = list(ood_ps)+list(ind_ps)
     merged_loss = list(ood_loss)+list(ind_loss)
     # sns.regplot(data=merged, x="P", y="loss")
     return spearmanr(merged_p, merged_loss)
+
+def correlation(ps, loss):
+
+    return spearmanr(ps, loss)
+
+def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=100):
+    """
+        Computes a pdf for the given number of bins, and gets the likelihood of the test loss at the given test_ps bin.
+    """
+
+    pargsort = np.argsort(ps)
+    sorted_ps = np.array(ps)[pargsort]
+    sorted_loss = np.array(loss)[pargsort]
+    p_bins = sorted_ps[::len(sorted_ps)//bins]
+    loss_samples_per_bin = [sorted_loss[i:j] for i, j in zip(range(0, len(sorted_loss), len(sorted_loss)//bins),
+                                                             range(len(sorted_loss)//bins, len(sorted_loss), len(sorted_loss)//bins))]
+
+    loss_pdfs = [np.histogram(losses_in_pbin, bins=len(loss_samples_per_bin[0]//10)) for losses_in_pbin in loss_samples_per_bin]
+    #loss_pdfs is essentially a probability funciton for each bin that shows the likelihood of some loss value given a certain p
+
+
+    test_p_indexes = np.digitize(test_ps, p_bins)
+    test_loss_pdfs = [loss_pdfs[i] for i in test_p_indexes]
+    test_loss_likelihoods = [pdf[0][np.digitize(test_loss, pdf[1])] for test_loss, pdf in zip(test_losses, test_loss_pdfs)]
+    print(test_loss_likelihoods)
+    return np.mean(test_loss_likelihoods)

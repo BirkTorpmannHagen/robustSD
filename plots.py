@@ -17,6 +17,37 @@ from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
 from bias_samplers import *
 
+
+def plot_nico_class_bias(model):
+    pca = PCA(n_components=2)
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((512, 512)),
+                                transforms.ToTensor(), ])
+    ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+    ind_encodings = np.zeros((len(ind), model.latent_dim))
+    val_encodings = np.zeros((len(ind_val), model.latent_dim))
+    with torch.no_grad():
+        for i, (x, y, _) in tqdm(enumerate(DataLoader(ind, shuffle=True)), total=len(ind)):
+            ind_encodings[i] = model.encode(x.to("cuda"))[0].cpu().numpy()
+
+        for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_val, sampler=ClassOrderSampler(ind_val))),
+                                 total=len(ind_val)):
+            val_encodings[i] = model.encode(x.to("cuda"))[0].cpu().numpy()
+
+    pca.fit(ind_encodings)
+    transformed_ind = pca.transform(ind_encodings)
+    transformed_val = pca.transform(val_encodings)
+
+    for idx, (i, j) in enumerate(zip(np.linspace(0, int(.9 * len(transformed_val)), 10),
+                                     np.linspace(int(0.1 * len(transformed_val)), len(transformed_val), 10))):
+        i = int(i)
+        j = int(j)
+        plt.scatter(transformed_val[:, 0], transformed_val[:, 1], label=f"InD")
+        plt.scatter(transformed_val[i:j, 0],
+                    transformed_val[i:j, 1], label=f"Biased")
+        plt.legend()
+        plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
+        plt.show()
 def plot_nico_clustering_bias():
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
     model = ResNetVAE().to("cuda").eval()
@@ -64,22 +95,23 @@ def get_classification_metrics(filename):
         # print(subset.groupby(["ood_dataset"])["vanilla_p"].mean())
         # print(subset.groupby(["ood_dataset"])["kn_p"].mean())
         # input()
+        print("sample size ",sample_size)
         fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
         fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", fpr_van)
-        # print("kn:", fpr_kn)
+        print("vanilla FPR: ", fpr_van)
+        print("kn FPR:", fpr_kn)
         aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
         aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
-        print("vanilla: ", aupr_van)
-        print("kn:", aupr_kn)
+        print("vanilla AUPR: ", aupr_van)
+        print("kn AUPR:", aupr_kn)
         auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
         auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", auroc_van)
-        # print("kn:", auroc_kn)
-        corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
-        corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
-     #   print("vanilla: ", corr_van)
-#        print("kn: ", corr_kn)
+        print("vanilla AUROC: ", auroc_van)
+        print("kn AUROC:", auroc_kn)
+        # corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
+        # corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
+        # print("vanilla: ", corr_van)
+        # print("kn: ", corr_kn)
         # f, ax = plt.subplots(figsize=(7, 7))
         # ax.set(yscale="log")
         # sns.regplot(np.concatenate((ood["loss"], ind["loss"])), np.concatenate((ood["kn_p"], ind["kn_p"])), ax=ax, color="blue")
@@ -90,22 +122,43 @@ def get_classification_metrics(filename):
         # plt.legend()
         # plt.title(f"{corr_kn} at n={sample_size}")
         # plt.show()
-        # dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
-        # dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
-        # print("vanilla: ", dr_van)
-        # print("kn: ", dr_kn)
+        dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+        dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+        print("vanilla DR: ", dr_van)
+        print("kn DR: ", dr_kn)
 
 
 def get_corrrelation_metrics(filename):
     dataset = pd.read_csv(filename)
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
-        ood = subset[subset["ood_dataset"] != "nico_dim"]
-        ind = subset[subset["ood_dataset"] == "nico_dim"]
-        corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
-        corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
-        
+        corr_van = correlation(np.log10(subset["vanilla_p"]), subset["loss"])
+        corr_kn = correlation(np.log10(subset["kn_p"]), subset["loss"])
+        print("correlation vanilla", corr_van)
+        print("correlation kn", corr_kn)
+        if sample_size==200:
+
+            f, ax = plt.subplots(figsize=(7, 7))
+            sns.regplot(subset["kn_p"],subset["loss"], ax=ax, color="blue")
+            ax.set_xlabel("kn_p", color="blue", fontsize=14)
+            ax.set(xscale="log")
+
+            # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
+            plt.ylim((0,10))
+            plt.legend()
+            plt.title(f"{round(corr_kn[0],3)} at n={sample_size}")
+            plt.show()
+
+            f2, ax2 = plt.subplots(figsize=(7, 7))
+            ax2.set(xscale="log")
+
+            sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
+            plt.ylim((0,10))
+
+            plt.show()
+
 
 if __name__ == '__main__':
   # plot_nico_clustering_bias()
-  get_classification_metrics()
+  get_classification_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv")
+  # get_corrrelation_metrics("lp_data_nico_unbiased.csv")

@@ -21,7 +21,7 @@ class ClassOrderSampler(Sampler):
 
 
     def __iter__(self):
-        return sum(self.indices, [])
+        return iter(sum(self.indices, []))
 
 
 class SequentialSampler(Sampler):
