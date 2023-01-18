@@ -128,7 +128,7 @@ def eval_nico():
     #     torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_40/checkpoints/epoch=8-step=22482.ckpt")[
     #         "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
     # classifier = SegmentationnicoModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
 
     aconfig = {"device":"cuda"}
@@ -165,7 +165,7 @@ def nico_correlation():
     #     torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
     #         "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
     # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
 
     aconfig = {"device":"cuda"}
@@ -177,19 +177,19 @@ def nico_correlation():
     columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
     for noise_val in np.linspace(0,1,25):
-        for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
+        for sample_size in [100]:
             data = ds.eval_synthetic(ind, ind_val,lambda x: x+torch.randn_like(x)*noise_val, sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
                                              sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{noise_val}")
             merged.append(data)
     final = pd.concat(merged)
-    final.to_csv(f"lp_data_nico_noise_25.csv")
+    final.to_csv(f"lp_data_nico_noise.csv")
     print(final.head(10))
 
 
 
 if __name__ == '__main__':
     # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
-    # nico_correlation()
-    eval_nico()
+    nico_correlation()
+    # eval_nico()
 
 
