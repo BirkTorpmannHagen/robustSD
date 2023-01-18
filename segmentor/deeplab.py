@@ -34,6 +34,10 @@ class SegmentationModel(pl.LightningModule):
         super().__init__()
 
         self.__dict__.update(locals())
+        optimizers = {'adam': Adam, 'sgd': SGD}
+        self.optimizer = optimizers[optimizer]
+        # instantiate loss criterion
+        self.criterion = JaccardLoss(mode="binary")
         resnets = {
             18: models.resnet18, 34: models.resnet34,
             50: models.resnet50, 101: models.resnet101,
@@ -42,35 +46,11 @@ class SegmentationModel(pl.LightningModule):
         optimizers = {'adam': Adam, 'sgd': SGD}
         self.optimizer = optimizers[optimizer]
         # instantiate loss criterion
-        self.criterion = JaccardLoss(mode="binary")
-        self.encoder =    resnets = {
-            18: models.resnet18, 34: models.resnet34,
-            50: models.resnet50, 101: models.resnet101,
-            152: models.resnet152
-        }
-        optimizers = {'adam': Adam, 'sgd': SGD}
-        self.optimizer = optimizers[optimizer]
-        # instantiate loss criterion
-        self.criterion = nn.CrossEntropyLoss()
         # Using a pretrained ResNet backbone
-        self.resnet_model = resnets[resnet_version](pretrained=transfer)
-
+        self.segmentor = DeepLabV3Plus()
+        self.encoder = self.segmentor.encoder
         # replace final layer for fine tuning
-        self.decoder = DeepLabV3PlusDecoder(
-            encoder_channels=self.encoder.out_channels,
-            out_channels=256,
-            atrous_rates= (12, 24, 36),
-            output_stride=32,
-        )
-
-        self.segmentation_head = SegmentationHead(
-            in_channels=self.decoder.out_channels,
-            out_channels=1,
-            activation=None,
-            kernel_size=1,
-            upsampling=4,
-        )
-
+        self.decoder = self.segmentor.decoder
         self.latent_dim = self.get_encoding_size()
 
 

@@ -105,6 +105,67 @@ class NjordVid(data.Dataset):
     def __len__(self):
         pass
 
+class EtisDataset(data.Dataset):
+    """
+        Dataset class that fetches Etis-LaribPolypDB images with the associated segmentation mask.
+        Used for testing.
+    """
+
+    def __init__(self, path, transforms, split="train"):
+        super(EtisDataset, self).__init__()
+        self.path = path
+        self.len = len(listdir(join(self.path, "Original")))
+        indeces = range(self.len)
+        self.train_indeces = indeces[:int(0.8*self.len)]
+        self.val_indeces = indeces[int(0.8*self.len):]
+        self.transforms = transforms
+        self.split = split
+        if self.split=="train":
+            self.len=len(self.train_indeces)
+        else:
+            self.len=len(self.val_indeces)
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, i):
+        if self.split=="train":
+            index = self.train_indeces[i]
+        else:
+            index = self.val_indeces[i]
+
+
+        img_path = join(self.path, "Original/{}.jpg".format(index + 1))
+        mask_path = join(self.path, "GroundTruth/p{}.jpg".format(index + 1))
+        image = Image.open(img_path)
+        mask = Image.open(mask_path)
+        image = self.transforms(image)
+        mask = (self.transforms(mask)>0.5).int()
+        # image = self.transforms(
+        #     open(join(self.path, "Original/{}.jpg".format(index + 1))).convert("RGB"))
+        # mask = self.transforms(
+        #     open(join(self.path, "GroundTruth/p{}.jpg".format(index + 1))).convert("RGB"))
+        # mask = (mask > 0.5).float()
+        return image, mask, index + 1
+
+class CVC_ClinicDB(data.Dataset):
+    def __init__(self, root_directory, transforms):
+        super(CVC_ClinicDB, self).__init__()
+        self.root = root_directory
+        self.mask_fnames = listdir(join(self.root, "GroundTruth"))
+        self.mask_locs = [join(self.root, "GroundTruth", i) for i in self.mask_fnames]
+        self.img_locs = [join(self.root, "Original", i) for i in
+                         self.mask_fnames]
+        self.common_transforms = transforms
+
+    def __getitem__(self, idx):
+        mask = self.common_transforms(open(self.mask_locs[idx]))
+        image = self.common_transforms(open(self.img_locs[idx]))
+        return image, mask, self.mask_fnames[idx]
+
+    def __len__(self):
+        return len(self.mask_fnames)
+
 def wrap_dataset(dataset):
     """
     dumb utility function to make testing easier. get just returns an extra 0.
@@ -164,12 +225,14 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
-def build_polyp_dataset(root, fold, seed=0):
-    if fold=="Kvasir":
-        train_set = KvasirSegmentationDataset(root, split="train")
-        val_set = KvasirSegmentationDataset(root, split="val")
+def build_polyp_dataset(root, fold="Etis", seed=0):
+    trans = transforms.Compose([transforms.Resize((512,512)),
+                                              transforms.ToTensor()])
+    if fold=="Etis":
+        train_set = EtisDataset(root, trans, split="train")
+        val_set = EtisDataset(root, trans, split="val")
     else:
-        raise NotImplementedError
+        return CVC_ClinicDB(root,trans)
     return train_set, val_set
 
 def build_njord_dataset():
@@ -196,6 +259,6 @@ class NICOTestDataset(data.Dataset):
 if __name__ == '__main__':
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
-                                              transforms.Resize(512),
+                                              transforms.Resize((512,512)),
                                               transforms.ToTensor(),])
     build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="autumn", biased=True, seed=0)[0]
