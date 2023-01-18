@@ -10,9 +10,9 @@ from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
 from classifier.resnetclassifier import ResNetClassifier
 import yaml
 from metrics import *
-from bias_samplers import ClusterSampler
+from bias_samplers import ClusterSampler, ClusterSamplerWithSeverity, ClassOrderSampler
 from torch.utils.data import DataLoader
-from domain_datasets import build_nico_dataset
+from domain_datasets import build_nico_dataset, wrap_dataset
 import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
@@ -147,38 +147,143 @@ def get_classification_metrics(filename):
         print("kn DR: ", dr_kn)
 
 
-def get_corrrelation_metrics(filename):
-    dataset = pd.read_csv(filename)
+def get_corrrelation_metrics(filename_noise, filename_ood):
+    dataset = pd.read_csv(filename_noise)
+    # raw correlation data
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
         corr_van = correlation(np.log10(subset["vanilla_p"]), subset["loss"])
         corr_kn = correlation(np.log10(subset["kn_p"]), subset["loss"])
         print("correlation vanilla", corr_van)
         print("correlation kn", corr_kn)
-        if sample_size==200:
+        f, ax = plt.subplots(figsize=(7, 7))
+        sns.regplot(subset["kn_p"],subset["loss"], ax=ax, color="blue")
+        ax.set_xlabel("kn_p", color="blue", fontsize=14)
+        ax.set(xscale="log")
 
-            f, ax = plt.subplots(figsize=(7, 7))
-            sns.regplot(subset["kn_p"],subset["loss"], ax=ax, color="blue")
-            ax.set_xlabel("kn_p", color="blue", fontsize=14)
-            ax.set(xscale="log")
+        # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
+        plt.ylim((0,10))
+        plt.legend()
+        plt.title(f"{round(corr_kn[0],3)} at n={sample_size}")
+        plt.show()
 
-            # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
-            plt.ylim((0,10))
-            plt.legend()
-            plt.title(f"{round(corr_kn[0],3)} at n={sample_size}")
-            plt.show()
+        f2, ax2 = plt.subplots(figsize=(7, 7))
+        ax2.set(xscale="log")
+        sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
+        plt.ylim((0,10))
+        plt.show()
+    # predictive
+    dataset_ood = pd.read_csv(filename_ood)
+    for sample_size in np.unique(dataset["sample_size"]):
+        subset = dataset[dataset["sample_size"] == sample_size]
+        vanilla_predictive_likelihood = get_loss_pdf_from_ps(subset["vanilla_p"], subset["loss"], dataset_ood["vanilla_p"], dataset_ood["loss"])
+        kn_predictive_likelihood = get_loss_pdf_from_ps(subset["kn_p"], subset["loss"], dataset_ood["kn_p"], dataset_ood["loss"])
+        print("vanilla predictive likelihood", vanilla_predictive_likelihood)
+        print("kn predictive likelihood", kn_predictive_likelihood)
 
-            f2, ax2 = plt.subplots(figsize=(7, 7))
-            ax2.set(xscale="log")
+def genfailure_metrics(filename):
+    dataset = pd.read_csv(filename)
+    for sample_size in np.unique(dataset["sample_size"]):
+        subset = dataset[dataset["sample_size"] == sample_size]
+        ood = subset[subset["ood_dataset"] != "nico_dim"]
+        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        print(sample_size)
+        print("ood: ", ood["loss"].mean())
+        print("ind: ", ind["loss"].mean())
 
-            sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
-            plt.ylim((0,10))
 
-            plt.show()
+def plot_loss_v_encodings():
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    config = {"device":"cuda"}
 
+    model = ResNetClassifier.load_from_checkpoint(
+        "/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt",
+        num_classes=num_classes, resnet_version=34).to("cuda")
+    pca = PCA(n_components=2)
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((512, 512)),
+                                transforms.ToTensor(), ])
+    # ind_dataset, ood_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+    ind_dataset, ood_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="rock", seed=0)
+
+    ood_latents = np.zeros((len(ood_dataset), model.latent_dim))
+    ood_losses = np.zeros(len(ood_dataset))
+    for i, (x, y, _) in tqdm(enumerate(DataLoader(ood_dataset)), total=len(ood_dataset)):
+        with torch.no_grad():
+            ood_latents[i] = model.encode(x.to(config["device"]))[0].cpu().numpy()
+
+            ood_losses[i] = model.compute_loss(x.to(config["device"]),
+                                                         y.to(config["device"])).cpu().numpy()
+    latents =pca.fit_transform(ood_latents)
+    plt.show()
+    plt.hist(ood_losses, bins=100)
+    plt.show()
+    plt.scatter(latents[:,0], ood_losses)
+
+    plt.show()
+    # ax = plt.axes(projection="3d")
+    # ax.scatter3D(latents[:,0], latents[:,1], ood_losses, c=ood_losses)
+    plt.show()
+
+def eval_sample_size_impact(filename):
+    das_kn = []
+    das_vn = []
+    dataset = pd.read_csv(filename)
+    for sample_size in np.unique(dataset["sample_size"]):
+        subset = dataset[dataset["sample_size"] == sample_size]
+        ood = subset[subset["ood_dataset"] != "nico_dim"]
+        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        das_kn.append(calibrated_detection_rate(ood["kn_p"], ind["kn_p"]))
+        das_vn.append(calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"]))
+    plt.plot(np.unique(dataset["sample_size"]), das_kn, label="kn")
+    plt.plot(np.unique(dataset["sample_size"]), das_vn, label="vanilla")
+    plt.legend()
+    plt.show()
+
+def eval_k_impact(filename):
+    #todo collect a csv with k-data for some dataset and sample size
+    das_kn = []
+    das_vn = []
+    dataset = pd.read_csv(filename)
+    for k in np.unique(dataset["k"]):
+        subset = dataset[dataset["k"] == k]
+        ood = subset[subset["ood_dataset"] != "nico_dim"]
+        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        das_kn.append(calibrated_detection_rate(ood["kn_p"], ind["kn_p"]))
+        das_vn.append(calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"]))
+    plt.plot(np.unique(dataset["k"]), das_kn, label="kn")
+    plt.plot(np.unique(dataset["k"]), das_vn, label="vanilla")
+    plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
+  # plot_loss_v_encodings()
   # plot_nico_clustering_bias()
   # plot_nico_class_bias()
-  get_classification_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv")
+  # genfailure_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv") #potential bu88
+  # get_classification_metrics("ResNetClassifier_dim_k2_ClassOrderSampler-incomplte.csv") #lower k is slightly better with class-bias?
+  # genfailure_metrics()
+  # get_classification_metrics("ResNetClassifier_dim_k10_ClassOrderSampler.csv")
   # get_corrrelation_metrics("lp_data_nico_noise.csv")
+  # from torchvision.datasets import MNIST
+  # from torchvision.datasets import CIFAR10,CIFAR100
+  # dataset = CIFAR10("~/Datasets/cifar10", train=True, download=True)
+  # for x,y, z in dataset:
+  #   plt.imshow(x)
+  #   plt.show()
+  #   break
+  # CIFAR100("~/Datasets/cifar100", train=True, download=True)
+  # MNIST("~/Datasets/mnist", train=True, download=True)
+  # num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+  #
+  # model = ResNetClassifier.load_from_checkpoint(
+  #     "/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt",
+  #     num_classes=num_classes, resnet_version=34).to("cuda")
+  #
+  # trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+  #                             transforms.Resize((512, 512)),
+  #                             transforms.ToTensor(), ])
+  # ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+  # for i, (x,y,_) in enumerate(DataLoader(ind_val, sampler=ClusterSamplerWithSeverity(ind_val,model, 50, 0.5 ))):
+  #     pass
+  #

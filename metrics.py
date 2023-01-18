@@ -68,6 +68,10 @@ def correlation(ps, loss):
 def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=100):
     """
         Computes a pdf for the given number of bins, and gets the likelihood of the test loss at the given test_ps bin.
+        #todo: collect a new noise dataset with the right predictor
+        :returns the average likelihood of the observed test-loss as bootstrapped from the pdf w/noise.
+        Higher likelihood ~ more likely that the model is correct more often.
+        
     """
 
     pargsort = np.argsort(ps)
