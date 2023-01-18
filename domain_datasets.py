@@ -201,7 +201,7 @@ class CVC_ClinicDB(data.Dataset):
 
 def wrap_dataset(dataset):
     """
-    dumb utility function to make testing easier. get just returns an extra 0.
+    dumb utility function to make testing easier. standardizes datasets so that it works easier with the models and trainers
     :param dataset:
     :return:
     """
@@ -212,6 +212,8 @@ def wrap_dataset(dataset):
 
         def __getitem__(self, index):
             image, label = self.dataset[index]
+            if image.shape[0]==1:
+                image = image.repeat(3,1,1)
             return image, label, 0
 
         def __len__(self):

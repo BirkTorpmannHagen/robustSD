@@ -79,33 +79,56 @@ class robustSD:
 
                 ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
                                                          y.to(self.config["device"])).cpu().numpy()
-                # if ood_losses[i]<0.01:
-                #     print(torch.argmax(self.classifier(x.to(self.config["device"])).sigmoid()))
-                #     print(y)
-                #     print("huh")
-                #     plt.imshow(x[0].cpu().numpy().T)
-                #     plt.show()
         cols = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
         dataframe = []
-
         for start, stop in list(zip(range(0, len(ood_dataset), sample_size), range(sample_size, len(ood_dataset)+sample_size, sample_size)))[:-1]: #perform tests
             sample_idx = range(start,stop)
             ood_samples = ood_latents[sample_idx]
             vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
             k_nearest_idx = np.concatenate([np.argpartition(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1), k)[:k] for i in ood_samples])
             k_nearest_ind = ind_latents[k_nearest_idx]
-            # k_nearest_idx = [np.argmin(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1)) for i in ood_samples]
-            # k_nearest_ind = ind_latents[k_nearest_idx]
-            # viz = PCA()
-            # viz.fit_transform(X=np.concatenate((ind_latents, ood_samples, k_nearest_ind)), y=[0]*len(ind_latents)+[1]*len(ood_samples)+[2]*len(k_nearest_ind))
-            # viz.show()
             kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
             dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, type(self.rep_model).__name__, sample_size, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])))
         final = pd.DataFrame(data=dataframe, columns=cols)
-        print(final.head())
         return final
-    def bootstrap_severity_estimation(self):
-        pass
+    def bootstrap_severity_estimation(self, ind_dataset, ood_dataset, ood_sampler, sample_size, ind_dataset_name, k=5, plot=False):
+        #todo wip
+        sample_size = min(sample_size, len(ood_dataset))
+        fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{type(self.rep_model).__name__}.pkl"
+        fname_losses = f"robustSD_{ind_dataset_name}_losses_{type(self.rep_model).__name__}.pkl"
+        try:
+            ind_latents = pkl.load(open(fname_encodings, "rb"))
+            losses = pkl.load(open(fname_losses, "rb"))
+        except FileNotFoundError:
+            ind_latents = np.zeros((len(ind_dataset), self.rep_model.latent_dim))
+            losses = np.zeros(len(ind_dataset))
+            for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_dataset)),total=len(ind_dataset)):
+                with torch.no_grad():
+                    ind_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
+                    losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
+            pkl.dump(ind_latents, open(fname_encodings, "wb"))
+            pkl.dump(losses, open(fname_losses, "wb"))
+
+        ood_latents = np.zeros((len(ood_dataset), self.rep_model.latent_dim))
+        ood_losses = np.zeros(len(ood_dataset))
+        for i, (x, y, _) in tqdm(enumerate(DataLoader(ood_dataset, sampler=ood_sampler)), total=len(ood_dataset)):
+            with torch.no_grad():
+                ood_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
+
+                ood_losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),
+                                                         y.to(self.config["device"])).cpu().numpy()
+        cols = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+        dataframe = []
+        for start, stop in list(zip(range(0, len(ood_dataset), sample_size), range(sample_size, len(ood_dataset)+sample_size, sample_size)))[:-1]: #perform tests
+            sample_idx = range(start,stop)
+            ood_samples = ood_latents[sample_idx]
+            vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
+            k_nearest_idx = np.concatenate([np.argpartition(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1), k)[:k] for i in ood_samples])
+            k_nearest_ind = ind_latents[k_nearest_idx]
+            kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
+            dataframe.append(dict(zip(cols, [ind_dataset_name, "noise_level", type(self.rep_model).__name__, sample_size, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])))
+        final = pd.DataFrame(data=dataframe, columns=cols)
+        return final
 
     def eval_synthetic(self, ind_dataset, ind_val, trans_fn, sampler, sample_size, ind_dataset_name, ood_dataset_name, plot=False):
         dataset = transform_dataset(ind_val, trans_fn)
@@ -139,14 +162,19 @@ def eval_nico():
     ind_dataset_name = "nico"
     columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
-    for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
-        test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
-        for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-            data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClassOrderSampler(test_dataset),
-                                             sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}")
-            merged.append(data)
+    k=2
+    try:
+        for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
+            test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
+            for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
+                data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClassOrderSampler(test_dataset),
+                                                 sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}",k=k)
+                merged.append(data)
+    except KeyboardInterrupt:
+        final = pd.concat(merged)
+        final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}_ClassOrderSampler-incomplte.csv")
     final = pd.concat(merged)
-    final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{5}_ClassOrderSampler.csv")
+    final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}_ClassOrderSampler.csv")
     print(final.head(10))
 
 def nico_correlation():

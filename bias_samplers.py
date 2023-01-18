@@ -58,3 +58,42 @@ class ClusterSampler(Sampler):
 
     def __iter__(self):
         return iter(np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(self.num_clusters)], axis=0))
+
+
+class ClusterSamplerWithSeverity(Sampler):
+    """
+    Returns indices corresponding to a KMeans-clustering of the latent representations.
+    (Artificial) selection bias
+    """
+    def __init__(self, data_source, rep_model, sample_size=10, bias_severity=0.5):
+        """
+
+        :param data_source:
+        :param rep_model:
+        :param sample_size:
+        :param bias_severity: the percentage of subsequent data that is biased. Essentially: % of data that is not sorted
+        """
+        super(ClusterSamplerWithSeverity, self).__init__(data_source)
+        self.data_source = data_source
+        self.rep_model = rep_model
+        self.reps = np.zeros((len(data_source), rep_model.latent_dim))
+        with torch.no_grad():
+            for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
+                x=x.to("cuda")
+                self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
+        self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
+        self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
+        self.sample_size = sample_size
+        self.bias_severity = bias_severity
+        pca =PCA()
+        pca.fit_transform_show(X=self.reps, y=self.kmeans)
+
+
+    def __iter__(self):
+        full_bias = np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(self.num_clusters)], axis=0)
+        shuffle_indeces = np.random.choice(np.arange(len(full_bias)), size=int(len(full_bias)*self.bias_severity), replace=False)
+        to_shuffle = full_bias[shuffle_indeces]
+        np.random.shuffle(to_shuffle)
+        full_bias[shuffle_indeces] = to_shuffle
+        return iter(full_bias)
+
