@@ -163,27 +163,38 @@ class EtisDataset(data.Dataset):
         mask = Image.open(mask_path)
         image = self.transforms(image)
         mask = (self.transforms(mask)>0.5).int()
-        # image = self.transforms(
-        #     open(join(self.path, "Original/{}.jpg".format(index + 1))).convert("RGB"))
-        # mask = self.transforms(
-        #     open(join(self.path, "GroundTruth/p{}.jpg".format(index + 1))).convert("RGB"))
-        # mask = (mask > 0.5).float()
         return image, mask, index + 1
 
 class CVC_ClinicDB(data.Dataset):
-    def __init__(self, root_directory, transforms):
+    def __init__(self, path, transforms, split="train"):
         super(CVC_ClinicDB, self).__init__()
-        self.root = root_directory
-        self.mask_fnames = listdir(join(self.root, "GroundTruth"))
-        self.mask_locs = [join(self.root, "GroundTruth", i) for i in self.mask_fnames]
-        self.img_locs = [join(self.root, "Original", i) for i in
-                         self.mask_fnames]
+        self.path = path
+        self.len = len(listdir(join(self.path, "Original")))
+        indeces = range(self.len)
+        self.train_indeces = indeces[:int(0.8*self.len)]
+        self.val_indeces = indeces[int(0.8*self.len):]
+        self.transforms = transforms
+        self.split = split
+        if self.split=="train":
+            self.len=len(self.train_indeces)
+        else:
+            self.len=len(self.val_indeces)
         self.common_transforms = transforms
 
-    def __getitem__(self, idx):
-        mask = self.common_transforms(open(self.mask_locs[idx]))
-        image = self.common_transforms(open(self.img_locs[idx]))
-        return image, mask, self.mask_fnames[idx]
+    def __getitem__(self, i):
+        if self.split=="train":
+            index = self.train_indeces[i]
+        else:
+            index = self.val_indeces[i]
+
+
+        img_path = join(self.path, "Original/{}.jpg".format(index + 1))
+        mask_path = join(self.path, "GroundTruth/p{}.jpg".format(index + 1))
+        image = Image.open(img_path)
+        mask = Image.open(mask_path)
+        image = self.transforms(image)
+        mask = (self.transforms(mask)>0.5).int()
+        return image, mask, index + 1
 
     def __len__(self):
         return len(self.mask_fnames)

@@ -7,6 +7,7 @@ from matplotlib.animation import FuncAnimation
 from tqdm import tqdm
 from vae.vae_experiment import VAEXperiment
 from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
+from classifier.resnetclassifier import ResNetClassifier
 import yaml
 from metrics import *
 from bias_samplers import ClusterSampler
@@ -15,10 +16,14 @@ from domain_datasets import build_nico_dataset
 import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
+import os
 from bias_samplers import *
 
 
-def plot_nico_class_bias(model):
+def plot_nico_class_bias():
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+
+    model = ResNetClassifier.load_from_checkpoint("/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
     pca = PCA(n_components=2)
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                 transforms.Resize((512, 512)),
@@ -26,28 +31,42 @@ def plot_nico_class_bias(model):
     ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
     ind_encodings = np.zeros((len(ind), model.latent_dim))
     val_encodings = np.zeros((len(ind_val), model.latent_dim))
+    ind_classes = np.zeros((len(ind), 1))
+    val_classes = np.zeros((len(ind_val), 1))
+
     with torch.no_grad():
         for i, (x, y, _) in tqdm(enumerate(DataLoader(ind, shuffle=True)), total=len(ind)):
             ind_encodings[i] = model.encode(x.to("cuda"))[0].cpu().numpy()
+            ind_classes[i] = y
 
         for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_val, sampler=ClassOrderSampler(ind_val))),
                                  total=len(ind_val)):
             val_encodings[i] = model.encode(x.to("cuda"))[0].cpu().numpy()
+            val_classes[i] = y
 
-    pca.fit(ind_encodings)
+    pca.fit(np.vstack((ind_encodings, val_encodings)))
     transformed_ind = pca.transform(ind_encodings)
     transformed_val = pca.transform(val_encodings)
-
-    for idx, (i, j) in enumerate(zip(np.linspace(0, int(.9 * len(transformed_val)), 10),
-                                     np.linspace(int(0.1 * len(transformed_val)), len(transformed_val), 10))):
+    plt.show()
+    sample_size = 200
+    ps_biased = []
+    ps_unbiased = []
+    for idx, (i, j) in enumerate(zip(np.arange(0, len(ind_val), sample_size)[:-1],
+                                     np.arange(0, len(ind_val), sample_size)[1:])):
         i = int(i)
         j = int(j)
-        plt.scatter(transformed_val[:, 0], transformed_val[:, 1], label=f"InD")
+        plt.scatter(transformed_val[:, 0], transformed_val[:, 1],c="orange", label=f"InD")
         plt.scatter(transformed_val[i:j, 0],
-                    transformed_val[i:j, 1], label=f"Biased")
+                    transformed_val[i:j, 1], c=val_classes[i:j],cmap="tab10", label=f"Biased")
         plt.legend()
+        rand = np.random.randint(0, len(transformed_val) - sample_size)
+        ps_unbiased.append(ks_2samp(transformed_ind[:, 1], transformed_val[rand: rand+sample_size, 1])[1])
+        ps_biased.append(ks_2samp(transformed_ind[:, 0], transformed_val[i:j, 0])[1])
+        plt.title(f"{i}-{j}: {ks_2samp(transformed_ind[:, 0], transformed_val[i:j, 0])[1]} vs {ks_2samp(transformed_ind[:, 1], transformed_val[rand: rand+sample_size, 1])[1]}")
         plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
         plt.show()
+    print(f"Biased: {np.mean(ps_biased)}")
+    print(f"Unbiased: {np.mean(ps_unbiased)}")
 def plot_nico_clustering_bias():
     config = yaml.safe_load(open("vae/configs/vae.yaml"))
     model = ResNetVAE().to("cuda").eval()
@@ -74,7 +93,7 @@ def plot_nico_clustering_bias():
     transformed_ind = pca.transform(ind_encodings)
     transformed_val = pca.transform(val_encodings)
 
-    for idx, (i,j) in enumerate(zip(np.linspace(0,int(.9*len(transformed_val)),10), np.linspace(int(0.1*len(transformed_val)), len(transformed_val), 10))):
+    for idx, (i,j) in enumerate(zip(np.linspace(0,int(.9*len(transformed_val)),100), np.linspace(int(0.1*len(transformed_val)), len(transformed_val), 100))):
         i = int(i)
         j = int(j)
         plt.scatter(transformed_val[:,0], transformed_val[:,1], label=f"InD")
@@ -160,5 +179,6 @@ def get_corrrelation_metrics(filename):
 
 if __name__ == '__main__':
   # plot_nico_clustering_bias()
+  # plot_nico_class_bias()
   get_classification_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv")
-  # get_corrrelation_metrics("lp_data_nico_unbiased.csv")
+  # get_corrrelation_metrics("lp_data_nico_noise.csv")
