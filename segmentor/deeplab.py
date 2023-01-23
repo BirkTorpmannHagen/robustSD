@@ -10,7 +10,7 @@ from segmentation_models_pytorch.metrics import get_stats, iou_score
 import sys
 import warnings
 from segmentation_models_pytorch.base import SegmentationHead
-
+from torch.nn.functional import  interpolate
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -29,7 +29,7 @@ import pytorch_lightning as pl
 
 
 class SegmentationModel(pl.LightningModule):
-    def __init__(self, resnet_version, transfer=True,
+    def __init__(self, transfer=True,
                  optimizer='adam', lr=1e-3, batch_size=16):
         super().__init__()
 
@@ -38,11 +38,6 @@ class SegmentationModel(pl.LightningModule):
         self.optimizer = optimizers[optimizer]
         # instantiate loss criterion
         self.criterion = JaccardLoss(mode="binary")
-        resnets = {
-            18: models.resnet18, 34: models.resnet34,
-            50: models.resnet50, 101: models.resnet101,
-            152: models.resnet152
-        }
         optimizers = {'adam': Adam, 'sgd': SGD}
         self.optimizer = optimizers[optimizer]
         # instantiate loss criterion
@@ -52,6 +47,7 @@ class SegmentationModel(pl.LightningModule):
         # replace final layer for fine tuning
         self.decoder = self.segmentor.decoder
         self.latent_dim = self.get_encoding_size()
+        print(self.latent_dim)
 
 
 
@@ -60,9 +56,9 @@ class SegmentationModel(pl.LightningModule):
 
     def get_encoding_size(self):
         dummy = torch.zeros((1,3,512,512))
-        return self.segmentor.encoder(dummy)[-2].flatten(1).shape[-1]
+        return self.encode(dummy).shape[-1]
     def encode(self, X):
-        code =  self.segmentor.encoder(X)[-2].flatten(1).squeeze(-1)
+        code =  torch.mean(self.segmentor.encoder(X)[-2], [-1, -2]).flatten(1).squeeze(-1)
         return code
 
     def compute_loss(self, x, y):

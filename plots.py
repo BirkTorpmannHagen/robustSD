@@ -300,7 +300,7 @@ if __name__ == '__main__':
   # plot_nico_clustering_bias()
   # plot_nico_class_bias()
   # genfailure_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv") #potential bu88
-  # get_classification_metrics("ResNetClassifier_dim_k2_ClassOrderSampler-incomplte.csv") #lower k is slightly better with class-bias?
+  get_classification_metrics("CVC_ClinicDB_ResNetVAE_k5_ClusterSampler.csv") #lower k is slightly better with class-bias?
   # genfailure_metrics()
   # get_classification_metrics("ResNetClassifier_dim_k10_ClassOrderSampler.csv")
   # get_corrrelation_metrics("lp_data_nico_noise.csv")
