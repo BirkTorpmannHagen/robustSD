@@ -70,17 +70,6 @@ class ResNetClassifier(pl.LightningModule):
     def configure_optimizers(self):
         return self.optimizer(self.parameters(), lr=self.lr)
 
-    def train_dataloader(self):
-        # values here are specific to pneumonia dataset and should be changed for custom data
-        transform = transforms.Compose([
-            transforms.Resize((512, 5121)),
-            transforms.RandomHorizontalFlip(0.3),
-            transforms.RandomVerticalFlip(0.3),
-            transforms.ToTensor()
-        ])
-        img_train= build_nico_dataset(1, "datasets/NICO++", 0.1, transform, transform, 0)[0]
-        return DataLoader(img_train, batch_size=self.batch_size, shuffle=True)
-
     def training_step(self, batch, batch_idx):
         x, y, context = batch
         preds = self(x)
@@ -95,17 +84,6 @@ class ResNetClassifier(pl.LightningModule):
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
-    def val_dataloader(self):
-        # values here are specific to pneumonia dataset and should be changed for custom data
-        transform = transforms.Compose([
-            transforms.Resize((512, 512)),
-            transforms.ToTensor(),
-        ])
-
-        img_val = build_nico_dataset(1, "datasets/NICO++", 0.1, transform, transform, 0)[1]
-
-        return DataLoader(img_val, batch_size=1, shuffle=False)
-
     def validation_step(self, batch, batch_idx):
         x, y, context = batch
         preds = self(x)
@@ -117,11 +95,6 @@ class ResNetClassifier(pl.LightningModule):
         # perform logging
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_acc", acc, on_epoch=True, prog_bar=True, logger=True)
-
-    def test_dataloader(self):
-        # values here are specific to pneumonia dataset and should be changed for custom data
-        return self.val_dataloader()
-
     def test_step(self, batch, batch_idx):
         x, y, context = batch
         preds = self(x)

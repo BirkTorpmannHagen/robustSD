@@ -1,8 +1,6 @@
 import os
 import json
 import torch
-from  torchvision.datasets import MNIST,CIFAR10,CIFAR100
-import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from glob import glob
@@ -199,27 +197,6 @@ class CVC_ClinicDB(data.Dataset):
     def __len__(self):
         return len(self.mask_fnames)
 
-def wrap_dataset(dataset):
-    """
-    dumb utility function to make testing easier. standardizes datasets so that it works easier with the models and trainers
-    :param dataset:
-    :return:
-    """
-    class NewDataset(data.Dataset):
-        def __init__(self, dataset):
-            super().__init__()
-            self.dataset = dataset
-
-        def __getitem__(self, index):
-            image, label = self.dataset[index]
-            if image.shape[0]==1:
-                image = image.repeat(3,1,1)
-            return image, label, 0
-
-        def __len__(self):
-            return len(self.dataset)
-
-    return NewDataset(dataset)
 
 # write a function which takes a dataset and a transform as parameters and returns a new dataset class that performs the transformation
 def transform_dataset(dataset, transform):

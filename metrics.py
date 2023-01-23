@@ -4,6 +4,8 @@ from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.metrics import RocCurveDisplay
 import seaborn as sns
 from scipy.stats import spearmanr, pearsonr
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_percentage_error as mape
 import numpy as np
 def fprat95tpr(ood_ps, ind_ps):
     """
@@ -65,7 +67,14 @@ def correlation(ps, loss):
 
     return spearmanr(ps, loss)
 
-def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=100):
+def linreg_smape(ps, loss, ood_ps, ood_loss):
+    lr = LinearRegression()
+    lr.fit(np.array(np.log10(ps)).reshape(-1, 1), loss)
+    preds = lr.predict(np.array(np.log10(ood_ps)).reshape(-1, 1))
+    return mape(preds, ood_loss)
+
+
+def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
     """
         Computes a pdf for the given number of bins, and gets the likelihood of the test loss at the given test_ps bin.
         #todo: collect a new noise dataset with the right predictor
@@ -73,20 +82,34 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=100):
         Higher likelihood ~ more likely that the model is correct more often.
         
     """
-
+    #split ps into unevenly sized bins with equal number of entries
     pargsort = np.argsort(ps)
     sorted_ps = np.array(ps)[pargsort]
     sorted_loss = np.array(loss)[pargsort]
-    p_bins = sorted_ps[::len(sorted_ps)//bins]
-    loss_samples_per_bin = [sorted_loss[i:j] for i, j in zip(range(0, len(sorted_loss), len(sorted_loss)//bins),
-                                                             range(len(sorted_loss)//bins, len(sorted_loss), len(sorted_loss)//bins))]
+    p_bins = sorted_ps[::len(sorted_ps)//bins] #defines bin limits
+    [min_val, max_val] = [sorted_ps[0], sorted_ps[-1]]
+    p_bins = np.append(p_bins, max_val)
 
-    loss_pdfs = [np.histogram(losses_in_pbin, bins=len(loss_samples_per_bin[0]//10)) for losses_in_pbin in loss_samples_per_bin]
+    #there are now 15 bins
+    # print(p_bins)
+    loss_samples_per_bin = [sorted_loss[i:j] for i, j in zip(range(0, len(sorted_loss), len(sorted_loss)//bins),
+                                                             range(len(sorted_loss)//bins, len(sorted_loss)+len(sorted_loss)//bins, len(sorted_loss)//bins))]
+
+    loss_pdfs = [np.histogram(losses_in_pbin, bins=len(loss_samples_per_bin[0])//10) for losses_in_pbin in loss_samples_per_bin]
     #loss_pdfs is essentially a probability funciton for each bin that shows the likelihood of some loss value given a certain p
 
+    test_p_indexes = np.digitize(test_ps, p_bins[:-1])
+    loss_diff = []
+    for p, loss in zip(test_ps, test_losses):
+        index = np.digitize(p, p_bins[:-1])
+        predicted_loss = np.mean(loss_samples_per_bin[np.clip(index, 0, len(loss_samples_per_bin)-1)])
+        loss_diff.append(np.abs(loss-predicted_loss))
+    return np.mean(loss_diff)
+    #index of the p-bin that each test point falls into
 
-    test_p_indexes = np.digitize(test_ps, p_bins)
-    test_loss_pdfs = [loss_pdfs[i] for i in test_p_indexes]
-    test_loss_likelihoods = [pdf[0][np.digitize(test_loss, pdf[1])] for test_loss, pdf in zip(test_losses, test_loss_pdfs)]
-    print(test_loss_likelihoods)
-    return np.mean(test_loss_likelihoods)
+    # print(np.max(test_p_indexes))
+    # print(len(loss_pdfs))
+    # test_loss_pdfs = [loss_pdfs[np.clip(i, 0,len(loss_pdfs)-1)] for i in test_p_indexes]
+    # test_loss_likelihoods = [pdf[0][np.clip(np.digitize(test_loss, pdf[1]), 0, 3)] for test_loss, pdf in zip(test_losses, test_loss_pdfs)]
+    # print(test_loss_likelihoods)
+    # return np.mean(test_loss_likelihoods)

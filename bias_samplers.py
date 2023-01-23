@@ -10,10 +10,10 @@ class ClassOrderSampler(Sampler):
     Sampler that splits the data_source into classes, returns indexes in order of class
     Induces selection bias via label shift
     """
-    def __init__(self, data_source):
+    def __init__(self, data_source, num_classes):
         super(ClassOrderSampler, self).__init__(data_source)
         self.data_source = data_source
-        self.indices = [[] for i in data_source.classes]
+        self.indices = [[] for i in range(num_classes)]
 
         #initial pass to sort the indices by class
         for i, (x,y,_) in enumerate(data_source):
@@ -50,7 +50,7 @@ class ClusterSampler(Sampler):
             for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
                 x=x.to("cuda")
                 self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
-        self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
+        self.num_clusters = max(int(len(data_source)//(sample_size+0.1)),4)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         pca =PCA()
         pca.fit_transform_show(X=self.reps, y=self.kmeans)
