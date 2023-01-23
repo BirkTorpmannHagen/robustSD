@@ -107,8 +107,8 @@ def get_classification_metrics(filename):
     dataset = pd.read_csv(filename)
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
-        ood = subset[subset["ood_dataset"] != "nico_dim"]
-        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        ood = subset[subset["ood_dataset"] != subset["ind_dataset"]]
+        ind = subset[subset["ood_dataset"] == subset["ind_dataset"]]
         # plt.hist(ind["vanilla_p"], label="vanilla")
         # plt.hist(ind["kn_p"], label="kn")
         # print(subset.groupby(["ood_dataset"])["vanilla_p"].mean())
@@ -261,7 +261,7 @@ if __name__ == '__main__':
   # plot_nico_clustering_bias()
   # plot_nico_class_bias()
   # genfailure_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv") #potential bu88
-  # get_classification_metrics("ResNetClassifier_dim_k2_ClassOrderSampler-incomplte.csv") #lower k is slightly better with class-bias?
+  get_classification_metrics("CVC_ClinicDB_ResNetVAE_k5_ClusterSampler.csv") #lower k is slightly better with class-bias?
   # genfailure_metrics()
   # get_classification_metrics("ResNetClassifier_dim_k10_ClassOrderSampler.csv")
   # get_corrrelation_metrics("lp_data_nico_noise.csv")

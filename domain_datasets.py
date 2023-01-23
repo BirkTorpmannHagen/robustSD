@@ -188,16 +188,16 @@ class CVC_ClinicDB(data.Dataset):
             index = self.val_indeces[i]
 
 
-        img_path = join(self.path, "Original/{}.jpg".format(index + 1))
-        mask_path = join(self.path, "GroundTruth/p{}.jpg".format(index + 1))
+        img_path = join(self.path, "Original/{}.png".format(index + 1))
+        mask_path = join(self.path, "Ground Truth/{}.png".format(index + 1))
         image = Image.open(img_path)
         mask = Image.open(mask_path)
         image = self.transforms(image)
-        mask = (self.transforms(mask)>0.5).int()
+        mask = (self.transforms(mask)>0.5).int()[0].unsqueeze(0)
         return image, mask, index + 1
 
     def __len__(self):
-        return len(self.mask_fnames)
+        return self.len
 
 def wrap_dataset(dataset):
     """
@@ -260,14 +260,21 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
+
+
 def build_polyp_dataset(root, fold="Etis", seed=0):
     trans = transforms.Compose([transforms.Resize((512,512)),
                                               transforms.ToTensor()])
     if fold=="Etis":
         train_set = EtisDataset(root, trans, split="train")
         val_set = EtisDataset(root, trans, split="val")
+        return train_set
+    elif fold=="Kvasir":
+        train_set = KvasirSegmentationDataset(root)
+        val_set = KvasirSegmentationDataset(root, "val")
     else:
-        return CVC_ClinicDB(root,trans)
+        train_set = CVC_ClinicDB(root,trans, split="train")
+        val_set = CVC_ClinicDB(root,trans, split="val")
     return train_set, val_set
 
 def build_njord_dataset():

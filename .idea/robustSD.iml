@@ -3,7 +3,7 @@
   <component name="NewModuleRootManager">
     <content url="file://$USER_HOME$/Datasets" />
     <content url="file://$MODULE_DIR$" />
-    <orderEntry type="jdk" jdkName="Python 3.9 (njord)" jdkType="Python SDK" />
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

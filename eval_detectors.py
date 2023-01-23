@@ -1,4 +1,5 @@
 import os
+from torch.utils.data import ConcatDataset
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,11 +9,13 @@ from vae.vae_experiment import VAEXperiment
 from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
 import yaml
 import torch
+from segmentor.deeplab import SegmentationModel
 from torch.utils.data import DataLoader
 from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
 from scipy.stats import ks_2samp
 from bias_samplers import ClusterSampler, ClassOrderSampler
+from torch.utils.data.sampler import RandomSampler
 import torchvision.transforms as transforms
 from tqdm import tqdm
 import pickle as pkl
@@ -60,6 +63,7 @@ class robustSD:
         fname_losses = f"robustSD_{ind_dataset_name}_losses_{type(self.rep_model).__name__}.pkl"
         try:
             ind_latents = pkl.load(open(fname_encodings, "rb"))
+            print(ind_latents.shape)
             losses = pkl.load(open(fname_losses, "rb"))
         except FileNotFoundError:
             ind_latents = np.zeros((len(ind_dataset), self.rep_model.latent_dim))
@@ -162,19 +166,21 @@ def eval_nico():
     ind_dataset_name = "nico"
     columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
-    k=2
+    k=5
     try:
         for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
             test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
-            for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
-                data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClassOrderSampler(test_dataset),
-                                                 sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}",k=k)
-                merged.append(data)
+            for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
+                for sampler in [ClassOrderSampler(test_dataset), ClusterSampler(test_dataset, classifier, sample_size=sample_size), RandomSampler(test_dataset)]:
+                    data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClassOrderSampler(test_dataset),
+                                                     sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}",k=k)
+                    data["sampler"]=type(sampler).__name__
+                    merged.append(data)
     except KeyboardInterrupt:
         final = pd.concat(merged)
-        final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}_ClassOrderSampler-incomplte.csv")
+        final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}.csv")
     final = pd.concat(merged)
-    final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}_ClassOrderSampler.csv")
+    final.to_csv(f"nico_{type(ds.rep_model).__name__}_k{k}.csv")
     print(final.head(10))
 
 def nico_correlation():
@@ -213,11 +219,52 @@ def nico_correlation():
     final.to_csv(f"lp_data_nico_noise.csv")
     print(final.head(10))
 
+def eval_polyp():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((512, 512)),
+                                transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+    cvc_train_set, cvc_val_set = build_polyp_dataset("../../Datasets/Polyps/CVC-ClinicDB", "CVC", 0)
+    kvasir_train_set, kvasir_val_set = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    ind = ConcatDataset((cvc_train_set, kvasir_train_set, kvasir_val_set))
+    ind_val = cvc_val_set
+    config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    model = ResNetVAE().to("cuda").eval()
+    vae_exp = VAEXperiment(model, config)
+    vae_exp.load_state_dict(
+        torch.load("vae_logs/nico_dim/version_41/checkpoints/last.ckpt")[
+            "state_dict"])
+    classifier = SegmentationModel.load_from_checkpoint(
+        "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
+    classifier.eval()
 
+    aconfig = {"device": "cuda"}
+    ds = robustSD(model, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
+    # print("ood")
+    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    k = 5
+    try:
+        for test_dataset in [ind_val, build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis")]:
+            for sample_size in [10, 20, 50, 100, 200, 500]:
+                data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset,model, sample_size=sample_size),
+                                                 sample_size=sample_size, ind_dataset_name=type(ind_val).__name__,
+                                                 ood_dataset_name=f"{type(test_dataset).__name__}", k=k)
+                merged.append(data)
+    except KeyboardInterrupt:
+        final = pd.concat(merged)
+        final.to_csv(f"{type(ds.rep_model).__name__}_k{k}_ClusterSampler-incomplete.csv")
+    final = pd.concat(merged)
+    final.to_csv(f"{type(ind_val).__name__}_{type(ds.rep_model).__name__}_k{k}_ClusterSampler.csv")
+    print(final.head(10))
 
 if __name__ == '__main__':
     # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
-    nico_correlation()
-    # eval_nico()
+    # nico_correlation()
+    eval_nico()
+    # eval_polyp()
 
 
