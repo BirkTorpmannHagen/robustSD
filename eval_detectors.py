@@ -11,16 +11,18 @@ import yaml
 import torch
 from segmentor.deeplab import SegmentationModel
 from torch.utils.data import DataLoader
+from utils import *
 from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
 from scipy.stats import ks_2samp
-from bias_samplers import ClusterSampler, ClassOrderSampler
-from torch.utils.data.sampler import RandomSampler
+from bias_samplers import ClusterSampler, ClassOrderSampler, ClusterSamplerWithSeverity
 import torchvision.transforms as transforms
 from tqdm import tqdm
+from torchvision.datasets import CIFAR10,CIFAR100,MNIST
 import pickle as pkl
 import torch.utils.data as data
 from domain_datasets import *
+from torch.utils.data import RandomSampler
 from classifier.resnetclassifier import ResNetClassifier
 
 def transform_dataset(dataset, transform):
@@ -134,9 +136,9 @@ class robustSD:
         final = pd.DataFrame(data=dataframe, columns=cols)
         return final
 
-    def eval_synthetic(self, ind_dataset, ind_val, trans_fn, sampler, sample_size, ind_dataset_name, ood_dataset_name, plot=False):
+    def eval_synthetic(self, ind_dataset, ind_val, trans_fn, sampler, sample_size, ind_dataset_name, ood_dataset_name, k=5, plot=False):
         dataset = transform_dataset(ind_val, trans_fn)
-        return self.compute_pvals_and_loss(ind_dataset, dataset, ood_sampler=sampler,sample_size=sample_size, ind_dataset_name=ind_dataset_name, ood_dataset_name=ood_dataset_name, plot=plot)
+        return self.compute_pvals_and_loss(ind_dataset, dataset, ood_sampler=sampler,sample_size=sample_size, ind_dataset_name=ind_dataset_name, ood_dataset_name=ood_dataset_name, plot=plot, k=k)
 
 
 def eval_nico():
@@ -183,6 +185,44 @@ def eval_nico():
     final.to_csv(f"nico_{type(ds.rep_model).__name__}_k{k}.csv")
     print(final.head(10))
 
+
+def eval_nico_for_k():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                        transforms.Resize((512,512)),
+                        transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+
+    ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    config = yaml.safe_load(open("vae/configs/vae.yaml"))
+
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    # classifier = SegmentationnicoModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
+    aconfig = {"device":"cuda"}
+    ds = robustSD(classifier, classifier, aconfig)
+    # print("ood")
+    ind_dataset_name = "nico"
+    columns=["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    k=2
+    try:
+        for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
+            test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
+            for sample_size in [10, 20, 50, 100, 200, 500, 1000, 10000]:
+                for k in [1, 5, 10, 15, 20, 25]:
+                    data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset),
+                                                     sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}",k=k)
+                    data["k"]=k
+                    merged.append(data)
+    except KeyboardInterrupt:
+        final = pd.concat(merged)
+        final.to_csv(f"{type(ds.rep_model).__name__}_dim_all_ks_ClusterSampler-incomplete.csv")
+    final = pd.concat(merged)
+    final.to_csv(f"{type(ds.rep_model).__name__}_dim_all_ks_ClusterSampler.csv")
+    print(final.head(10))
 def nico_correlation():
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                         transforms.Resize((512,512)),
@@ -239,26 +279,184 @@ def eval_polyp():
         "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
     classifier.eval()
 
+def eval_cifar10():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((32, 32)),
+                                transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+    test = CIFAR10("../../Datasets/cifar10", train=True, transform=trans)
+    ind = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=trans))
+
+    ind_val = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans))
+
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    # config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    # model = ResNetVAE().to("cuda").eval()
+    # vae_exp = VAEXperiment(model, config)
+    # vae_exp.load_state_dict(
+    #     torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+    #         "state_dict"])
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to("cuda").eval()
+    classifier = wrap_model(classifier)
+    print(classifier.get_encoding_size())
+    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
     aconfig = {"device": "cuda"}
-    ds = robustSD(model, classifier, aconfig)
+    ds = robustSD(classifier, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
+    # print("ood")
+    ind_dataset_name = "nico"
+    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    for noise_val in np.linspace(0, 0.20, 11):
+        for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
+            for sampler_type in [ClusterSampler(ind_val, classifier, sample_size=sample_size), RandomSampler(ind_val), ClassOrderSampler(ind_val, num_classes=10)]:
+                data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
+                                         sampler=sampler_type,
+                                         sample_size=sample_size, ind_dataset_name="cifar10",
+                                         ood_dataset_name=f"cifar10_{noise_val}")
+                data["sampler"]=type(sampler_type).__name__
+                merged.append(data)
+                print(data.head(10))
+    final = pd.concat(merged)
+    final.to_csv(f"lp_data_cifar10_noise.csv")
+    print(final.head(10))
+
+
+def eval_cifar10_bias_severity():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((32, 32)),
+                                transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+    test = CIFAR10("../../Datasets/cifar10", train=True, transform=trans)
+    ind = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=trans))
+
+    ind_val = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans))
+
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    # config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    # model = ResNetVAE().to("cuda").eval()
+    # vae_exp = VAEXperiment(model, config)
+    # vae_exp.load_state_dict(
+    #     torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+    #         "state_dict"])
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to("cuda").eval()
+    classifier = wrap_model(classifier)
+    print(classifier.get_encoding_size())
+    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
+    aconfig = {"device": "cuda"}
+    ds = robustSD(classifier, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
+    # print("ood")
+    ind_dataset_name = "nico"
+    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    for noise_val in np.linspace(0, 0.20, 11):
+        for severity in np.linspace(0.1, 1, 10):
+            for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
+                sampler_type = ClusterSamplerWithSeverity(ind_val, classifier, sample_size=sample_size, bias_severity=severity)
+                data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
+                                         sampler=sampler_type,
+                                         sample_size=sample_size, ind_dataset_name="cifar10",
+                                         ood_dataset_name=f"cifar10_{noise_val}")
+                data["sampler"]=f"{type(sampler_type).__name__}_{severity}"
+                merged.append(data)
+                print(data.head(10))
+    final = pd.concat(merged)
+    final.to_csv(f"lp_data_cifar10_noise_severity.csv")
+    print(final.head(10))
+
+def eval_cifar10_fork():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((32, 32)),
+                                transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+    test = CIFAR10("../../Datasets/cifar10", train=True, transform=trans)
+    ind = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=trans))
+
+    ind_val = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans))
+
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    # config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    # model = ResNetVAE().to("cuda").eval()
+    # vae_exp = VAEXperiment(model, config)
+    # vae_exp.load_state_dict(
+    #     torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+    #         "state_dict"])
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to("cuda").eval()
+    classifier = wrap_model(classifier)
+    print(classifier.get_encoding_size())
+    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
+    aconfig = {"device": "cuda"}
+    ds = robustSD(classifier, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
+    # print("ood")
+    ind_dataset_name = "nico"
+    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    for noise_val in np.linspace(0, 0.20, 11):
+        for sample_size in [10, 20, 50]:
+            for k in [1, 5, 10, 20, 50, 100, 200]:
+                data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
+                                         sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
+                                         sample_size=sample_size, ind_dataset_name="cifar10",
+                                         ood_dataset_name=f"cifar10_{noise_val}", k=k)
+                data["k"]=k
+                merged.append(data)
+    final = pd.concat(merged)
+    final.to_csv(f"lp_data_cifar10_ks.csv")
+    print(final.head(10))
+
+def eval_cifar100():
+    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                transforms.Resize((32, 32)),
+                                transforms.ToTensor(), ])
+    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+    # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
+    ind = wrap_dataset(CIFAR100("../../Datasets/cifar100", train=True, transform=trans))
+
+    ind_val = wrap_dataset(CIFAR100("../../Datasets/cifar100", train=False, transform=trans))
+
+    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+    # config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    # model = ResNetVAE().to("cuda").eval()
+    # vae_exp = VAEXperiment(model, config)
+    # vae_exp.load_state_dict(
+    #     torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+    #         "state_dict"])
+    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+    classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar100_resnet32", pretrained=True).to("cuda").eval()
+    classifier = wrap_model(classifier)
+    print(classifier.get_encoding_size())
+    # classifier = SegmentationModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
+
+    aconfig = {"device": "cuda"}
+    ds = robustSD(classifier, classifier, aconfig)
     # ds = robustSD(model, classifier, aconfig)
 
     # print("ood")
     columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
-    k = 5
-    try:
-        for test_dataset in [ind_val, build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis")]:
-            for sample_size in [10, 20, 50, 100, 200, 500]:
-                data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset,model, sample_size=sample_size),
-                                                 sample_size=sample_size, ind_dataset_name=type(ind_val).__name__,
-                                                 ood_dataset_name=f"{type(test_dataset).__name__}", k=k)
-                merged.append(data)
-    except KeyboardInterrupt:
-        final = pd.concat(merged)
-        final.to_csv(f"{type(ds.rep_model).__name__}_k{k}_ClusterSampler-incomplete.csv")
+    for noise_val in np.linspace(0, 0.20, 11):
+        for sample_size in [100]:
+            data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
+                                     sampler=ClusterSampler(ind_val, classifier, sample_size=sample_size),
+                                     sample_size=sample_size, ind_dataset_name="cifar100",
+                                     ood_dataset_name=f"cifar100_{noise_val}")
+            merged.append(data)
     final = pd.concat(merged)
-    final.to_csv(f"{type(ind_val).__name__}_{type(ds.rep_model).__name__}_k{k}_ClusterSampler.csv")
+    final.to_csv(f"lp_data_cifar100_noise_clusterbias.csv")
     print(final.head(10))
 
 def eval_njord():
@@ -298,10 +496,8 @@ def eval_njord():
     print(final.head(10))
 
 if __name__ == '__main__':
-    # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
-    # nico_correlation()
+
     # eval_nico()
     eval_njord()
     eval_polyp()
     eval_nico_noise()
-

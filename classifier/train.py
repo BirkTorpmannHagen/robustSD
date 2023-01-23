@@ -1,6 +1,7 @@
 from pytorch_lightning import Trainer
 from torchvision.models import resnet34
-from domain_datasets import build_nico_dataset, wrap_dataset
+from domain_datasets import build_nico_dataset
+from utils import wrap_dataset
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
@@ -39,7 +40,6 @@ def train_classifier():
                         transforms.ToTensor(), ])
 
     # train_set, val_set = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
-    # train_set = CIFAR10("../../Datasets/cifar10", train=True, transform=trans)
     # val_set = CIFAR10("../../Datasets/cifar10", train=False, transform=trans)
     train_set = MNIST("../../Datasets/mnist", train=True, download=True, transform=trans)
     val_set = MNIST("../../Datasets/mnist", train=False, download=True, transform=trans)
@@ -47,7 +47,6 @@ def train_classifier():
     train_set = wrap_dataset(train_set)
     val_set = wrap_dataset(val_set)
     trainer = Trainer(gpus=[0], max_epochs=200, logger=tb_logger)
-
     trainer.fit(model, train_dataloaders=DataLoader(train_set, shuffle=True, num_workers=24),
                 val_dataloaders=DataLoader(val_set, shuffle=True, num_workers=24))
 

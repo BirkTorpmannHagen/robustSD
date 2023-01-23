@@ -12,7 +12,8 @@ import yaml
 from metrics import *
 from bias_samplers import ClusterSampler, ClusterSamplerWithSeverity, ClassOrderSampler
 from torch.utils.data import DataLoader
-from domain_datasets import build_nico_dataset, wrap_dataset
+from domain_datasets import build_nico_dataset
+from utils import wrap_dataset
 import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
@@ -103,17 +104,12 @@ def plot_nico_clustering_bias():
         plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
         plt.show()
 
-def get_classification_metrics(filename):
+def get_nico_classification_metrics(filename):
     dataset = pd.read_csv(filename)
     for sample_size in np.unique(dataset["sample_size"]):
         subset = dataset[dataset["sample_size"] == sample_size]
-        ood = subset[subset["ood_dataset"] != subset["ind_dataset"]]
-        ind = subset[subset["ood_dataset"] == subset["ind_dataset"]]
-        # plt.hist(ind["vanilla_p"], label="vanilla")
-        # plt.hist(ind["kn_p"], label="kn")
-        # print(subset.groupby(["ood_dataset"])["vanilla_p"].mean())
-        # print(subset.groupby(["ood_dataset"])["kn_p"].mean())
-        # input()
+        ood = subset[subset["ood_dataset"] != "nico_dim"]
+        ind = subset[subset["ood_dataset"] == "nico_dim"]
         print("sample size ",sample_size)
         fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
         fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
@@ -127,59 +123,93 @@ def get_classification_metrics(filename):
         auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
         print("vanilla AUROC: ", auroc_van)
         print("kn AUROC:", auroc_kn)
-        # corr_van = correlation(ood["vanilla_p"], ind["vanilla_p"], ood["loss"], ind["loss"])
-        # corr_kn = correlation(ood["kn_p"], ind["kn_p"], ood["loss"], ind["loss"])
-        # print("vanilla: ", corr_van)
-        # print("kn: ", corr_kn)
-        # f, ax = plt.subplots(figsize=(7, 7))
-        # ax.set(yscale="log")
-        # sns.regplot(np.concatenate((ood["loss"], ind["loss"])), np.concatenate((ood["kn_p"], ind["kn_p"])), ax=ax, color="blue")
-        # ax2 = plt.twinx()
-        # ax.set_ylabel("kn_p", color="blue", fontsize=14)
-        # ax.set_ylabel("vanilla_p", color="orange", fontsize=14)
-        # sns.regplot(np.concatenate((ood["loss"], ind["loss"])), np.concatenate((ood["vanilla_p"], ind["vanilla_p"])), ax=ax2, color="orange")
-        # plt.legend()
-        # plt.title(f"{corr_kn} at n={sample_size}")
-        # plt.show()
         dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
         dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
         print("vanilla DR: ", dr_van)
         print("kn DR: ", dr_kn)
 
+def get_cifar10_classification_metrics(filename):
+    data = pd.read_csv(filename)
+    for sampler in np.unique(data["sampler"]):
+        dataset = data[data["sampler"]==sampler]
+        print()
+        print(sampler)
+        for sample_size in np.unique(dataset["sample_size"]):
+            print(sample_size)
+            subset = dataset[dataset["sample_size"] == sample_size]
+            for noise_val in np.unique(subset["ood_dataset"]):
+                if noise_val=="cifar10_0.0":
+                    continue
+                ood = subset[subset["ood_dataset"] == noise_val]
+                ind = subset[subset["ood_dataset"] == "cifar10_0.0"]
+                print(f"{noise_val} has loss {ood['loss'].mean()} compared to {ind['loss'].mean()}")
+                fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
+                fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+                print("vanilla FPR: ", fpr_van)
+                print("kn FPR:", fpr_kn)
+                aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
+                aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
+                print("vanilla AUPR: ", aupr_van)
+                print("kn AUPR:", aupr_kn)
+                auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
+                auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
+                print("vanilla AUROC: ", auroc_van)
+                print("kn AUROC:", auroc_kn)
+                dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+                dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+                print("vanilla DR: ", dr_van)
+                print("kn DR: ", dr_kn)
+        print()
 
-def get_corrrelation_metrics(filename_noise, filename_ood):
-    dataset = pd.read_csv(filename_noise)
-    # raw correlation data
-    for sample_size in np.unique(dataset["sample_size"]):
-        subset = dataset[dataset["sample_size"] == sample_size]
-        corr_van = correlation(np.log10(subset["vanilla_p"]), subset["loss"])
-        corr_kn = correlation(np.log10(subset["kn_p"]), subset["loss"])
-        print("correlation vanilla", corr_van)
-        print("correlation kn", corr_kn)
-        f, ax = plt.subplots(figsize=(7, 7))
-        sns.regplot(subset["kn_p"],subset["loss"], ax=ax, color="blue")
-        ax.set_xlabel("kn_p", color="blue", fontsize=14)
-        ax.set(xscale="log")
 
-        # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
-        plt.ylim((0,10))
-        plt.legend()
-        plt.title(f"{round(corr_kn[0],3)} at n={sample_size}")
-        plt.show()
 
-        f2, ax2 = plt.subplots(figsize=(7, 7))
-        ax2.set(xscale="log")
-        sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
-        plt.ylim((0,10))
-        plt.show()
-    # predictive
-    dataset_ood = pd.read_csv(filename_ood)
-    for sample_size in np.unique(dataset["sample_size"]):
-        subset = dataset[dataset["sample_size"] == sample_size]
-        vanilla_predictive_likelihood = get_loss_pdf_from_ps(subset["vanilla_p"], subset["loss"], dataset_ood["vanilla_p"], dataset_ood["loss"])
-        kn_predictive_likelihood = get_loss_pdf_from_ps(subset["kn_p"], subset["loss"], dataset_ood["kn_p"], dataset_ood["loss"])
-        print("vanilla predictive likelihood", vanilla_predictive_likelihood)
-        print("kn predictive likelihood", kn_predictive_likelihood)
+def get_corrrelation_metrics(filename_noise, filename_ood=""):
+    data = pd.read_csv(filename_noise)
+    for sampler in np.unique(data["sampler"]):
+        dataset = data[data["sampler"] == sampler]
+        print()
+        print(sampler)
+        for sample_size in np.unique(dataset["sample_size"]):
+            subset = dataset[dataset["sample_size"] == sample_size]
+            corr_van = correlation(np.log10(subset["vanilla_p"]), subset["loss"])
+            corr_kn = correlation(np.log10(subset["kn_p"]), subset["loss"])
+            print("correlation vanilla", corr_van)
+            print("correlation kn", corr_kn)
+            f, ax = plt.subplots(figsize=(7, 7))
+            sns.regplot(np.log10(subset["kn_p"]),subset["loss"], ax=ax, color="blue")
+            ax.set_xlabel("kn_p", color="blue", fontsize=14)
+            # ax.set(xscale="log")
+            from sklearn.linear_model import LinearRegression
+            lr = LinearRegression()
+            lr.fit(np.array(np.log10(subset["kn_p"])).reshape(-1,1),np.array(subset["loss"]).reshape(-1,1))
+            # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
+            plt.ylim((0,np.max(subset["loss"])))
+            plt.legend()
+            plt.title(f"{lr.coef_[0,0]}+{lr.intercept_[0]} at n={sample_size}")
+            plt.show()
+
+            f2, ax2 = plt.subplots(figsize=(7, 7))
+            # ax2.set(xscale="log")
+            sns.regplot(np.log(subset["vanilla_p"]), subset["loss"],  ax=ax2, color="orange")
+            plt.ylim((0,np.max(subset["loss"])))
+            lr = LinearRegression()
+            print(np.array(np.log10(subset[subset["vanilla_p"]!=0]["vanilla_p"])).reshape(-1,1))
+            lr.fit(np.array(np.log10(subset[subset["vanilla_p"]!=0]["vanilla_p"])).reshape(-1,1),np.array(subset[subset["vanilla_p"]!=0]["loss"]).reshape(-1,1))
+            plt.title(f"{lr.coef_[0,0]}+{lr.intercept_[0]} at n={sample_size}")
+            plt.show()
+        # predictive
+        if filename_ood!="":
+            dataset_ood = pd.read_csv(filename_ood)
+            for sample_size in np.unique(dataset["sample_size"]):
+                subset = dataset[dataset["sample_size"] == sample_size]
+                vanilla_predictive_likelihood = get_loss_pdf_from_ps(subset["vanilla_p"], subset["loss"], dataset_ood["vanilla_p"], dataset_ood["loss"])
+                kn_predictive_likelihood = get_loss_pdf_from_ps(subset["kn_p"], subset["loss"], dataset_ood["kn_p"], dataset_ood["loss"])
+                print("vanilla predictive likelihood", vanilla_predictive_likelihood)
+                print("kn predictive likelihood", kn_predictive_likelihood)
+                kn_mape = linreg_smape(subset["kn_p"], subset["loss"], dataset_ood["kn_p"], dataset_ood["loss"])
+                vanilla_mape = linreg_smape(subset["vanilla_p"], subset["loss"], dataset_ood["vanilla_p"], dataset_ood["loss"])
+                print("vanilla mape: ", vanilla_mape)
+                print("kn mape: ", kn_mape)
 
 def genfailure_metrics(filename):
     dataset = pd.read_csv(filename)
@@ -246,17 +276,26 @@ def eval_k_impact(filename):
     das_vn = []
     dataset = pd.read_csv(filename)
     for k in np.unique(dataset["k"]):
+        print(k)
         subset = dataset[dataset["k"] == k]
-        ood = subset[subset["ood_dataset"] != "nico_dim"]
-        ind = subset[subset["ood_dataset"] == "nico_dim"]
+        ood = subset[subset["ood_dataset"] != "cifar10_0.0"]
+        ind = subset[subset["ood_dataset"] == "cifar10_0.0"]
         das_kn.append(calibrated_detection_rate(ood["kn_p"], ind["kn_p"]))
         das_vn.append(calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"]))
+    print(das_kn)
     plt.plot(np.unique(dataset["k"]), das_kn, label="kn")
     plt.plot(np.unique(dataset["k"]), das_vn, label="vanilla")
     plt.legend()
     plt.show()
 
+
 if __name__ == '__main__':
+    # get_corrrelation_metrics("lp_data_nico_noise.csv", "lp_nico_datak6_nobias.csv")
+
+    get_corrrelation_metrics("lp_data_cifar10_noise.csv")
+    # get_classification_metrics()
+    # get_cifar10_classification_metrics("lp_data_cifar10_noise.csv")
+    # eval_k_impact("lp_data_cifar10_noise_clusterbias.csv")
   # plot_loss_v_encodings()
   # plot_nico_clustering_bias()
   # plot_nico_class_bias()
