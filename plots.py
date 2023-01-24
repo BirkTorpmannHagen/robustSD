@@ -210,10 +210,13 @@ def get_corrrelation_metrics(filename_noise, filename_ood=""):
             subset = dataset[dataset["sample_size"] == sample_size]
             corr_van = correlation(np.log10(subset["vanilla_p"]), subset["loss"])
             corr_kn = correlation(np.log10(subset["kn_p"]), subset["loss"])
+            print(sample_size)
             print("correlation vanilla", corr_van)
             print("correlation kn", corr_kn)
             f, ax = plt.subplots(figsize=(7, 7))
-            sns.scatterplot(np.log10(subset["kn_p"]),subset["loss"], hue=subset["ood_dataset"], ax=ax)
+            # sns.regplot(np.log10(subset["kn_p"]),subset["loss"], ax=ax, color="blue")
+            sns.scatterplot(np.log10(subset["kn_p"]),subset["loss"],hue=subset["ood_dataset"])
+
             ax.set_xlabel("kn_p", color="blue", fontsize=14)
             # ax.set(xscale="log")
             from sklearn.linear_model import LinearRegression
@@ -222,16 +225,21 @@ def get_corrrelation_metrics(filename_noise, filename_ood=""):
             # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
             plt.ylim((-1,np.max(subset["loss"])))
             plt.legend()
-            plt.title(f"{lr.coef_[0,0]}+{lr.intercept_[0]} at n={sample_size}")
+            plt.title(f"n={sample_size} and {sampler}")
+
+            plt.savefig(f"correlation_figures/cifar10_kn_{sample_size}_{sampler}.eps")
             plt.show()
 
-            f2, ax2 = plt.subplots(figsize=(7, 7))
             # ax2.set(xscale="log")
-            sns.regplot(np.log(subset["vanilla_p"]), subset["loss"],  ax=ax2, color="orange")
+            # sns.regplot(np.log(subset["vanilla_p"]), subset["loss"],  ax=ax2, color="orange")
+            sns.scatterplot(np.log(subset["vanilla_p"]), subset["loss"], hue=subset["ood_dataset"])
+
             plt.ylim((0,np.max(subset["loss"])))
             lr = LinearRegression()
             lr.fit(np.array(np.log10(subset[subset["vanilla_p"]!=0]["vanilla_p"])).reshape(-1,1),np.array(subset[subset["vanilla_p"]!=0]["loss"]).reshape(-1,1))
-            plt.title(f"{lr.coef_[0,0]}+{lr.intercept_[0]} at n={sample_size}")
+
+            plt.title(f"n={sample_size} and {sampler}")
+            plt.savefig(f"correlation_figures/cifar10_vanilla_{sample_size}_{sampler}.eps")
             plt.show()
         # predictive
         if filename_ood!="":
@@ -400,11 +408,5 @@ def illustrate_clustersampler():
 
 
 if __name__ == '__main__':
-    # get_njord_classification_metrics("Njord_VanillaVAE_k1.csv")
-    # plot_nico_samplesize("lp")
-    # illustrate_clustersampler()
-    # get_polyp_classification_metrics("lp_data_polyps.csv")
-    # get_corrrelation_metrics("nico_ResNetClassifier_k5.csv")
-    get_nico_classification_metrics("nico_ResNetClassifier_k5.csv")
-    # get_corrrelation_metrics("lp_data_cifar10_noise.csv")
-    # get_cifar10_classification_metrics("lp_data_cifar10_noise.csv")
+    # get_nico_classification_metrics("nico_ResNetClassifier_k5.csv")
+    get_corrrelation_metrics("lp_data_cifar10_noise.csv")
