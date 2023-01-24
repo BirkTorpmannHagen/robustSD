@@ -104,29 +104,64 @@ def plot_nico_clustering_bias():
         plt.savefig(f"figures/nico_clusterbias_{idx}.eps")
         plt.show()
 
+
+
 def get_nico_classification_metrics(filename):
-    dataset = pd.read_csv(filename)
-    for sample_size in np.unique(dataset["sample_size"]):
-        subset = dataset[dataset["sample_size"] == sample_size]
-        ood = subset[subset["ood_dataset"] != "nico_dim"]
-        ind = subset[subset["ood_dataset"] == "nico_dim"]
-        print("sample size ",sample_size)
-        fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
-        fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
-        print("vanilla FPR: ", fpr_van)
-        print("kn FPR:", fpr_kn)
-        aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
-        aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
-        print("vanilla AUPR: ", aupr_van)
-        print("kn AUPR:", aupr_kn)
-        auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
-        auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
-        print("vanilla AUROC: ", auroc_van)
-        print("kn AUROC:", auroc_kn)
-        dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
-        dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
-        print("vanilla DR: ", dr_van)
-        print("kn DR: ", dr_kn)
+    data = pd.read_csv(filename)
+    for sampler in np.unique(data["sampler"]):
+        dataset = data[data["sampler"]==sampler]
+        print(sampler)
+        for sample_size in np.unique(dataset["sample_size"]):
+            subset = dataset[dataset["sample_size"] == sample_size]
+            ood = subset[subset["ood_dataset"] != "nico_dim"]
+            ind = subset[subset["ood_dataset"] == "nico_dim"]
+            print("sample size ",sample_size)
+            fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
+            fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+            print("vanilla FPR: ", fpr_van)
+            print("kn FPR:", fpr_kn)
+            aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
+            aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
+            print("vanilla AUPR: ", aupr_van)
+            print("kn AUPR:", aupr_kn)
+            auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
+            auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
+            print("vanilla AUROC: ", auroc_van)
+            print("kn AUROC:", auroc_kn)
+            dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+            dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+            print("vanilla DR: ", dr_van)
+            print("kn DR: ", dr_kn)
+            print()
+
+def get_polyp_classification_metrics(filename):
+    data = pd.read_csv(filename)
+    for sampler in np.unique(data["sampler"]):
+        dataset = data[data["sampler"]==sampler]
+        print()
+        print(sampler)
+        for sample_size in np.unique(dataset["sample_size"]):
+            print(sample_size)
+            subset = dataset[dataset["sample_size"] == sample_size]
+            ood = subset[subset["ood_dataset"] == "polyp_ood"]
+            ind = subset[subset["ood_dataset"] == "polyp_ind"]
+            fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
+            fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+            print("vanilla FPR: ", fpr_van)
+            print("kn FPR:", fpr_kn)
+            aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
+            aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
+            print("vanilla AUPR: ", aupr_van)
+            print("kn AUPR:", aupr_kn)
+            auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
+            auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
+            print("vanilla AUROC: ", auroc_van)
+            print("kn AUROC:", auroc_kn)
+            dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+            dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+            print("vanilla DR: ", dr_van)
+            print("kn DR: ", dr_kn)
+        print()
 
 def get_cifar10_classification_metrics(filename):
     data = pd.read_csv(filename)
@@ -165,25 +200,27 @@ def get_cifar10_classification_metrics(filename):
 
 def get_corrrelation_metrics(filename_noise, filename_ood=""):
     data = pd.read_csv(filename_noise)
+    print(data.groupby(["sampler", "sample_size", "ood_dataset"])["loss"].mean())
     for sampler in np.unique(data["sampler"]):
         dataset = data[data["sampler"] == sampler]
         print()
         print(sampler)
         for sample_size in np.unique(dataset["sample_size"]):
+            print(sample_size)
             subset = dataset[dataset["sample_size"] == sample_size]
             corr_van = correlation(np.log10(subset["vanilla_p"]), subset["loss"])
             corr_kn = correlation(np.log10(subset["kn_p"]), subset["loss"])
             print("correlation vanilla", corr_van)
             print("correlation kn", corr_kn)
             f, ax = plt.subplots(figsize=(7, 7))
-            sns.regplot(np.log10(subset["kn_p"]),subset["loss"], ax=ax, color="blue")
+            sns.scatterplot(np.log10(subset["kn_p"]),subset["loss"], hue=subset["ood_dataset"], ax=ax)
             ax.set_xlabel("kn_p", color="blue", fontsize=14)
             # ax.set(xscale="log")
             from sklearn.linear_model import LinearRegression
             lr = LinearRegression()
             lr.fit(np.array(np.log10(subset["kn_p"])).reshape(-1,1),np.array(subset["loss"]).reshape(-1,1))
             # sns.regplot(subset["vanilla_p"], subset["loss"],  ax=ax2, color="orange")
-            plt.ylim((0,np.max(subset["loss"])))
+            plt.ylim((-1,np.max(subset["loss"])))
             plt.legend()
             plt.title(f"{lr.coef_[0,0]}+{lr.intercept_[0]} at n={sample_size}")
             plt.show()
@@ -193,7 +230,6 @@ def get_corrrelation_metrics(filename_noise, filename_ood=""):
             sns.regplot(np.log(subset["vanilla_p"]), subset["loss"],  ax=ax2, color="orange")
             plt.ylim((0,np.max(subset["loss"])))
             lr = LinearRegression()
-            print(np.array(np.log10(subset[subset["vanilla_p"]!=0]["vanilla_p"])).reshape(-1,1))
             lr.fit(np.array(np.log10(subset[subset["vanilla_p"]!=0]["vanilla_p"])).reshape(-1,1),np.array(subset[subset["vanilla_p"]!=0]["loss"]).reshape(-1,1))
             plt.title(f"{lr.coef_[0,0]}+{lr.intercept_[0]} at n={sample_size}")
             plt.show()
@@ -288,41 +324,87 @@ def eval_k_impact(filename):
     plt.legend()
     plt.show()
 
+def get_njord_classification_metrics(filename):
+    data = pd.read_csv(filename)
+    for sampler in np.unique(data["sampler"]):
+        dataset = data[data["sampler"] == sampler]
+        print(sampler)
+        for sample_size in np.unique(dataset["sample_size"]):
+            print(sample_size)
+            subset = dataset[dataset["sample_size"] == sample_size]
+            print(subset[subset["ood_dataset"] == "Njordind"]["vanilla_p"].mean()-subset[subset["ood_dataset"] == "Njordood"]["vanilla_p"].mean(), subset[subset["ood_dataset"] == "Njordind"]["kn_p"].mean()-subset[subset["ood_dataset"] == "Njordood"]["kn_p"].mean())
+            ood = subset[subset["ood_dataset"] == "Njordood"]
+            ind = subset[subset["ood_dataset"] == "Njordind"]
+            if sample_size==100:
+                subset.to_csv("debug.csv")
+                input()
+            fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
+            fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+            print("vanilla FPR: ", fpr_van)
+            print("kn FPR:", fpr_kn)
+            aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
+            aupr_kn = aupr(ood["kn_p"], ind["kn_p"])
+            print("vanilla AUPR: ", aupr_van)
+            print("kn AUPR:", aupr_kn)
+            auroc_van = auroc(ood["vanilla_p"], ind["vanilla_p"])
+            auroc_kn = auroc(ood["kn_p"], ind["kn_p"])
+            print("vanilla AUROC: ", auroc_van)
+            print("kn AUROC:", auroc_kn)
+            dr_van = calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"])
+            dr_kn = calibrated_detection_rate(ood["kn_p"], ind["kn_p"])
+            print("vanilla DR: ", dr_van)
+            print("kn DR: ", dr_kn)
+        print()
+
+def plot_nico_samplesize(filename):
+    data = pd.read_csv(filename)
+    for sampler in np.unique(data["sampler"]):
+        dataset = data[data["sampler"]==sampler]
+        auprs_kn = []
+        auprs_van = []
+        for sample_size in np.unique(dataset["sample_size"]):
+            subset = dataset[dataset["sample_size"] == sample_size]
+            ood = subset[subset["ood_dataset"] != "nico_dim"]
+            ind = subset[subset["ood_dataset"] == "nico_dim"]
+            auprs_van.append(aupr(ood["vanilla_p"], ind["vanilla_p"]))
+            auprs_kn.append(aupr(ood["kn_p"], ind["kn_p"]))
+        plt.plot(sorted(np.unique(dataset["sample_size"])), auprs_kn, label="knndsd")
+        plt.plot(sorted(np.unique(dataset["sample_size"])), auprs_van, label="Rabanser et Al")
+        plt.title(type(sampler).__name__)
+        plt.legend()
+        plt.show()
+
+def illustrate_clustersampler():
+    fig, ax = plt.subplots(5,1, sharex=True, sharey=True)
+    for i, severity in enumerate([0, 0.1, 0.25, 0.5, 1]):
+        dataset_classes = np.array(sum([[i] * 10 for i in range(10)], []))  # sorted
+        shuffle_indeces = np.random.choice(np.arange(len(dataset_classes)), size=int(len(dataset_classes) * severity),
+                                           replace=False)
+        to_shuffle = dataset_classes[shuffle_indeces]
+        np.random.shuffle(to_shuffle)
+        dataset_classes[shuffle_indeces] = to_shuffle
+        ax[i].imshow(dataset_classes.reshape((1,len(dataset_classes))).repeat(16,0), cmap="viridis")
+        # ax[i].axis("off")
+        ax[i].set_ylabel(f"{1-severity}       ", rotation=0)
+        ax[i].xaxis.set_visible(False)
+        # make spines (the box) invisible
+        plt.setp(ax[i].spines.values(), visible=False)
+        # remove ticks and labels for the left axis
+        ax[i].tick_params(left=False, labelleft=False)
+        # remove background patch (only needed for non-white background)
+        ax[i].patch.set_visible(False)
+    fig.text(0.5, 0.05, 'Index Order', ha='center')
+    fig.text(0.1, 0.5, 'Bias Severity', va='center', rotation='vertical')
+    plt.savefig("bias_severity.eps")
+    plt.show()
+
 
 if __name__ == '__main__':
-    # get_corrrelation_metrics("lp_data_nico_noise.csv", "lp_nico_datak6_nobias.csv")
-
-    get_corrrelation_metrics("lp_data_cifar10_noise.csv")
-    # get_classification_metrics()
+    # get_njord_classification_metrics("Njord_VanillaVAE_k1.csv")
+    # plot_nico_samplesize("lp")
+    # illustrate_clustersampler()
+    # get_polyp_classification_metrics("lp_data_polyps.csv")
+    # get_corrrelation_metrics("nico_ResNetClassifier_k5.csv")
+    get_nico_classification_metrics("nico_ResNetClassifier_k5.csv")
+    # get_corrrelation_metrics("lp_data_cifar10_noise.csv")
     # get_cifar10_classification_metrics("lp_data_cifar10_noise.csv")
-    # eval_k_impact("lp_data_cifar10_noise_clusterbias.csv")
-  # plot_loss_v_encodings()
-  # plot_nico_clustering_bias()
-  # plot_nico_class_bias()
-  # genfailure_metrics("ResNetClassifier_dim_k5_ClassOrderSampler.csv") #potential bu88
-  get_classification_metrics("CVC_ClinicDB_ResNetVAE_k5_ClusterSampler.csv") #lower k is slightly better with class-bias?
-  # genfailure_metrics()
-  # get_classification_metrics("ResNetClassifier_dim_k10_ClassOrderSampler.csv")
-  # get_corrrelation_metrics("lp_data_nico_noise.csv")
-  # from torchvision.datasets import MNIST
-  # from torchvision.datasets import CIFAR10,CIFAR100
-  # dataset = CIFAR10("~/Datasets/cifar10", train=True, download=True)
-  # for x,y, z in dataset:
-  #   plt.imshow(x)
-  #   plt.show()
-  #   break
-  # CIFAR100("~/Datasets/cifar100", train=True, download=True)
-  # MNIST("~/Datasets/mnist", train=True, download=True)
-  # num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-  #
-  # model = ResNetClassifier.load_from_checkpoint(
-  #     "/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=109-step=1236510.ckpt",
-  #     num_classes=num_classes, resnet_version=34).to("cuda")
-  #
-  # trans = transforms.Compose([transforms.RandomHorizontalFlip(),
-  #                             transforms.Resize((512, 512)),
-  #                             transforms.ToTensor(), ])
-  # ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
-  # for i, (x,y,_) in enumerate(DataLoader(ind_val, sampler=ClusterSamplerWithSeverity(ind_val,model, 50, 0.5 ))):
-  #     pass
-  #
