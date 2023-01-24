@@ -255,7 +255,13 @@ def build_polyp_dataset(root, fold="Etis", seed=0):
     return train_set, val_set
 
 def build_njord_dataset():
-    pass
+    ind = check_dataset("njord/folds/ind_fold.yaml")
+    ood = check_dataset("njord/folds/ood_fold.yaml")
+
+    train_set = create_dataloader(ind["train"], 512, 16, 32)[1]
+    val_set =  create_dataloader(ind["val"], 512, 16, 32)[1]
+    ood_set =  create_dataloader(ood["val"], 512, 16, 32)[1]
+    return train_set, val_set, ood_set
 
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):

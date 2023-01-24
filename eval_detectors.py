@@ -22,8 +22,8 @@ from tqdm import tqdm
 from torchvision.datasets import CIFAR10,CIFAR100,MNIST
 import pickle as pkl
 import torch.utils.data as data
+from domain_datasets import *
 from torch.utils.data import RandomSampler
-from domain_datasets import build_nico_dataset, build_polyp_dataset
 from classifier.resnetclassifier import ResNetClassifier
 
 def transform_dataset(dataset, transform):
@@ -462,11 +462,45 @@ def eval_cifar100():
     final.to_csv(f"lp_data_cifar100_noise_clusterbias.csv")
     print(final.head(10))
 
-if __name__ == '__main__':
-    # eval_cifar10()
-    # eval_nico_for_k()
-    # eval_cifar10_fork()
-    # eval_cifar10_bias_severity()
-    # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
-    # nico_correlation()
 
+def eval_njord():
+    trans = transforms.Compose([transforms.Resize((512, 512)),
+                                transforms.ToTensor(), ])
+    config = yaml.safe_load(open("vae/configs/vae.yaml"))
+    model = VanillaVAE(3, 128).to("cuda").eval()
+    ind, ind_val, ood = build_njord_dataset()
+    vae_exp = VAEXperiment(model, config)
+    vae_exp.load_state_dict(
+        torch.load("njord_vae/VanillaVAE/version_0/checkpoints/epoch=16-step=31109.ckpt")[
+            "state_dict"])
+    classifier = SegmentationModel.load_from_checkpoint(
+        "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
+    classifier.eval()
+
+    aconfig = {"device": "cuda"}
+    ds = robustSD(model, classifier, aconfig)
+    # ds = robustSD(model, classifier, aconfig)
+
+    # print("ood")
+    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
+    merged = []
+    k = 5
+    try:
+        for test_dataset in [ind_val, build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis")]:
+            for sample_size in [10, 20, 50, 100, 200, 500]:
+                data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=ClusterSampler(test_dataset,model, sample_size=sample_size),
+                                                 sample_size=sample_size, ind_dataset_name=type(ind_val).__name__,
+                                                 ood_dataset_name=f"{type(test_dataset).__name__}", k=k)
+                merged.append(data)
+    except KeyboardInterrupt:
+        final = pd.concat(merged)
+        final.to_csv(f"{type(ds.rep_model).__name__}_k{k}_ClusterSampler-incomplete.csv")
+    final = pd.concat(merged)
+    final.to_csv(f"{type(ind_val).__name__}_{type(ds.rep_model).__name__}_k{k}_ClusterSampler.csv")
+    print(final.head(10))
+
+if __name__ == '__main__':
+
+    # eval_nico()
+    eval_njord()
+    eval_polyp()
