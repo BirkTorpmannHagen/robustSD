@@ -15,12 +15,8 @@ from utils import *
 from yellowbrick.features.manifold import Manifold
 from sklearn.manifold import SpectralEmbedding, Isomap
 from scipy.stats import ks_2samp
-<<<<<<< HEAD
 from bias_samplers import ClusterSampler, ClassOrderSampler, ClusterSamplerWithSeverity
-=======
-from bias_samplers import ClusterSampler, ClassOrderSampler
 from torch.utils.data.sampler import RandomSampler
->>>>>>> 76de622aac7b043402122b2b81c60a6a47c8989d
 import torchvision.transforms as transforms
 from tqdm import tqdm
 from torchvision.datasets import CIFAR10,CIFAR100,MNIST
@@ -318,11 +314,12 @@ def eval_cifar10():
     merged = []
     for noise_val in np.linspace(0, 0.20, 11):
         for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
-            for sampler_type in [ClusterSampler(ind_val, classifier, sample_size=sample_size), RandomSampler(ind_val), ClassOrderSampler(ind_val, num_classes=10)]:
-                data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
-                                         sampler=sampler_type,
+            ood_set = transform_dataset(ind_val,lambda x: x + torch.randn_like(x) * noise_val )
+            for sampler_type in [ClusterSampler(ood_set, classifier, sample_size=sample_size), RandomSampler(ood_set), ClassOrderSampler(ood_set, num_classes=10)]:
+                data = ds.compute_pvals_and_loss(ind, ood_set,
+                                         ood_sampler=sampler_type,
                                          sample_size=sample_size, ind_dataset_name="cifar10",
-                                         ood_dataset_name=f"cifar10_{noise_val}")
+                                         ood_dataset_name=f"cifar10_{noise_val}", k=5)
                 data["sampler"]=type(sampler_type).__name__
                 merged.append(data)
                 print(data.head(10))
@@ -365,12 +362,13 @@ def eval_cifar10_bias_severity():
     merged = []
     for noise_val in np.linspace(0, 0.20, 11):
         for severity in np.linspace(0.1, 1, 10):
-            for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
-                sampler_type = ClusterSamplerWithSeverity(ind_val, classifier, sample_size=sample_size, bias_severity=severity)
-                data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
-                                         sampler=sampler_type,
+            ood_set = transform_dataset(ind_val,lambda x: x + torch.randn_like(x) * noise_val)
+            for sample_size in [10, 20, 50, 100]:
+                sampler_type = ClusterSamplerWithSeverity(ood_set, classifier, sample_size=sample_size, bias_severity=severity)
+                data = ds.compute_pvals_and_loss(ind, ood_set,
+                                         ood_sampler=sampler_type,
                                          sample_size=sample_size, ind_dataset_name="cifar10",
-                                         ood_dataset_name=f"cifar10_{noise_val}")
+                                         ood_dataset_name=f"cifar10_{noise_val}", k=5)
                 data["sampler"]=f"{type(sampler_type).__name__}_{severity}"
                 merged.append(data)
                 print(data.head(10))
@@ -465,10 +463,10 @@ def eval_cifar100():
     print(final.head(10))
 
 if __name__ == '__main__':
+    # eval_cifar10()
     # eval_nico_for_k()
     # eval_cifar10_fork()
-    # eval_cifar10()
-    eval_cifar10_bias_severity()
+    # eval_cifar10_bias_severity()
     # generate_plot(create_datasets_by_fold(), ["ind", "test_val"])
     # nico_correlation()
 
