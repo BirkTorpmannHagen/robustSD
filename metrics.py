@@ -20,7 +20,7 @@ def fprat95tpr(ood_ps, ind_ps):
     thresholded = ind_ps<threshold
     return thresholded.mean()
 
-def calibrated_detection_rate(ood_ps, ind_ps, tnr_threshold=1):
+def calibrated_detection_rate(ood_ps, ind_ps, tnr_threshold=0, threshold=0):
     """
 
     :param ood_ps:
@@ -30,10 +30,12 @@ def calibrated_detection_rate(ood_ps, ind_ps, tnr_threshold=1):
     :return:
     """
     sorted_ps = sorted(ind_ps)
-    threshold = sorted_ps[int((1-tnr_threshold)*len(sorted_ps))] #minimum ind p_val that results in tnr of tnr_threshold
-    # print(sorted_ps)
+    threshold = sorted_ps[int(np.ceil(tnr_threshold*len(sorted_ps)))]
+    # threshold = min(sorted_ps)
+
     # print("t:", threshold)
-    return (tnr_threshold+(ood_ps<threshold).mean())/2
+
+    return ((1-tnr_threshold)+(ood_ps<threshold).mean()) /2
 
 def auroc(ood_ps, ind_ps):
     true = [0]*len(ood_ps)+[1]*len(ind_ps)

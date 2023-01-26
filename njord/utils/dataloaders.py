@@ -282,7 +282,6 @@ class _RepeatSampler:
     """
 
     def __init__(self, sampler):
-        print(sampler)
         self.sampler = sampler
 
     def __iter__(self):

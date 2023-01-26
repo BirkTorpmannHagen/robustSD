@@ -245,7 +245,7 @@ def build_polyp_dataset(root, fold="Etis", seed=0):
     if fold=="Etis":
         train_set = EtisDataset(root, trans, split="train")
         val_set = EtisDataset(root, trans, split="val")
-        return train_set
+        return train_set, val_set
     elif fold=="Kvasir":
         train_set = KvasirSegmentationDataset(root)
         val_set = KvasirSegmentationDataset(root, "val")
@@ -255,12 +255,28 @@ def build_polyp_dataset(root, fold="Etis", seed=0):
     return train_set, val_set
 
 def build_njord_dataset():
+    def njord_wrapper(dataset):
+        class Njord(data.Dataset):
+            def __init__(self, dataset):
+                super().__init__()
+                self.dataset = dataset
+
+            def __getitem__(self, index):
+                image = self.dataset[index][0]
+                image = image.float()/255
+                return image, 0, 0
+
+            def __len__(self):
+                return len(self.dataset)
+
+        return Njord(dataset)
+
     ind = check_dataset("njord/folds/ind_fold.yaml")
     ood = check_dataset("njord/folds/ood_fold.yaml")
 
-    train_set = create_dataloader(ind["train"], 512, 16, 32)[1]
-    val_set =  create_dataloader(ind["val"], 512, 16, 32)[1]
-    ood_set =  create_dataloader(ood["val"], 512, 16, 32)[1]
+    train_set = njord_wrapper(create_dataloader(ind["train"], 512, 16, 32)[1])
+    val_set =  njord_wrapper(create_dataloader(ind["val"], 512, 16, 32)[1])
+    ood_set =  njord_wrapper(create_dataloader(ood["val"], 512, 16, 32)[1])
     return train_set, val_set, ood_set
 
 class NICOTestDataset(data.Dataset):
