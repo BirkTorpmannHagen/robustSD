@@ -77,13 +77,13 @@ class robustSD:
                                                          y.to(self.config["device"])).cpu().numpy()
         cols = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
         dataframe = []
-        for start, stop in list(zip(range(0, len(ood_dataset), sample_size), range(sample_size, len(ood_dataset)+sample_size, sample_size)))[:-1]: #perform tests
+        for start, stop in tqdm(list(zip(range(0, len(ood_dataset), sample_size), range(sample_size, len(ood_dataset)+sample_size, sample_size)))[:-1]): #perform tests
             sample_idx = range(start,stop)
             ood_samples = ood_latents[sample_idx]
-            vanilla_pval = min(np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
+            vanilla_pval = np.min([ks_2samp(ind_latents[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
             k_nearest_idx = np.concatenate([np.argpartition(np.sum((np.expand_dims(i, 0) - ind_latents) ** 2, axis=-1), k)[:k] for i in ood_samples])
             k_nearest_ind = ind_latents[k_nearest_idx]
-            kn_pval = min(np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)]), 1)
+            kn_pval = np.min([ks_2samp(k_nearest_ind[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
             dataframe.append(dict(zip(cols, [ind_dataset_name, ood_dataset_name, type(self.rep_model).__name__, sample_size, vanilla_pval, kn_pval, np.mean(ood_losses[sample_idx])])))
         final = pd.DataFrame(data=dataframe, columns=cols)
         return final
@@ -354,8 +354,6 @@ def eval_cifar10():
     # ds = robustSD(model, classifier, aconfig)
 
     # print("ood")
-    ind_dataset_name = "nico"
-    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
     for noise_val in np.linspace(0, 0.20, 11):
         for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
@@ -373,38 +371,36 @@ def eval_cifar10():
     print(final.head(10))
 
 def eval_mnist():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
-                                transforms.Resize((32, 32)),
+    trans = transforms.Compose([transforms.Resize((64, 64)),
                                 transforms.ToTensor(), ])
-    contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
     # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
     ind = wrap_dataset(MNIST("../../Datasets/mnist", train=True, transform=trans))
-    ind_val = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans))
+    ind_val = wrap_dataset(MNIST("../../Datasets/mnist", train=False, transform=trans))
 
-
-    num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("MNIST_logs/lightning_logs/version_0/checkpoints/epoch=40-step=2460000.ckpt", num_classes=10)
+    classifier = ResNetClassifier.load_from_checkpoint("MNIST_logs/lightning_logs/version_0/checkpoints/epoch=40-step=2460000.ckpt",
+                                                       num_classes=10, resnet_version=34,transfer=True, batch_size=100).to("cuda")
+    classifier.eval()
 
     aconfig = {"device": "cuda"}
     ds = robustSD(classifier, classifier, aconfig)
     # ds = robustSD(model, classifier, aconfig)
 
     # print("ood")
-    ind_dataset_name = "nico"
-    columns = ["ind_dataset", "ood_dataset", "rep_model", "sample_size", "vanilla_p", "kn_p", "loss"]
     merged = []
     for noise_val in np.linspace(0, 0.20, 11):
-        for sample_size in [10, 20, 50, 100, 200, 500, 1000]:
-            for sampler_type in [ClusterSampler(ind_val, classifier, sample_size=sample_size), RandomSampler(ind_val), ClassOrderSampler(ind_val, num_classes=10)]:
-                data = ds.eval_synthetic(ind, ind_val, lambda x: x + torch.randn_like(x) * noise_val,
-                                         sampler=sampler_type,
-                                         sample_size=sample_size, ind_dataset_name="mnist",
-                                         ood_dataset_name=f"mnist_{noise_val}", k=5)
-                data["sampler"]=type(sampler_type).__name__
+        for sample_size in [10, 100]:
+            ood_set = transform_dataset(ind_val, lambda x: x + torch.randn_like(x) * noise_val)
+            for sampler_type in [ClusterSampler(ood_set, classifier, sample_size=sample_size), RandomSampler(ood_set),
+                                 ClassOrderSampler(ood_set, num_classes=10)]:
+                data = ds.compute_pvals_and_loss(ind, ood_set,
+                                                 ood_sampler=sampler_type,
+                                                 sample_size=sample_size, ind_dataset_name="mnist",
+                                                 ood_dataset_name=f"mnist_{noise_val}", k=5)
+                data["sampler"] = type(sampler_type).__name__
                 merged.append(data)
                 print(data.head(10))
     final = pd.concat(merged)
-    final.to_csv(f"lp_data_cifar10_noise.csv")
+    final.to_csv(f"lp_data_mnist_noise.csv")
     print(final.head(10))
 def eval_cifar10_bias_severity():
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -579,7 +575,4 @@ def eval_njord():
     print(final.head(10))
 
 if __name__ == '__main__':
-    eval_nico()
-    # eval_njord()
-    # eval_polyp()
-    nico_correlation()
+    eval_mnist()

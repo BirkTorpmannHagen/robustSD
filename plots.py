@@ -409,4 +409,6 @@ def illustrate_clustersampler():
 
 if __name__ == '__main__':
     # get_nico_classification_metrics("nico_ResNetClassifier_k5.csv")
-    get_corrrelation_metrics("lp_data_cifar10_noise.csv")
+    # get_corrrelation_metrics("lp_data_cifar10_noise.csv")
+    # get_njord_classification_metrics("Njord_VanillaVAE_k5.csv")
+
