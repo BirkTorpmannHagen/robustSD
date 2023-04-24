@@ -1,10 +1,3 @@
-# robustSD
-## TODOS
-- [x] Implement code for robustDS
-- [ ] Implement code for ODIN
-- [ ] Implement gradient-based methods (i.e using classifiers)
-- [ ] Implement evaluation metrics
-- [ ] Implement data collation scripts
-- [ ] Plots
-- [ ] Experiment with polyp datasets
-- [ ] Experiment with 
+# KNNDSD
+Note for reviewers: refactoring in progress. The codebase is currently extensive and difficult to navigate. This will be addressed soon.
+To collect data on a given dataset, run the relevant function in eval_detectors.py. Metrics are computed with a corresponding function in plots.py

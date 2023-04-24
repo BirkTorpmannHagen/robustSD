@@ -257,13 +257,7 @@ def get_corrrelation_metrics(filename_noise, filename_ood=""):
 
 def genfailure_metrics(filename):
     dataset = pd.read_csv(filename)
-    for sample_size in np.unique(dataset["sample_size"]):
-        subset = dataset[dataset["sample_size"] == sample_size]
-        ood = subset[subset["ood_dataset"] != "nico_dim"]
-        ind = subset[subset["ood_dataset"] == "nico_dim"]
-        print(sample_size)
-        print("ood: ", ood["loss"].mean())
-        print("ind: ", ind["loss"].mean())
+    print(dataset.groupby(["ood_dataset"]).mean()["loss"])
 
 
 def plot_loss_v_encodings():
@@ -300,18 +294,39 @@ def plot_loss_v_encodings():
     plt.show()
 
 def eval_sample_size_impact(filename):
-    das_kn = []
-    das_vn = []
     dataset = pd.read_csv(filename)
-    for sample_size in np.unique(dataset["sample_size"]):
-        subset = dataset[dataset["sample_size"] == sample_size]
-        ood = subset[subset["ood_dataset"] != "nico_dim"]
-        ind = subset[subset["ood_dataset"] == "nico_dim"]
-        das_kn.append(calibrated_detection_rate(ood["kn_p"], ind["kn_p"]))
-        das_vn.append(calibrated_detection_rate(ood["vanilla_p"], ind["vanilla_p"]))
-    plt.plot(np.unique(dataset["sample_size"]), das_kn, label="kn")
-    plt.plot(np.unique(dataset["sample_size"]), das_vn, label="vanilla")
-    plt.legend()
+    fig, ax = plt.subplots(3,1, sharex=True)
+    for i, sampler in enumerate(np.unique([dataset["sampler"]])):
+        data = dataset[dataset["sampler"] == sampler]
+        dataframe = []
+        for ood_dataset in np.unique(data["ood_dataset"]):
+            if ood_dataset=="cifar10_0.0":
+                continue
+            das_kn = [[], []]
+            das_vn = [[], []]
+            for sample_size in np.unique(data["sample_size"]):
+                subset = data[data["sample_size"] == sample_size]
+                ood = subset[subset["ood_dataset"] == ood_dataset]
+                ind = subset[subset["ood_dataset"] == "cifar10_0.0"]
+                das_kn[1].append(auroc(ood["kn_p"], ind["kn_p"]))
+                das_vn[1].append(auroc(ood["vanilla_p"], ind["vanilla_p"]))
+                das_vn[0].append(sample_size)
+                das_kn[0].append(sample_size)
+                dataframe.append(
+                    {"ood_dataset": ood_dataset, "Sample Size": sample_size, "AUROC": das_kn[1][-1],
+                     "Method": "KNNDSD"})
+                dataframe.append(
+                    {"ood_dataset": ood_dataset, "Sample Size": sample_size, "AUROC": das_vn[1][-1],
+                     "Method": "Rabanser et Al."})
+
+        df = pd.DataFrame(data=dataframe)
+        print(df)
+        sns.lineplot(data=df, ax=ax[i], x="Sample Size", y="AUROC", hue="Method")
+        ax[i].set_ylabel(f"{sampler}")
+    ax[0].legend("")
+    ax[1].legend("")
+    fig.text(0.04, 0.5, "AUROC", va='center', rotation='vertical')
+    plt.savefig("figures/sample_size_lineplot.png")
     plt.show()
 
 def eval_k_impact(filename):
@@ -407,8 +422,40 @@ def illustrate_clustersampler():
     plt.show()
 
 
-if __name__ == '__main__':
-    # get_nico_classification_metrics("nico_ResNetClassifier_k5.csv")
-    # get_corrrelation_metrics("lp_data_cifar10_noise.csv")
-    # get_njord_classification_metrics("Njord_VanillaVAE_k5.csv")
+def plot_bias_severity_impact(filename):
+    data = pd.read_csv(filename)
+    full_bias = pd.read_csv("lp_data_cifar10_noise.csv")
+    full_bias = full_bias[full_bias["sampler"]=="ClusterSampler"]
+    full_bias["sampler"]="ClusterSamplerWithSeverity_0.0"
+    data = pd.concat((data, full_bias))
 
+    data = data[data["sample_size"]==100]
+    dataframe = []
+    for ood_dataset in np.unique(data["ood_dataset"]):
+        das_kn = [[], []]
+        das_vn = [[], []]
+        for sampler in np.unique(data["sampler"]):
+            print(sampler)
+            subset = data[data["sampler"]==sampler]
+            ood = subset[subset["ood_dataset"] == ood_dataset]
+            ind = subset[subset["ood_dataset"] == "cifar10_0.0"]
+            das_kn[1].append(auroc(ood["kn_p"], ind["kn_p"]))
+            das_vn[1].append(auroc(ood["vanilla_p"], ind["vanilla_p"]))
+            das_vn[0].append(1-float(sampler.split("_")[-1]))
+            das_kn[0].append(1 - float(sampler.split("_")[-1]))
+            dataframe.append({"ood_dataset": ood_dataset, "Bias Severity":1 - float(sampler.split("_")[-1]), "AUROC": das_kn[1][-1], "Method":"KNNDSD"})
+            dataframe.append({"ood_dataset": ood_dataset, "Bias Severity":1 - float(sampler.split("_")[-1]), "AUROC": das_vn[1][-1], "Method":"Rabanser et Al."})
+
+    df = pd.DataFrame(data=dataframe)
+    print(df)
+    sns.lineplot(data=df, x="Bias Severity", y="AUROC", hue="Method")
+    plt.savefig("figures/bias_severity_lineplot.png")
+    plt.show()
+        # plt.plot(das_kn[0], das_kn[1],label="KNNDSD")
+        # plt.plot(das_vn[0], das_vn[1],label="Rabanser et Al.")
+        # plt.title(str(ood_dataset))
+        # plt.legend()
+        # plt.show()
+
+if __name__ == '__main__':
+    pass
