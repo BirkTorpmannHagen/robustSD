@@ -7,11 +7,32 @@ from torchvision.datasets.folder import default_loader
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms
-from torchvision.datasets import CelebA
+from torchvision.datasets import CIFAR10
 from torchvision.datasets import ImageFolder
 import zipfile
 from vae.utils.general import check_dataset, colorstr
 from domain_datasets import *
+def wrap_dataset(dataset):
+    """
+    dumb utility function to make testing easier. standardizes datasets so that it works easier with the models and trainers
+    :param dataset:
+    :return:
+    """
+    class NewDataset(data.Dataset):
+        def __init__(self, dataset):
+            super().__init__()
+            self.dataset = dataset
+
+        def __getitem__(self, index):
+            image, label = self.dataset[index]
+            if image.shape[0]==1:
+                image = image.repeat(3,1,1)
+            return image, label, 0
+
+        def __len__(self):
+            return len(self.dataset)
+
+    return NewDataset(dataset)
 
 class VAEDataset(LightningDataModule):
     """
@@ -51,16 +72,18 @@ class VAEDataset(LightningDataModule):
     def setup(self,  stage: Optional[str] = None) -> None:
         train_transforms = transforms.Compose([
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
-                                              transforms.Resize(self.patch_size),
+                                              transforms.Resize((32,32)),
                                               transforms.ToTensor(),])
         
         val_transforms = transforms.Compose([
                                             # transforms.CenterCrop(148),
-                                            transforms.Resize(self.patch_size),
+                                            transforms.Resize((32,32)),
                                             transforms.ToTensor(),])
 
-        self.train_dataset, self.val_dataset = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", fold="Kvasir", seed=0)
+        # self.train_dataset, self.val_dataset = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", fold="Kvasir", seed=0)
 
+        self.train_dataset = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=True, download=False, transform=train_transforms))
+        self.val_dataset = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=False, download=False, transform=train_transforms))
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_dataset,

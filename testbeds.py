@@ -116,7 +116,13 @@ class BaseTestBed:
     def compute_losses(self):
         pass
 
-    def compute_distshift(self):
+    def ind_loader(self):
+        pass
+
+    def ood_loaders(self):
+        pass
+
+    def ind_val_loader(self):
         pass
 
 class NicoTestBed(BaseTestBed):
@@ -135,6 +141,35 @@ class NicoTestBed(BaseTestBed):
                  DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
     
 
+class CIFAR10TestBed(BaseTestBed):
+    def __init__(self, sample_size):
+        super().__init__(sample_size)
+        self.trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                    transforms.Resize((32, 32)),
+                                    transforms.ToTensor(), ])
+
+        classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to(
+            "cuda").eval()
+        self.classifier = wrap_model(classifier)
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        self.rep_model = VanillaVAE(3,512).to("cuda").eval()
+        vae_exp = VAEXperiment(self.rep_model, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+                "state_dict"])
 
 
+    def ind_loader(self):
+        return DataLoader(
+            wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=self.trans)))
 
+    def ind_val_loader(self):
+        return DataLoader(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans)))
+
+    def ood_loaders(self):
+        ood_sets = [transform_dataset(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans))
+                                      , lambda x: x + torch.randn_like(x) * noise_val) for noise_val in
+                    np.linspace(0, 0.20, 11)]
+        self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
+                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
+                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]

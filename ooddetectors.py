@@ -9,16 +9,69 @@ from bias_samplers import *
 from tqdm import tqdm
 import pickle as pkl
 from domain_datasets import *
+from vae.models.vanilla_vae import VanillaVAE
 
 class BaseSD:
-    def __init__(self):
-        pass
+    def __init__(self, rep_model, sample_selector):
+        self.sample_selector = sample_selector
+        self.rep_model = rep_model
+
+    def register_testbed(self, testbed):
+        self.testbed = testbed
 
 
 class RabanserSD:
-    def __init__(self) -> None:
+    def __init__(self, sample_selector) -> None:
         pass
 
+class TypicalitySD(BaseSD):
+    def __init__(self,rep_model, sample_selector):
+        super().__init__(rep_model, sample_selector)
+
+    def compute_entropy(self, samples):
+        pass
+
+    def compute_pvals_and_loss(self, sample_size, mc_samples=25):
+        sample_size=(sample_size, len(self.testbed.ood_loader()))
+        # resubstitution estimation of entropy
+        try:
+            likelihoods = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        except FileNotFoundError:
+            likelihoods = []
+            for x,y,_ in self.testbed.ind_loader():
+                likelihoods.append(self.rep_model.monte_carlo_likelihood_estimate(x, mc_samples))
+            torch.save(likelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        resub_entropy = -torch.log(torch.tensor(likelihoods)).mean().item()
+
+        # compute ind_val pvalues
+        ind_likelihoods = []
+        for x,y,_ in self.testbed.ind_val_loader():
+            ind_likelihoods.append(self.rep_model.monte_carlo_likelihood_estimate(x, mc_samples))
+        ind_val_entropy = -torch.log(torch.tensor(ind_likelihoods))
+
+        ood_likelihoods = [[[],[],[]] for i in self.testbed.ood_loaders()]
+        for i, ood_set in enumerate(self.testbed.ood_loaders()):
+            for j, ood_wsampler in ood_set:
+                for x,y,_ in ood_wsampler: #todo possible bug here
+                    ood_likelihoods[i][j].append(self.rep_model.monte_carlo_likelihood_estimate(x, mc_samples))
+        ood_entropies = [-torch.log(torch.tensor(ood_set)) for ood_set in ood_likelihoods]
+
+        print("Resubstitution entropy: ", resub_entropy)
+        print("Ind val entropy: ", ind_val_entropy.mean().item())
+        ood_pvals = [[[],[],[]] for i in self.testbed.ood_loaders()]
+
+
+        #bootstrap from ind_val to generate a distribution of entropies used to compute pvalues
+        bootstrap_entropy_distribution = [np.random.choice(ind_val_entropy, sample_size).mean().item() for i in range(1000)]
+        entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99) # alpha of .99 quantile
+        print("Entropy epsilon: ", entropy_epsilon)
+        for ood_entropy_noiseval in ood_entropies:
+            for ood_entropy_sampler in ood_entropy_noiseval:
+                for x,y, _ in ood_entropy_sampler:
+                    #batch size determined by sample_size
+                    #get p_vals for each batch by comparing to bootstrap distribution
+
+                    pass
 
 class robustSD:
     def __init__(self, rep_model, classifier, config):

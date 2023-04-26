@@ -26,6 +26,7 @@ from domain_datasets import *
 from torch.utils.data import RandomSampler
 from classifier.resnetclassifier import ResNetClassifier
 from ooddetectors import *
+from testbeds import *
 
 def transform_dataset(dataset, transform):
     class NewDataset(data.Dataset):
@@ -470,4 +471,7 @@ def eval_njord():
     print(final.head(10))
 
 if __name__ == '__main__':
-    eval_mnist()
+    # eval_mnist()
+    cifar10_bench = CIFAR10TestBed(10)
+    tsd = TypicalitySD(cifar10_bench.rep_model, None)
+    tsd.compute_pvals_and_loss()
