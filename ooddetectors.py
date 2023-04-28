@@ -62,16 +62,19 @@ class TypicalitySD(BaseSD):
 
 
         #bootstrap from ind_val to generate a distribution of entropies used to compute pvalues
-        bootstrap_entropy_distribution = [np.random.choice(ind_val_entropy, sample_size).mean().item() for i in range(1000)]
+        bootstrap_entropy_distribution = sorted([np.random.choice(ind_val_entropy, sample_size).mean().item() for i in range(1000)])
+
         entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99) # alpha of .99 quantile
         print("Entropy epsilon: ", entropy_epsilon)
-        for ood_entropy_noiseval in ood_entropies:
-            for ood_entropy_sampler in ood_entropy_noiseval:
-                for x,y, _ in ood_entropy_sampler:
-                    #batch size determined by sample_size
-                    #get p_vals for each batch by comparing to bootstrap distribution
+        for i, ood_entropy_noiseval in enumerate(ood_entropies):
+            for j, ood_entropies_by_sampler in enumerate(ood_entropy_noiseval):
+                for start, stop in tqdm(list(zip(range(0, len(ood_pvals), sample_size),
+                                                  range(sample_size, len(ood_pvals)+sample_size, sample_size)))[:-1]):
+                    sample_entropy = ood_entropies_by_sampler[start:stop].mean().item()
+                    p_value = np.mean([1 if sample_entropy > entropy_epsilon else 0 for i in bootstrap_entropy_distribution])
+                    ood_pvals[i][j].append(p_value)
+                    print(p_value)
 
-                    pass
 
 class robustSD:
     def __init__(self, rep_model, classifier, config):
