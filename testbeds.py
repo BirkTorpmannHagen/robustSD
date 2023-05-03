@@ -152,10 +152,11 @@ class CIFAR10TestBed(BaseTestBed):
             "cuda").eval()
         self.classifier = wrap_model(classifier)
         config = yaml.safe_load(open("vae/configs/vae.yaml"))
-        self.rep_model = VanillaVAE(3,512).to("cuda").eval()
+        # self.rep_model = VanillaVAE(3,512).to("cuda").eval()
+        self.rep_model = ResNetVAE().cuda().eval()
         vae_exp = VAEXperiment(self.rep_model, config)
         vae_exp.load_state_dict(
-            torch.load("vae_logs/nico_dim/version_40/checkpoints/last.ckpt")[
+            torch.load("vae_logs/nico_dim/version_43/checkpoints/epoch=0-step=12500.ckpt")[
                 "state_dict"])
 
 
@@ -164,12 +165,14 @@ class CIFAR10TestBed(BaseTestBed):
             wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=self.trans)))
 
     def ind_val_loader(self):
-        return DataLoader(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans)))
+        return DataLoader(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans)))
 
     def ood_loaders(self):
-        ood_sets = [transform_dataset(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=trans))
-                                      , lambda x: x + torch.randn_like(x) * noise_val) for noise_val in
-                    np.linspace(0, 0.20, 11)]
-        self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
-                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
-                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
+        # ood_sets = [transform_dataset(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans))
+        #                               , lambda x: x + torch.randn_like(x) * noise_val) for noise_val in
+        #             np.linspace(0, 0.20, 11)]
+        # self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
+        #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
+        #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
+        # return self.oods
+        return 0 #DEBUG

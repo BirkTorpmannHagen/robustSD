@@ -32,33 +32,37 @@ class TypicalitySD(BaseSD):
         pass
 
     def compute_pvals_and_loss(self, sample_size, mc_samples=25):
-        sample_size=(sample_size, len(self.testbed.ood_loader()))
+        sample_size=min(sample_size, 100)
         # resubstitution estimation of entropy
         try:
             likelihoods = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
         except FileNotFoundError:
             likelihoods = []
             for x,y,_ in self.testbed.ind_loader():
-                likelihoods.append(self.rep_model.monte_carlo_likelihood_estimate(x, mc_samples))
+                x = x.to("cuda")
+                likelihoods.append(self.rep_model.elbo_likelihood(x))
             torch.save(likelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
         resub_entropy = -torch.log(torch.tensor(likelihoods)).mean().item()
 
         # compute ind_val pvalues
         ind_likelihoods = []
         for x,y,_ in self.testbed.ind_val_loader():
-            ind_likelihoods.append(self.rep_model.monte_carlo_likelihood_estimate(x, mc_samples))
+            x = x.to("cuda")
+            ind_likelihoods.append(self.rep_model.elbo_likelihood(x))
         ind_val_entropy = -torch.log(torch.tensor(ind_likelihoods))
+        print(len(ind_val_entropy))
 
         ood_likelihoods = [[[],[],[]] for i in self.testbed.ood_loaders()]
         for i, ood_set in enumerate(self.testbed.ood_loaders()):
             for j, ood_wsampler in ood_set:
                 for x,y,_ in ood_wsampler: #todo possible bug here
-                    ood_likelihoods[i][j].append(self.rep_model.monte_carlo_likelihood_estimate(x, mc_samples))
-        ood_entropies = [-torch.log(torch.tensor(ood_set)) for ood_set in ood_likelihoods]
+                    x = x.to("cuda")
+                    ood_likelihoods[i][j].append(self.rep_model.elbo_likelihood(x))
+        ood_entropies = [[-torch.log(torch.tensor(ood_set)) for ood_set in ood_likelihoods_dataset] for ood_likelihoods_dataset in ood_likelihoods]
 
         print("Resubstitution entropy: ", resub_entropy)
         print("Ind val entropy: ", ind_val_entropy.mean().item())
-        ood_pvals = [[[],[],[]] for i in self.testbed.ood_loaders()]
+        # ood_pvals = [[[],[],[]] for i in self.testbed.ood_loaders()]
 
 
         #bootstrap from ind_val to generate a distribution of entropies used to compute pvalues
@@ -66,14 +70,18 @@ class TypicalitySD(BaseSD):
 
         entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99) # alpha of .99 quantile
         print("Entropy epsilon: ", entropy_epsilon)
+        # for i, ood_entropy_noiseval in enumerate(ind_val_entropy):
+            # for j, ood_entropies_by_sampler in enumerate(ood_entropy_noiseval):
+        for start, stop in list(zip(range(0, len(ind_val_entropy), sample_size),
+                            range(sample_size, len(ind_val_entropy)+sample_size, sample_size)))[:-1]:
+            sample_entropy = ind_val_entropy[start:stop].mean().item()
+            p_value = np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+            print(p_value)
+
+        
         for i, ood_entropy_noiseval in enumerate(ood_entropies):
             for j, ood_entropies_by_sampler in enumerate(ood_entropy_noiseval):
-                for start, stop in tqdm(list(zip(range(0, len(ood_pvals), sample_size),
-                                                  range(sample_size, len(ood_pvals)+sample_size, sample_size)))[:-1]):
-                    sample_entropy = ood_entropies_by_sampler[start:stop].mean().item()
-                    p_value = np.mean([1 if sample_entropy > entropy_epsilon else 0 for i in bootstrap_entropy_distribution])
-                    ood_pvals[i][j].append(p_value)
-                    print(p_value)
+                
 
 
 class robustSD:

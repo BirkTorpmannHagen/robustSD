@@ -180,8 +180,6 @@ def nico_correlation():
     for noise_val in np.linspace(0, 0.20, 11):
         for sample_size in [10, 20, 50, 100]:
             ood_dataset = transform_dataset(ind_val, lambda x: x + torch.randn_like(x) * noise_val)
-            plt.imshow(ood_dataset[0].T)
-            plt.show()
             for sampler_type in [ClusterSampler(ood_dataset, classifier, sample_size=sample_size), RandomSampler(ood_dataset),
                                  ClassOrderSampler(ood_dataset, num_classes=num_classes)]:
                 data = ds.compute_pvals_and_loss(ind, ind_val,
@@ -474,4 +472,5 @@ if __name__ == '__main__':
     # eval_mnist()
     cifar10_bench = CIFAR10TestBed(10)
     tsd = TypicalitySD(cifar10_bench.rep_model, None)
-    tsd.compute_pvals_and_loss()
+    tsd.register_testbed(cifar10_bench)
+    tsd.compute_pvals_and_loss(10)
