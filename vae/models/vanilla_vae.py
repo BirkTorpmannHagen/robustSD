@@ -6,6 +6,16 @@ import torch.nn.functional as F
 import torchvision.models as models
 from torch.autograd import Variable
 
+from torch.distributions import Normal
+
+def gaussian_likelihood(x, mu_x, sigma_x):
+    constant_term = 1 / torch.sqrt(2 * torch.pi * sigma_x ** 2)
+    exponent_term = -((x - mu_x) ** 2) / (2 * sigma_x ** 2)
+    likelihood = constant_term * torch.exp(exponent_term)
+
+    # Calculate the likelihood for each data point and take the average across all data points
+    return torch.mean(likelihood)
+
 
 class VanillaVAE(BaseVAE):
 
@@ -231,6 +241,99 @@ class ResNetVAE(BaseVAE):
             nn.Sigmoid()  # y = (y1, y2, y3) \in [0 ,1]^3
         )
 
+    def estimate_log_likelihood(self, sample, num_samples=100, prior_mean=0, prior_std=1):
+        """
+        Estimate the log likelihood for a given sample using a trained VAE and importance sampling.
+
+        Args:
+            vae: The trained VAE model.
+            sample: A single CIFAR10 image (shape: [3, 32, 32]).
+            num_samples: Number of samples to use for the Monte Carlo estimate (default: 100).
+            prior_mean: Mean of the prior distribution (default: 0).
+            prior_std: Standard deviation of the prior distribution (default: 1).
+
+        Returns:
+            log_likelihood: The estimated log likelihood for the given sample.
+        """
+
+        # Ensure the input sample has the correct shape
+        sample = sample.unsqueeze(0)
+
+        # Encode the sample to obtain the (mu, sigma) encoding
+        mu, log_sigma = self.encode(sample)
+        sigma = torch.exp(log_sigma)
+
+        # Compute the prior and learned distributions
+        prior_dist = Normal(prior_mean, prior_std)
+        learned_dist = Normal(mu, sigma)
+
+        # Sample multiple times from the learned latent distribution using the reparameterization trick
+        epsilon = torch.randn(num_samples, *sigma.shape)
+        z = mu + epsilon * sigma
+
+        # Decode the latent variables to reconstruct the samples
+        reconstructions = self.decode(z)
+
+        # Compute the log probabilities of the reconstructions under the learned and prior distributions
+        log_probs_prior = prior_dist.log_prob(z).sum(dim=1)
+        log_probs_learned = learned_dist.log_prob(z).sum(dim=1)
+        log_probs_recon = -F.binary_cross_entropy(reconstructions, sample.repeat(num_samples, 1, 1, 1),
+                                                  reduction='none').view(num_samples, -1).sum(dim=1)
+
+        # Compute the importance weights for each sample
+        importance_weights = log_probs_recon + log_probs_prior - log_probs_learned
+
+        # Compute the log likelihood using the importance weights
+        log_likelihood = torch.logsumexp(importance_weights, dim=0) - torch.log(torch.tensor(float(num_samples)))
+
+        return log_likelihood.item()
+    def elbo_likelihood(self, sample):
+        """
+        Estimate the ELBO for a given sample using a trained VAE.
+
+        Args:
+            vae: The trained VAE model.
+            sample: A single CIFAR10 image (shape: [3, 32, 32]).
+            prior_mean: Mean of the prior distribution (default: 0).
+            prior_std: Standard deviation of the prior distribution (default: 1).
+
+        Returns:
+            elbo: The estimated ELBO for the given sample.
+        """
+
+        # Ensure the input sample has the correct shape
+        # Encode the sample to obtain the (mu, sigma) encoding
+        mu, log_sigma = self.encode(sample)
+        sigma = torch.exp(log_sigma)
+
+        # Sample from the learned latent distribution using the reparameterization trick
+        epsilon = torch.randn_like(sigma)
+        z = mu + epsilon * sigma
+
+        # Decode the latent variable to reconstruct the sample
+        reconstruction = self.decode(z)
+
+        # Compute the reconstruction loss (negative log likelihood of the sample)
+        recon_loss = F.binary_cross_entropy(reconstruction, sample, reduction='sum') / sample.size(0)
+
+        # Compute the KL divergence between the learned distribution and the prior
+        prior_dist = Normal(0, 1)
+        learned_dist = Normal(mu, sigma)
+        kl_div = torch.distributions.kl_divergence(learned_dist, prior_dist).sum() / sample.size(0)
+
+        # Compute the ELBO by subtracting the KL divergence from the reconstruction loss
+        elbo = recon_loss - kl_div
+
+        return elbo.item()
+
+
+
+    def entropy(self, prob_distribution):
+        # Calculate the entropy for a given probability distribution
+        prob_distribution = torch.tensor(prob_distribution)
+        non_zero_indices = prob_distribution > 0
+        entropy = -torch.sum(prob_distribution[non_zero_indices] * torch.log(prob_distribution[non_zero_indices]))
+        return entropy
 
     def encode(self, x):
         x = self.resnet(x)  # ResNet
@@ -259,7 +362,7 @@ class ResNetVAE(BaseVAE):
         x = self.convTrans6(x)
         x = self.convTrans7(x)
         x = self.convTrans8(x)
-        x = F.interpolate(x, size=(512, 512), mode='bilinear')
+        x = F.interpolate(x, size=(32, 32), mode='bilinear')
         return x
 
     # def forward(self, x):
