@@ -1,16 +1,17 @@
-
-
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from scipy.stats import ks_2samp
+
+import metrics
 from bias_samplers import *
 
 from tqdm import tqdm
 import pickle as pkl
 from domain_datasets import *
 from vae.models.vanilla_vae import VanillaVAE
-
+import matplotlib.pyplot as plt
 class BaseSD:
     def __init__(self, rep_model, sample_selector):
         self.sample_selector = sample_selector
@@ -28,60 +29,83 @@ class TypicalitySD(BaseSD):
     def __init__(self,rep_model, sample_selector):
         super().__init__(rep_model, sample_selector)
 
-    def compute_entropy(self, samples):
-        pass
+    def compute_entropy(self, data_loader):
+        log_likelihoods = []
+        for i, (x, y, _) in enumerate(data_loader):
+            x = x.to("cuda")
+            log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
+        entropies = -(torch.tensor(log_likelihoods))
+        return entropies
 
-    def compute_pvals_and_loss(self, sample_size, mc_samples=25):
-        sample_size=min(sample_size, 100)
+    def compute_pvals_and_loss(self, sample_size):
+        """
+
+        :param sample_size: sample size for the tests
+        :return: ind_p_values: p-values for ind fold for each sampler
+        :return ood_p_values: p-values for ood fold for each sampler
+        :return ind_sample_losses: losses for each sampler on ind fold, in correct order
+        :return ood_sample_losses: losses for each sampler on ood fold, in correct order
+        """
+        sample_size=min(sample_size, len(self.testbed.ind_val_loaders()[0]))
+
         # resubstitution estimation of entropy
         try:
-            likelihoods = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+            loglikelihoods = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
         except FileNotFoundError:
-            likelihoods = []
+            loglikelihoods = []
             for x,y,_ in self.testbed.ind_loader():
                 x = x.to("cuda")
-                likelihoods.append(self.rep_model.elbo_likelihood(x))
-            torch.save(likelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        resub_entropy = -torch.log(torch.tensor(likelihoods)).mean().item()
+                loglikelihoods.append(self.rep_model.estimate_log_likelihood(x))
+            torch.save(loglikelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        resub_entropy = -(torch.tensor(loglikelihoods)).mean().item()
 
-        # compute ind_val pvalues
-        ind_likelihoods = []
-        for x,y,_ in self.testbed.ind_val_loader():
-            x = x.to("cuda")
-            ind_likelihoods.append(self.rep_model.elbo_likelihood(x))
-        ind_val_entropy = -torch.log(torch.tensor(ind_likelihoods))
-        print(len(ind_val_entropy))
-
-        ood_likelihoods = [[[],[],[]] for i in self.testbed.ood_loaders()]
-        for i, ood_set in enumerate(self.testbed.ood_loaders()):
-            for j, ood_wsampler in ood_set:
-                for x,y,_ in ood_wsampler: #todo possible bug here
-                    x = x.to("cuda")
-                    ood_likelihoods[i][j].append(self.rep_model.elbo_likelihood(x))
-        ood_entropies = [[-torch.log(torch.tensor(ood_set)) for ood_set in ood_likelihoods_dataset] for ood_likelihoods_dataset in ood_likelihoods]
-
-        print("Resubstitution entropy: ", resub_entropy)
-        print("Ind val entropy: ", ind_val_entropy.mean().item())
-        # ood_pvals = [[[],[],[]] for i in self.testbed.ood_loaders()]
-
+        # compute ind_val pvalues for each sampler
+        ind_val_entropies = dict([(loader.sampler.__class__.__name__, self.compute_entropy(loader)) for loader in self.testbed.ind_val_loaders()])
+        ind_val_losses = dict([(loader.sampler.__class__.__name__, self.testbed.compute_losses(loader)) for loader in self.testbed.ind_val_loaders()])
 
         #bootstrap from ind_val to generate a distribution of entropies used to compute pvalues
-        bootstrap_entropy_distribution = sorted([np.random.choice(ind_val_entropy, sample_size).mean().item() for i in range(1000)])
-
+        ind_val_entropy_nobias = ind_val_entropies["RandomSampler"] #assume bootstrapping from unbiased data
+        bootstrap_entropy_distribution = sorted([np.random.choice(ind_val_entropy_nobias, sample_size).mean().item() for i in range(10000)])
         entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99) # alpha of .99 quantile
-        print("Entropy epsilon: ", entropy_epsilon)
-        # for i, ood_entropy_noiseval in enumerate(ind_val_entropy):
-            # for j, ood_entropies_by_sampler in enumerate(ood_entropy_noiseval):
-        for start, stop in list(zip(range(0, len(ind_val_entropy), sample_size),
-                            range(sample_size, len(ind_val_entropy)+sample_size, sample_size)))[:-1]:
-            sample_entropy = ind_val_entropy[start:stop].mean().item()
-            p_value = np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
-            print(p_value)
 
-        
-        for i, ood_entropy_noiseval in enumerate(ood_entropies):
-            for j, ood_entropies_by_sampler in enumerate(ood_entropy_noiseval):
-                
+        ind_p_values = dict([(biased_sampler_name, []) for biased_sampler_name in ind_val_entropies.keys()])
+        ind_sample_losses = dict([(biased_sampler_name, []) for biased_sampler_name in ind_val_entropies.keys()])
+
+        for biased_sampler_name, biased_sampler_entropies in ind_val_entropies.items():
+            for start, stop in list(zip(range(0, len(biased_sampler_entropies), sample_size),
+                                range(sample_size, len(biased_sampler_entropies)+sample_size, sample_size)))[:-1]:
+                sample_entropy = biased_sampler_entropies[start:stop].mean().item()
+                p_value = np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+                ind_p_values[biased_sampler_name].append(p_value)
+                ind_sample_losses[biased_sampler_name].append(ind_val_losses[biased_sampler_name][start:stop].mean().item())
+            print(f"{biased_sampler_name} pvalues: {np.mean(ind_p_values[biased_sampler_name])}")
+
+
+        # compute ood pvalues
+        ood_pvalues = dict([(loader.sampler.__class__.__name__, []) for loader in self.testbed.ood_loaders()[0]])
+        ood_sample_losses = dict([(loader.sampler.__class__.__name__, []) for loader in self.testbed.ood_loaders()[0]])
+        import matplotlib.pyplot as plt
+        for i, ood_set in enumerate(self.testbed.ood_loaders()):
+            for j, ood_wsampler in enumerate(ood_set):
+                entropies=self.compute_entropy(ood_wsampler)
+                losses = self.testbed.compute_losses(ood_wsampler)
+                plt.hist(entropies, label="ood", alpha=0.5, bins=np.linspace(0,10000, 500))
+                plt.hist(ind_val_entropy_nobias, label="ind", alpha=0.5, bins=np.linspace(0,10000, 500))
+                plt.legend()
+                plt.show()
+                for start, stop in list(zip(range(0, len(entropies), sample_size),
+                                            range(sample_size, len(entropies) + sample_size, sample_size)))[:-1]:
+                    sample_entropy = entropies[start:stop].mean().item()
+                    p_value = np.mean([1 if sample_entropy > entropy_test else 0 for entropy_test in bootstrap_entropy_distribution])
+                    ood_pvalues[ood_wsampler.sampler.__class__.__name__].append(p_value)
+                    ood_sample_losses[ood_wsampler.sampler.__class__.__name__].append(losses[start:stop].mean().item())
+                print(f"{ood_wsampler.sampler.__class__.__name__} ood pvalues: {np.mean(ood_pvalues[ood_wsampler.sampler.__class__.__name__])}")
+
+        # for sampler in ood_pvalues.keys():
+        #     ood_pvalues_by_sampler = np.array(ood_pvalues[sampler])
+        #     ind_pvalues_by_sampler = np.array(ind_p_values[sampler])
+        return ind_p_values, ood_pvalues, ind_sample_losses, ood_sample_losses
+
 
 
 class robustSD:
@@ -104,7 +128,7 @@ class robustSD:
             for i, (x, y, _) in tqdm(enumerate(DataLoader(ind_dataset)),total=len(ind_dataset)):
                 with torch.no_grad():
                     ind_latents[i] = self.rep_model.encode(x.to(self.config["device"]))[0].cpu().numpy()
-                    losses[i] = self.classifier.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
+                    losses[i] = self.compute_loss(x.to(self.config["device"]),y.to(self.config["device"])).cpu().numpy()
             pkl.dump(ind_latents, open(fname_encodings, "wb"))
             pkl.dump(losses, open(fname_losses, "wb"))
 

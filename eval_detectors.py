@@ -470,7 +470,8 @@ def eval_njord():
 
 if __name__ == '__main__':
     # eval_mnist()
-    cifar10_bench = CIFAR10TestBed(10)
-    tsd = TypicalitySD(cifar10_bench.rep_model, None)
-    tsd.register_testbed(cifar10_bench)
-    tsd.compute_pvals_and_loss(10)
+    # cifar10_bench = CIFAR10TestBed(10)
+    bench = NicoTestBed(100)
+    tsd = TypicalitySD(bench.rep_model, None)
+    tsd.register_testbed(bench)
+    tsd.compute_pvals_and_loss(100)

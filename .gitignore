@@ -136,3 +136,6 @@ vae_logs/
 njord/vanilla_*/
 njord/Njord/
 *.pt
+*.png
+*.eps
+.idea/

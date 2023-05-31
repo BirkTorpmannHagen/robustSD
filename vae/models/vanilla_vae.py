@@ -202,7 +202,7 @@ class ResNetVAE(BaseVAE):
         self.pd1, self.pd2, self.pd3, self.pd4 = (0, 0), (0, 0), (0, 0), (0, 0)  # 2d padding
 
         # encoding components
-        resnet = models.resnet152(pretrained=True)
+        resnet = models.resnet18(pretrained=True)
         modules = list(resnet.children())[:-1]  # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
         self.fc1 = nn.Linear(resnet.fc.in_features, self.fc_hidden1)
@@ -257,7 +257,7 @@ class ResNetVAE(BaseVAE):
         """
 
         # Ensure the input sample has the correct shape
-        sample = sample.unsqueeze(0)
+        # sample = sample.unsqueeze(0)
 
         # Encode the sample to obtain the (mu, sigma) encoding
         mu, log_sigma = self.encode(sample)
@@ -268,7 +268,7 @@ class ResNetVAE(BaseVAE):
         learned_dist = Normal(mu, sigma)
 
         # Sample multiple times from the learned latent distribution using the reparameterization trick
-        epsilon = torch.randn(num_samples, *sigma.shape)
+        epsilon = torch.randn(num_samples, sigma.shape[-1]).to("cuda")
         z = mu + epsilon * sigma
 
         # Decode the latent variables to reconstruct the samples
@@ -362,7 +362,7 @@ class ResNetVAE(BaseVAE):
         x = self.convTrans6(x)
         x = self.convTrans7(x)
         x = self.convTrans8(x)
-        x = F.interpolate(x, size=(32, 32), mode='bilinear')
+        x = F.interpolate(x, size=(512, 512), mode='bilinear')
         return x
 
     # def forward(self, x):

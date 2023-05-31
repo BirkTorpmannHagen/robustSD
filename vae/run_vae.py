@@ -6,10 +6,10 @@ from models.vanilla_vae import VanillaVAE, ResNetVAE
 from vae_experiment import VAEXperiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.utilities.seed import seed_everything
+# from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning_dataset import VAEDataset
-from pytorch_lightning.plugins import DDPPlugin
+# from pytorch_lightning.plugins import DDPPlugin
 
 
 parser = argparse.ArgumentParser(description='Generic runner for VAE models')
@@ -31,7 +31,7 @@ tb_logger =  TensorBoardLogger(save_dir=config['logging_params']['save_dir'],
                                name=config['logging_params']['name'],)
 
 # For reproducibility
-seed_everything(config['exp_params']['manual_seed'], True)
+# seed_everything(config['exp_params']['manual_seed'], True)
 # vae_models = {'VanillaVAE':VanillaVAE}
 # model = vae_models[config['model_params']['name']](**config['model_params'])
 model = ResNetVAE()
@@ -49,7 +49,7 @@ runner = Trainer(logger=tb_logger,
                                      monitor= "val_loss",
                                      save_last= True),
                  ],
-                 strategy=DDPPlugin(find_unused_parameters=False),
+                 # strategy=DDPPlugin(find_unused_parameters=False),
                  **config['trainer_params'])
 
 

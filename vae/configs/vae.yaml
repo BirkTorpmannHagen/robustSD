@@ -20,7 +20,7 @@ exp_params:
   manual_seed: 1265
 
 trainer_params:
-  gpus: [0]
+  devices: [0]
   max_epochs: 200
 
 logging_params:

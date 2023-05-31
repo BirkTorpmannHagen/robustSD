@@ -113,6 +113,7 @@ class BaseTestBed:
     def __init__(self, sample_size):
         self.sample_size = sample_size
 
+
     def compute_losses(self):
         pass
 
@@ -122,23 +123,52 @@ class BaseTestBed:
     def ood_loaders(self):
         pass
 
-    def ind_val_loader(self):
+    def ind_val_loaders(self):
         pass
 
 class NicoTestBed(BaseTestBed):
 
     def __init__(self, sample_size):
+        self.trans = trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+                                    transforms.Resize((512, 512)),
+                                    transforms.ToTensor(), ])
+        self.num_classes = num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+
         super().__init__(sample_size)
-        ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+        self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
         self.num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-        classifier = ResNetClassifier.load_from_checkpoint(
-            "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
-            resnet_version=34).to("cuda").eval()
-        rep_model = classifier
-        ood_sets = [build_nico_dataset(build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=i, seed=0)) for i in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")]
-        oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=num_classes)),
-                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, classifier, sample_size=sample_size)),
-                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
+        # classifier = ResNetClassifier.load_from_checkpoint(
+        #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
+        #     resnet_version=34).to("cuda").eval()
+        # self.rep_model = self.classifier
+        self.rep_model = ResNetVAE().to("cuda").eval()
+        self.vae_experiment = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
+        self.vae_experiment.load_state_dict(torch.load("vae_logs/nico_dim/version_7/checkpoints/epoch=8-step=22482.ckpt")["state_dict"])
+
+
+    def compute_losses(self):
+        pass
+
+    def ind_loader(self):
+        return DataLoader(self.ind, shuffle=True)
+
+
+    def ood_loaders(self):
+        self.ood_sets = [
+            build_nico_dataset(1, "../../Datasets/NICO++", 0, self.trans, self.trans, context=i, seed=0)[0] for
+            i in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train") if i != "dim"][:1] #debug
+        self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes)),
+                      DataLoader(test_dataset,
+                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size)),
+                      DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in self.ood_sets]
+        return self.oods
+
+    def ind_val_loaders(self):
+        loaders =  [DataLoader(self.ind_val, sampler=sampler) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
+                                                                          ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                                                                            RandomSampler(self.ind_val)]]
+        return loaders
+
     
 
 class CIFAR10TestBed(BaseTestBed):
@@ -156,7 +186,7 @@ class CIFAR10TestBed(BaseTestBed):
         self.rep_model = ResNetVAE().cuda().eval()
         vae_exp = VAEXperiment(self.rep_model, config)
         vae_exp.load_state_dict(
-            torch.load("vae_logs/nico_dim/version_43/checkpoints/epoch=0-step=12500.ckpt")[
+            torch.load("vae_logs/nico_dim/version_4/checkpoints/epoch=2-step=37500.ckpt")[
                 "state_dict"])
 
 
@@ -164,15 +194,18 @@ class CIFAR10TestBed(BaseTestBed):
         return DataLoader(
             wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=self.trans)))
 
-    def ind_val_loader(self):
+    def ind_val_loaders(self):
         return DataLoader(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans)))
 
     def ood_loaders(self):
-        # ood_sets = [transform_dataset(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans))
-        #                               , lambda x: x + torch.randn_like(x) * noise_val) for noise_val in
-        #             np.linspace(0, 0.20, 11)]
+        ood_sets = [transform_dataset(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans))
+                                      , lambda x: x + torch.randn_like(x) * noise_val) for noise_val in
+                    np.linspace(0.1, 0.20, 3)]
         # self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
         #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
         #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
-        # return self.oods
-        return 0 #DEBUG
+        self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
+                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
+                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
+        return self.oods
+        # return 0 #DEBUG

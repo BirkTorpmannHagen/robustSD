@@ -70,20 +70,30 @@ class VAEDataset(LightningDataModule):
         self.pin_memory = pin_memory
         self.context=context
     def setup(self,  stage: Optional[str] = None) -> None:
+        # train_transforms = transforms.Compose([
+        #                                       # transforms.CenterCrop(148), #2048 with, 4096 without...
+        #                                       transforms.Resize((32,32)),
+        #                                       transforms.ToTensor(),])
+        #
+        # val_transforms = transforms.Compose([
+        #                                     # transforms.CenterCrop(148),
+        #                                     transforms.Resize((32,32)),
+        #                                     transforms.ToTensor(),])
+
         train_transforms = transforms.Compose([
-                                              # transforms.CenterCrop(148), #2048 with, 4096 without...
-                                              transforms.Resize((32,32)),
-                                              transforms.ToTensor(),])
-        
+            # transforms.CenterCrop(148), #2048 with, 4096 without...
+            transforms.Resize((512, 512)),
+            transforms.ToTensor(), ])
+
         val_transforms = transforms.Compose([
-                                            # transforms.CenterCrop(148),
-                                            transforms.Resize((32,32)),
-                                            transforms.ToTensor(),])
+            # transforms.CenterCrop(148),
+            transforms.Resize((512, 512)),
+            transforms.ToTensor(), ])
 
         # self.train_dataset, self.val_dataset = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", fold="Kvasir", seed=0)
-
-        self.train_dataset = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=True, download=False, transform=train_transforms))
-        self.val_dataset = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=False, download=False, transform=train_transforms))
+        self.train_dataset, self.val_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, train_transforms, val_transforms, context="dim", seed=0)
+        # self.train_dataset = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=True, download=False, transform=train_transforms))
+        # self.val_dataset = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=False, download=False, transform=train_transforms))
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_dataset,
