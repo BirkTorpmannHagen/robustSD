@@ -22,8 +22,80 @@ class BaseSD:
 
 
 class RabanserSD:
-    def __init__(self, sample_selector) -> None:
-        pass
+    def __init__(self, rep_model, sample_selector):
+        super().__init__(rep_model, sample_selector)
+
+    def get_encodings(self, dataloader):
+        encodings = np.zeros((len(self.testbed.ind_loader()), self.rep_model.latent_dim))
+        for i, (x, y, _) in enumerate(self.testbed.ind_loader()):
+            x = x.to("cuda")
+            encodings[i] = self.rep_model.get_encoding(x)
+        return encodings
+    def compute_pvals_and_loss(self, sample_size):
+        """
+
+        :param sample_size: sample size for the tests
+        :return: ind_p_values: p-values for ind fold for each sampler
+        :return ood_p_values: p-values for ood fold for each sampler
+        :return ind_sample_losses: losses for each sampler on ind fold, in correct order
+        :return ood_sample_losses: losses for each sampler on ood fold, in correct order
+        """
+        sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
+
+        try:
+            ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        except FileNotFoundError:
+            ind_latents = self.get_encodings(self.testbed.ind_loader())
+            torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+
+        # compute ind_val pvalues for each sampler
+        ind_val_encodings = dict([(loader.sampler.__class__.__name__, self.get_encodings(loader)) for loader in
+                                  self.testbed.ind_val_loaders()])
+        ind_val_losses = dict([(loader.sampler.__class__.__name__, self.testbed.compute_losses(loader)) for loader in
+                               self.testbed.ind_val_loaders()])
+
+        # bootstrap from ind_val to generate a distribution of entropies used to compute pvalues
+        ind_val_entropy_nobias = ind_val_entropies["RandomSampler"]  # assume bootstrapping from unbiased data
+        bootstrap_entropy_distribution = sorted(
+            [np.random.choice(ind_val_entropy_nobias, sample_size).mean().item() for i in range(10000)])
+        entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99)  # alpha of .99 quantile
+
+        ind_p_values = dict([(biased_sampler_name, []) for biased_sampler_name in ind_val_entropies.keys()])
+        ind_sample_losses = dict([(biased_sampler_name, []) for biased_sampler_name in ind_val_entropies.keys()])
+
+        for biased_sampler_name, biased_sampler_encodings in ind_val_encodings.items():
+            for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                        range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                               :-1]:
+                ood_samples = biased_sampler_encodings[start:stop]
+                p_value = np.min(
+                    [ks_2samp(ind_latents[:, i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
+                ind_p_values[biased_sampler_name].append(p_value)
+                ind_sample_losses[biased_sampler_name].append(
+                    ind_val_losses[biased_sampler_name][start:stop].mean().item())
+            print(f"{biased_sampler_name} pvalues: {np.mean(ind_p_values[biased_sampler_name])}")
+
+        # compute ood pvalues
+        ood_pvalues = dict([(loader.sampler.__class__.__name__, []) for loader in self.testbed.ood_loaders()[0]])
+        ood_sample_losses = dict([(loader.sampler.__class__.__name__, []) for loader in self.testbed.ood_loaders()[0]])
+        import matplotlib.pyplot as plt
+        for i, ood_set in enumerate(self.testbed.ood_loaders()):
+            for j, ood_wsampler in enumerate(ood_set):
+                ood_samples = biased_sampler_encodings[start:stop]
+                p_value = np.min(
+                    [ks_2samp(ind_latents[:, i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
+                ind_p_values[biased_sampler_name].append(p_value)
+                ind_sample_losses[biased_sampler_name].append(
+                    ind_val_losses[biased_sampler_name][start:stop].mean().item())
+                print(
+                    f"{ood_wsampler.sampler.__class__.__name__} ood pvalues: {np.mean(ood_pvalues[ood_wsampler.sampler.__class__.__name__])}")
+
+        # for sampler in ood_pvalues.keys():
+        #     ood_pvalues_by_sampler = np.array(ood_pvalues[sampler])
+        #     ind_pvalues_by_sampler = np.array(ind_p_values[sampler])
+        return ind_p_values, ood_pvalues, ind_sample_losses, ood_sample_losses
+
+
 
 class TypicalitySD(BaseSD):
     def __init__(self,rep_model, sample_selector):
