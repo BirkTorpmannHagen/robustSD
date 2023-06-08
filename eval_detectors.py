@@ -4,6 +4,7 @@ from torch.utils.data import ConcatDataset
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from metrics import *
 from yellowbrick.features import PCA
 from vae.vae_experiment import VAEXperiment
 from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
@@ -71,22 +72,21 @@ def collect_data(name):
 
 
 def eval_nico():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
     # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
 
     ind, ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
-    # ind, ind_val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
-    config = yaml.safe_load(open("vae/configs/vae.yaml"))
     # model = ResNetVAE().to("cuda").eval()
     # vae_exp = VAEXperiment(model, config)
     # vae_exp.load_state_dict(
     #     torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_40/checkpoints/epoch=8-step=22482.ckpt")[
     #         "state_dict"])
     num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-    classifier = ResNetClassifier.load_from_checkpoint("lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes, resnet_version=34).to("cuda")
+    classifier = ResNetClassifier.load_from_checkpoint("NICODataset_logs/lightning_logs/version_10/checkpoints/epoch=417-step=4176238.ckpt", num_classes=num_classes, resnet_version=18).to("cuda")
+    rep_model = classifier
     # classifier = SegmentationnicoModel.load_from_checkpoint("segmentation_logs/lightning_logs/version_1/checkpoints/epoch=48-step=2450.ckpt").to("cuda").eval()
 
     aconfig = {"device":"cuda"}
@@ -99,24 +99,25 @@ def eval_nico():
     merged = []
     k=5
     try:
-        for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train"):
+        for context in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")[:3]:
+            print(context)
             test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context=context, seed=0)[1]
-            for sample_size in [10, 20, 50, 100, 200, 500]:
-                for sampler in [ClassOrderSampler(test_dataset, num_classes=num_classes), ClusterSampler(test_dataset, classifier, sample_size=sample_size), RandomSampler(test_dataset)]:
-                    data = ds.compute_pvals_and_loss(ind, test_dataset, ood_sampler=sampler,
+            for sample_size in [100]:
+                for sampler in [ClassOrderSampler(test_dataset, num_classes=num_classes), ClusterSampler(test_dataset, rep_model=rep_model, sample_size=sample_size), RandomSampler(test_dataset)]:
+                    data = ds.compute_pvals_and_loss(DataLoader(ind), DataLoader(test_dataset, sampler=sampler),
                                                      sample_size=sample_size, ind_dataset_name="nico_dim", ood_dataset_name=f"nico_{context}",k=k)
                     data["sampler"]=type(sampler).__name__
                     merged.append(data)
     except KeyboardInterrupt:
         final = pd.concat(merged)
-        final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}.csv")
+        final.to_csv(f"{type(ds.rep_model).__name__}_dim_k{k}_test.csv")
     final = pd.concat(merged)
-    final.to_csv(f"nico_{type(ds.rep_model).__name__}_k{k}.csv")
+    final.to_csv(f"nico_{type(ds.rep_model).__name__}_k{k}_test.csv")
     print(final.head(10))
 
 
 def eval_nico_for_k():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
@@ -153,7 +154,7 @@ def eval_nico_for_k():
     final.to_csv(f"{type(ds.rep_model).__name__}_dim_all_ks_ClusterSampler.csv")
     print(final.head(10))
 def nico_correlation():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
@@ -232,7 +233,7 @@ def eval_polyp():
     print(final.head(10))
 
 def eval_cifar10():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                                 transforms.Resize((32, 32)),
                                 transforms.ToTensor(), ])
     # datasets = dict(zip(contexts, [build_dataset(1, "datasets/NICO++", 0, trans, trans, context=i, seed=0) for i in contexts]))
@@ -297,7 +298,7 @@ def eval_mnist():
     final.to_csv(f"lp_data_mnist_noise.csv")
     print(final.head(10))
 def eval_cifar10_bias_severity():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                                 transforms.Resize((32, 32)),
                                 transforms.ToTensor(), ])
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
@@ -345,7 +346,7 @@ def eval_cifar10_bias_severity():
     print(final.head(10))
 
 def eval_cifar10_fork():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                                 transforms.Resize((32, 32)),
                                 transforms.ToTensor(), ])
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
@@ -390,7 +391,7 @@ def eval_cifar10_fork():
     print(final.head(10))
 
 def eval_cifar100():
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                                 transforms.Resize((32, 32)),
                                 transforms.ToTensor(), ])
     contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
@@ -468,10 +469,23 @@ def eval_njord():
     final.to_csv(f"{type(ind_val).__name__}_{type(ds.rep_model).__name__}_k{k}.csv")
     print(final.head(10))
 
+def compute_stats(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample_losses):
+    for sampler in ind_pvalues.keys():
+        auroc = metrics.auroc(ood_pvalues[sampler], ind_pvalues[sampler])
+        fpr = metrics.fprat95tpr(ood_pvalues[sampler], ind_pvalues[sampler])
+        accuracy = metrics.calibrated_detection_rate(ood_pvalues[sampler], ind_pvalues[sampler])
+        print(f"{sampler} AUROC: {auroc}")
+        print(f"{sampler} FPR: {fpr}")
+        print(f"{sampler} Accuracy: {accuracy}")
+
+
 if __name__ == '__main__':
     # eval_mnist()
     # cifar10_bench = CIFAR10TestBed(10)
+    # eval_nico()
     bench = NicoTestBed(100)
-    tsd = TypicalitySD(bench.rep_model, None)
+    # tsd = TypicalitySD(bench.rep_model, None)
+    tsd = RabanserSD(bench.rep_model, None)
     tsd.register_testbed(bench)
-    tsd.compute_pvals_and_loss(100)
+    compute_stats(*tsd.compute_pvals_and_loss(100))
+    # compute_stats()

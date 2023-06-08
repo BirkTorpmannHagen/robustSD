@@ -458,4 +458,4 @@ def plot_bias_severity_impact(filename):
         # plt.show()
 
 if __name__ == '__main__':
-    pass
+    get_nico_classification_metrics("nico_ResNetClassifier_k5_test.csv")

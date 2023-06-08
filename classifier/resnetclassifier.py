@@ -51,6 +51,7 @@ class ResNetClassifier(pl.LightningModule):
 
 
 
+
     def forward(self, X):
         return self.resnet_model(X)
 
@@ -61,7 +62,7 @@ class ResNetClassifier(pl.LightningModule):
             torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).shape
         )
         return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).flatten(1).shape[-1]
-    def encode(self, X, depth=-2):
+    def get_encoding(self, X, depth=-2):
         return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(X).flatten(1)
 
     def compute_loss(self, x, y):

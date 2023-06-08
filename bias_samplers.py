@@ -23,6 +23,9 @@ class ClassOrderSampler(Sampler):
     def __iter__(self):
         return iter(sum(self.indices, []))
 
+    def __len__(self):
+        return len(self.data_source)
+
 
 class SequentialSampler(Sampler):
     """
@@ -35,6 +38,8 @@ class SequentialSampler(Sampler):
     def __iter__(self):
         return iter(range(len(self.data_source))) #essentially: just prevents accidental shuffling
 
+    def __len__(self):
+        return len(self.data_source)
 
 class ClusterSampler(Sampler):
     """
@@ -46,10 +51,16 @@ class ClusterSampler(Sampler):
         self.data_source = data_source
         self.rep_model = rep_model
         self.reps = np.zeros((len(data_source), rep_model.latent_dim))
+        print(rep_model.__class__.__name__)
+        print(self.reps.shape)
+        print(sample_size)
+
         with torch.no_grad():
             for i, list in tqdm(enumerate(DataLoader(self.data_source))):
                 x=list[0].to("cuda")
-                self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
+                self.reps[i] = rep_model.get_encoding(x).cpu().numpy()
+        np.save("reps_with_no_tb.npy", self.reps)
+
         self.num_clusters = max(int(len(data_source)//(sample_size+0.1)),4)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         pca =PCA()
@@ -58,6 +69,10 @@ class ClusterSampler(Sampler):
 
     def __iter__(self):
         return iter(np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(self.num_clusters)], axis=0))
+
+    def __len__(self):
+        return len(self.data_source)
+
 
 
 class ClusterSamplerWithSeverity(Sampler):
@@ -97,3 +112,5 @@ class ClusterSamplerWithSeverity(Sampler):
         full_bias[shuffle_indeces] = to_shuffle
         return iter(full_bias)
 
+    def __len__(self):
+        return len(self.data_source)

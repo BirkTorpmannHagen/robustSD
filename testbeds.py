@@ -1,6 +1,6 @@
 import os
 from torch.utils.data import ConcatDataset
-
+import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -26,9 +26,10 @@ from domain_datasets import *
 from torch.utils.data import RandomSampler
 from classifier.resnetclassifier import ResNetClassifier
 from ooddetectors import *
+from torch.nn import functional as F
 
 def create_testbed(name, sample_size):
-    trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+    trans = transforms.Compose([
                         transforms.Resize((512,512)),
                         transforms.ToTensor(), ])
     if name=="nico":
@@ -77,7 +78,7 @@ def create_testbed(name, sample_size):
         oods = [DataLoader(ood, sampler=i) for i in [RandomSampler(ood), ClusterSampler(ood, rep_model, sample_size),
                                      SequentialSampler(ood)]]
     elif name=="cifar":
-        trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+        trans = transforms.Compose([
                                     transforms.Resize((32, 32)),
                                     transforms.ToTensor(), ])
         ind = wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=trans))
@@ -93,7 +94,7 @@ def create_testbed(name, sample_size):
                  DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, classifier, sample_size=sample_size)),
                  DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
     elif name=="mnist":
-        trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+        trans = transforms.Compose([
                                     transforms.Resize((32, 32)),
                                     transforms.ToTensor(), ])
         ind = wrap_dataset(MNIST("../../Datasets/mnist", train=True, transform=trans))
@@ -114,7 +115,7 @@ class BaseTestBed:
         self.sample_size = sample_size
 
 
-    def compute_losses(self):
+    def compute_losses(self, loaders):
         pass
 
     def ind_loader(self):
@@ -129,44 +130,57 @@ class BaseTestBed:
 class NicoTestBed(BaseTestBed):
 
     def __init__(self, sample_size):
-        self.trans = trans = transforms.Compose([transforms.RandomHorizontalFlip(),
-                                    transforms.Resize((512, 512)),
-                                    transforms.ToTensor(), ])
+        super().__init__(sample_size)
+        self.trans = transforms.Compose([
+                                                 transforms.Resize((512, 512)),
+                                                 transforms.ToTensor(), ])
         self.num_classes = num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
 
-        super().__init__(sample_size)
-        self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+        self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="dim", seed=0)
         self.num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
-        # classifier = ResNetClassifier.load_from_checkpoint(
-        #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
-        #     resnet_version=34).to("cuda").eval()
-        # self.rep_model = self.classifier
-        self.rep_model = ResNetVAE().to("cuda").eval()
-        self.vae_experiment = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
-        self.vae_experiment.load_state_dict(torch.load("vae_logs/nico_dim/version_7/checkpoints/epoch=8-step=22482.ckpt")["state_dict"])
+        try:
+            # self.classifier = ResNetClassifier.load_from_checkpoint(
+            #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
+            #     resnet_version=34).to("cuda").eval()
+            self.classifier = ResNetClassifier.load_from_checkpoint(
+                "NICODataset_logs/lightning_logs/version_10/checkpoints/epoch=417-step=4176238.ckpt", num_classes=num_classes,
+                resnet_version=18).to("cuda").eval()
+
+        except FileNotFoundError:
+            warnings.warn("No classifier found, using f:x->0")
+            self.classifier = lambda x: torch.zeros(x.shape[0], num_classes).to("cuda")
+        self.rep_model = self.classifier
+        # self.rep_model = ResNetVAE().to("cuda").eval()
+
+        # self.vae_experiment = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
+        # self.vae_experiment.load_state_dict(torch.load("vae_logs/nico_dim/version_7/checkpoints/last.ckpt")["state_dict"])
 
 
-    def compute_losses(self):
-        pass
+    def compute_losses(self, loader):
+        losses = []
+        for x, y, _ in loader:
+            x = x.to("cuda")
+            y = y.to("cuda")
+            yhat = self.classifier(x)
+            losses.append(F.cross_entropy(yhat, y).item())
+        return losses
 
     def ind_loader(self):
         return DataLoader(self.ind, shuffle=True)
 
 
     def ood_loaders(self):
-        self.ood_sets = [
-            build_nico_dataset(1, "../../Datasets/NICO++", 0, self.trans, self.trans, context=i, seed=0)[0] for
-            i in os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train") if i != "dim"][:1] #debug
-        self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes)),
-                      DataLoader(test_dataset,
-                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size)),
-                      DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in self.ood_sets]
+        test_dataset = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="rock", seed=0)[1]
+        self.oods = [DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes)),
+                     DataLoader(test_dataset,
+                                sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size)),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset))]
         return self.oods
 
     def ind_val_loaders(self):
         loaders =  [DataLoader(self.ind_val, sampler=sampler) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
-                                                                          ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
-                                                                            RandomSampler(self.ind_val)]]
+                                                                              ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                                                                              RandomSampler(self.ind_val)]]
         return loaders
 
     
@@ -174,7 +188,7 @@ class NicoTestBed(BaseTestBed):
 class CIFAR10TestBed(BaseTestBed):
     def __init__(self, sample_size):
         super().__init__(sample_size)
-        self.trans = transforms.Compose([transforms.RandomHorizontalFlip(),
+        self.trans = transforms.Compose([
                                     transforms.Resize((32, 32)),
                                     transforms.ToTensor(), ])
 
@@ -205,7 +219,7 @@ class CIFAR10TestBed(BaseTestBed):
         #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
         #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
         self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
-                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
+                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size)),
                  DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
         return self.oods
         # return 0 #DEBUG

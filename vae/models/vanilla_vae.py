@@ -108,6 +108,8 @@ class VanillaVAE(BaseVAE):
 
         return [mu, log_var]
 
+    def get_encoding(self, x):
+        return self.encode(x)[0]
     def decode(self, z: Tensor) -> Tensor:
         """
         Maps the given latent codes
@@ -334,6 +336,9 @@ class ResNetVAE(BaseVAE):
         non_zero_indices = prob_distribution > 0
         entropy = -torch.sum(prob_distribution[non_zero_indices] * torch.log(prob_distribution[non_zero_indices]))
         return entropy
+
+    def get_encoding(self, x):
+        return self.encode(x)[0]
 
     def encode(self, x):
         x = self.resnet(x)  # ResNet
