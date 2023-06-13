@@ -53,10 +53,6 @@ class ClusterSampler(Sampler):
         self.rep_model = rep_model
         self.rep_model.eval()
         self.reps = np.zeros((len(data_source), rep_model.latent_dim))
-        print(rep_model.__class__.__name__)
-        print(data_source.context)
-        print(self.reps.shape)
-        print(sample_size)
 
         with torch.no_grad():
             for i, list in tqdm(enumerate(DataLoader(self.data_source))):

@@ -469,18 +469,20 @@ def eval_njord():
     final.to_csv(f"{type(ind_val).__name__}_{type(ds.rep_model).__name__}_k{k}.csv")
     print(final.head(10))
 
-def convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold):
+def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample_losses):
     data = []
-    for sampler in ind_pvalues.keys():
-        data.append({"fold": "ind", "sampler": sampler, "pvalue": ind_pvalues[sampler], "loss": ind_sample_losses[sampler]})
-        for fold in ood_pvalues_fold.keys():
-            data.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues_fold[fold][sampler], "loss": ood_sample_losses_fold[fold][sampler]})
+    for fold, by_sampler in ind_pvalues.items():
+        for sampler, data in by_sampler.items():
+            data.append({"fold": "ind", "sampler": sampler, "pvalue": ind_pvalues[fold][sampler], "loss": ind_sample_losses[fold][sampler]})
+    for fold, by_sampler in ood_pvalues.items():
+        for sampler, data in by_sampler.items():
+            data.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues[fold][sampler], "loss": ood_sample_losses[fold][sampler]})
     df = pd.DataFrame(data)
     df = df.explode(["pvalue", "loss"])
     return df
-def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold):
+def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold, fname):
     df = convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold)
-    df.to_csv("ResNetClassifier_NICO.csv")
+    df.to_csv(fname)
     for sampler in ind_pvalues.keys():
         for fold in ood_pvalues_fold.keys():
             ood_pvalues, ood_losses = ood_pvalues_fold[fold][sampler]
@@ -501,5 +503,7 @@ if __name__ == '__main__':
     # tsd = TypicalitySD(bench.rep_model, None)
     tsd = RabanserSD(bench.rep_model, None)
     tsd.register_testbed(bench)
-    compute_stats(*tsd.compute_pvals_and_loss(100))
+    compute_stats(*tsd.compute_pvals_and_loss(100, test="mmd"), "NICO_ResNet_mmd.csv")
+    # compute_stats(*tsd.compute_pvals_and_loss(100, test="ks"))
+    # compute_stats(*tsd.compute_pvals_and_loss(100, test="knn"))
     # compute_stats()

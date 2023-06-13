@@ -35,27 +35,70 @@ class RabanserSD(BaseSD):
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy() #mu from vae or features from classifier
         return encodings
 
-    def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size):
-        encodings = dict([(loader.sampler.__class__.__name__, self.get_encodings(loader)) for loader in dataloaders])
-        losses = dict([(loader.sampler.__class__.__name__, self.testbed.compute_losses(loader)) for loader in dataloaders])
+    def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size, test):
+        encodings = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [self.get_encodings(loader)
+                          for sampler_name, loader in loader_w_sampler.items()]
+                         )) for
+                     loader_w_sampler in dataloaders.values()])) #dict of dicts of tensors; sidenote initializing nested dicts sucks
+        losses =  dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [self.testbed.compute_losses(loader)
+                          for sampler_name, loader in loader_w_sampler.items()]
+                         )) for
+                     loader_w_sampler in dataloaders.values()]))
 
-        p_values = dict([(biased_sampler_name, []) for biased_sampler_name in encodings.keys()])
-        sample_losses = dict([(biased_sampler_name, []) for biased_sampler_name in encodings.keys()])
+        p_values = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [[]
+                          for _ in range(len(loader_w_sampler))]
+                         )) for
+                     loader_w_sampler in dataloaders.values()]))
 
-        for biased_sampler_name, biased_sampler_encodings in encodings.items():
-            for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                        range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
-                               :-1]:
-                ood_samples = biased_sampler_encodings[start:stop]
-                p_value = np.min([ks_2samp(ind_encodings[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
-                p_values[biased_sampler_name].append(p_value)
-                sample_losses[biased_sampler_name].append(np.mean(
-                    losses[biased_sampler_name][start:stop]))
+        sample_losses = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [[]
+                          for _ in range(len(loader_w_sampler))]
+                         )) for
+                     loader_w_sampler in dataloaders.values()]))
+
+
+        for fold_name, fold_encodings in encodings.items():
+            for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
+                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                                   :-1]:
+                    ood_samples = biased_sampler_encodings[start:stop]
+
+                    if test=="ks":
+                        p_value = np.min([ks_2samp(ind_encodings[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
+                    elif test=="mmd":
+                        mmd = tts.MMDStatistic(len(ind_encodings), len(ood_samples))
+                        print("computing...")
+                        value, matrix = mmd(torch.Tensor(ind_encodings), torch.Tensor(ood_samples),alphas=[0.5], ret_matrix=True)
+                        p_value = mmd.pval(matrix, n_permutations=1000)
+                        print(p_value)
+                    elif test=="knn":
+                        knn = tts.KNNStatistic(len(ind_encodings), len(ood_samples), k=sample_size)
+                        out = knn(torch.Tensor(ind_encodings), torch.Tensor(ood_samples), ret_matrix=True)
+                        p_value = knn.pval(out, n_permutations=1000)
+                        print(p_value)
+
+
+
+                    p_values[fold_name][biased_sampler_name].append(p_value)
+                    sample_losses[fold_name][biased_sampler_name].append(np.mean(
+                        losses[fold_name][biased_sampler_name][start:stop]))
 
         return p_values, sample_losses
 
 
-    def compute_pvals_and_loss(self, sample_size):
+    def compute_pvals_and_loss(self, sample_size, test):
         """
 
         :param sample_size: sample size for the tests
@@ -71,19 +114,17 @@ class RabanserSD(BaseSD):
             ind_latents = self.get_encodings(self.testbed.ind_loader())
             torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
 
-        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size)
-        ood_pvalues_dict = {}
-        ood_losses_dict = {}
-        for fold, ood_loader in self.testbed.ood_loaders().items():
-            ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, [ood_loader], sample_size)
-            ood_pvalues_dict[fold] = (ood_pvalues, ood_losses)
+        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size, test)
 
-        return ind_pvalues, ood_pvalues_dict, ind_losses, ood_losses_dict
+        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size, test)
+        print(ood_pvalues)
+        return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 
 class TypicalitySD(BaseSD):
     def __init__(self,rep_model, sample_selector):
         super().__init__(rep_model, sample_selector)
+
 
     def compute_entropy(self, data_loader):
         log_likelihoods = []
