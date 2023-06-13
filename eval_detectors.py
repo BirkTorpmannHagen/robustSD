@@ -469,14 +469,28 @@ def eval_njord():
     final.to_csv(f"{type(ind_val).__name__}_{type(ds.rep_model).__name__}_k{k}.csv")
     print(final.head(10))
 
-def compute_stats(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample_losses):
+def convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold):
+    data = []
     for sampler in ind_pvalues.keys():
-        auroc = metrics.auroc(ood_pvalues[sampler], ind_pvalues[sampler])
-        fpr = metrics.fprat95tpr(ood_pvalues[sampler], ind_pvalues[sampler])
-        accuracy = metrics.calibrated_detection_rate(ood_pvalues[sampler], ind_pvalues[sampler])
-        print(f"{sampler} AUROC: {auroc}")
-        print(f"{sampler} FPR: {fpr}")
-        print(f"{sampler} Accuracy: {accuracy}")
+        data.append({"fold": "ind", "sampler": sampler, "pvalue": ind_pvalues[sampler], "loss": ind_sample_losses[sampler]})
+        for fold in ood_pvalues_fold.keys():
+            data.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues_fold[fold][sampler], "loss": ood_sample_losses_fold[fold][sampler]})
+    df = pd.DataFrame(data)
+    df = df.explode(["pvalue", "loss"])
+    return df
+def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold):
+    df = convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold)
+    df.to_csv("ResNetClassifier_NICO.csv")
+    for sampler in ind_pvalues.keys():
+        for fold in ood_pvalues_fold.keys():
+            ood_pvalues, ood_losses = ood_pvalues_fold[fold][sampler]
+            auroc = metrics.auroc(ood_pvalues[sampler], ind_pvalues[sampler])
+            fpr = metrics.fprat95tpr(ood_pvalues[sampler], ind_pvalues[sampler])
+            accuracy = metrics.calibrated_detection_rate(ood_pvalues[sampler], ind_pvalues[sampler])
+            print(f"{fold} : {sampler} AUROC: {auroc}")
+            print(f"{fold} : {sampler} FPR: {fpr}")
+            print(f"{fold} : {sampler} Accuracy: {accuracy}")
+            print()
 
 
 if __name__ == '__main__':

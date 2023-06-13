@@ -28,8 +28,8 @@ class RabanserSD(BaseSD):
         super().__init__(rep_model, sample_selector)
 
     def get_encodings(self, dataloader):
-        encodings = np.zeros((len(self.testbed.ind_loader()), self.rep_model.latent_dim))
-        for i, (x, y, _) in enumerate(self.testbed.ind_loader()):
+        encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
+        for i, (x, y, _) in enumerate(dataloader):
             with torch.no_grad():
                 x = x.to("cuda")
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy() #mu from vae or features from classifier
@@ -48,7 +48,6 @@ class RabanserSD(BaseSD):
                                :-1]:
                 ood_samples = biased_sampler_encodings[start:stop]
                 p_value = np.min([ks_2samp(ind_encodings[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
-                print(p_value)
                 p_values[biased_sampler_name].append(p_value)
                 sample_losses[biased_sampler_name].append(np.mean(
                     losses[biased_sampler_name][start:stop]))
@@ -66,18 +65,20 @@ class RabanserSD(BaseSD):
         :return ood_sample_losses: losses for each sampler on ood fold, in correct order
         """
         # sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
-
         try:
             ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
         except FileNotFoundError:
             ind_latents = self.get_encodings(self.testbed.ind_loader())
             torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        print(ind_latents.shape)
 
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size)
-        input()
-        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size)
-        return ind_pvalues, ood_pvalues, ind_losses, ood_losses
+        ood_pvalues_dict = {}
+        ood_losses_dict = {}
+        for fold, ood_loader in self.testbed.ood_loaders().items():
+            ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, [ood_loader], sample_size)
+            ood_pvalues_dict[fold] = (ood_pvalues, ood_losses)
+
+        return ind_pvalues, ood_pvalues_dict, ind_losses, ood_losses_dict
 
 
 class TypicalitySD(BaseSD):
@@ -171,8 +172,8 @@ class robustSD:
         fname_encodings = f"robustSD_{ind_dataset_name}_enodings_{type(self.rep_model).__name__}.pkl"
         fname_losses = f"robustSD_{ind_dataset_name}_losses_{type(self.rep_model).__name__}.pkl"
         try:
-            ind_latents = pkl.load(open(fname_encodings, "rb"))
-            losses = pkl.load(open(fname_losses, "rb"))
+            ind_latents = torch.load(fname_encodings)
+            losses = torch.load(fname_losses)
         except FileNotFoundError:
             ind_latents = np.zeros((len(ind_dataset), self.rep_model.latent_dim))
             losses = np.zeros(len(ind_dataset))
@@ -180,8 +181,8 @@ class robustSD:
                 with torch.no_grad():
                     ind_latents[i] = self.rep_model.get_encoding(x.to(self.config["device"])).cpu().numpy()
                     losses[i] = torch.nn.MSELoss()(self.classifier(x.to(self.config["device"])),y.to(self.config["device"])).item()
-            pkl.dump(ind_latents, open(fname_encodings, "wb"))
-            pkl.dump(losses, open(fname_losses, "wb"))
+            torch.save(ind_latents, fname_encodings)
+            torch.save(losses, fname_losses)
 
         ood_latents = np.zeros((len(ood_dataset), self.rep_model.latent_dim))
         ood_losses = np.zeros(len(ood_dataset))

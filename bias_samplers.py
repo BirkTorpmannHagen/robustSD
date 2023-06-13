@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import Sampler, DataLoader
 from sklearn.cluster import KMeans
@@ -50,8 +51,10 @@ class ClusterSampler(Sampler):
         super(ClusterSampler, self).__init__(data_source)
         self.data_source = data_source
         self.rep_model = rep_model
+        self.rep_model.eval()
         self.reps = np.zeros((len(data_source), rep_model.latent_dim))
         print(rep_model.__class__.__name__)
+        print(data_source.context)
         print(self.reps.shape)
         print(sample_size)
 
@@ -59,8 +62,7 @@ class ClusterSampler(Sampler):
             for i, list in tqdm(enumerate(DataLoader(self.data_source))):
                 x=list[0].to("cuda")
                 self.reps[i] = rep_model.get_encoding(x).cpu().numpy()
-        np.save("reps_with_no_tb.npy", self.reps)
-
+        np.save("reps.npy", self.reps)
         self.num_clusters = max(int(len(data_source)//(sample_size+0.1)),4)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         pca =PCA()

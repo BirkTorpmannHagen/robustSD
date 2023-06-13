@@ -71,6 +71,7 @@ class NICODataset(data.Dataset):
         with open(label_map_json, "r") as f:
             self.label_map = json.load(f)
         context_path = os.path.join(*image_path_list[0].split("/")[:-3])
+        self.context = image_path_list[0].split("/")[-3]
         contexts = os.listdir(context_path)
         self.context_map = dict(zip(contexts, range(len(contexts))))
     def __len__(self):
