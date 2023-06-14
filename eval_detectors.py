@@ -470,14 +470,17 @@ def eval_njord():
     print(final.head(10))
 
 def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample_losses):
-    data = []
+    dataset = []
     for fold, by_sampler in ind_pvalues.items():
         for sampler, data in by_sampler.items():
-            data.append({"fold": "ind", "sampler": sampler, "pvalue": ind_pvalues[fold][sampler], "loss": ind_sample_losses[fold][sampler]})
+            dataset.append({"fold": fold, "sampler": sampler, "pvalue": ind_pvalues[fold][sampler], "loss": ind_sample_losses[fold][sampler]})
+
     for fold, by_sampler in ood_pvalues.items():
         for sampler, data in by_sampler.items():
-            data.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues[fold][sampler], "loss": ood_sample_losses[fold][sampler]})
-    df = pd.DataFrame(data)
+            dataset.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues[fold][sampler], "loss": ood_sample_losses[fold][sampler]})
+    print(dataset)
+    pkl.dump(dataset, open("data_nico_debug.pkl", "wb"))
+    df = pd.DataFrame(dataset)
     df = df.explode(["pvalue", "loss"])
     return df
 def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold, fname):
@@ -503,7 +506,10 @@ if __name__ == '__main__':
     # tsd = TypicalitySD(bench.rep_model, None)
     tsd = RabanserSD(bench.rep_model, None)
     tsd.register_testbed(bench)
-    compute_stats(*tsd.compute_pvals_and_loss(100, test="mmd"), "NICO_ResNet_mmd.csv")
+    for sample_size in [10, 20, 50, 100, 200, 500]:
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"NICO_ResNet_ks_{sample_size}.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"NICO_ResNet_mmd_{sample_size}.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"NICO_ResNet_knn_{sample_size}.csv")
     # compute_stats(*tsd.compute_pvals_and_loss(100, test="ks"))
     # compute_stats(*tsd.compute_pvals_and_loss(100, test="knn"))
     # compute_stats()

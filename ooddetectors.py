@@ -4,7 +4,7 @@ import pandas as pd
 import torch.nn
 
 from scipy.stats import ks_2samp
-
+from sklearn.decomposition import PCA as sklearnPCA
 import metrics
 from bias_samplers import *
 
@@ -43,6 +43,114 @@ class RabanserSD(BaseSD):
                           for sampler_name, loader in loader_w_sampler.items()]
                          )) for
                      loader_w_sampler in dataloaders.values()])) #dict of dicts of tensors; sidenote initializing nested dicts sucks
+
+
+
+
+        losses =  dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [self.testbed.compute_losses(loader)
+                          for sampler_name, loader in loader_w_sampler.items()]
+                         )) for
+                     loader_w_sampler in dataloaders.values()]))
+
+        p_values = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [[]
+                          for _ in range(len(loader_w_sampler))]
+                         )) for
+                     loader_w_sampler in dataloaders.values()]))
+
+        sample_losses = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [[]
+                          for _ in range(len(loader_w_sampler))]
+                         )) for
+                     loader_w_sampler in dataloaders.values()]))
+
+        mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
+        knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
+
+        for fold_name, fold_encodings in encodings.items():
+            for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
+                print(biased_sampler_name)
+                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                                   :-1]:
+                    ood_samples = biased_sampler_encodings[start:stop]
+
+                    if test=="ks":
+                        p_value = np.min([ks_2samp(ind_encodings[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
+                    else:
+                        #PCA for computational tractibility; otherwise, the mmd test takes several minutes per sample
+                        pca = sklearnPCA(n_components=16)
+                        pca.fit(np.vstack((ind_encodings, ood_samples)))
+                        ind_encodings_t = pca.transform(ind_encodings)
+                        ood_samples = pca.transform(ood_samples)
+                        if test=="mmd":
+                            value, matrix = mmd(torch.Tensor(ind_encodings_t).to("cuda"), torch.Tensor(ood_samples).to("cuda"),alphas=[0.5], ret_matrix=True)
+                            p_value = mmd.pval(matrix, n_permutations=100)
+                            print(p_value)
+                        elif test=="knn":
+                            value, matrix = knn(torch.Tensor(ind_encodings_t).cuda(), torch.Tensor(ood_samples).cuda(), ret_matrix=True)
+                            p_value = knn.pval(matrix, n_permutations=100)
+                            print(p_value)
+
+
+
+                    p_values[fold_name][biased_sampler_name].append(p_value)
+                    sample_losses[fold_name][biased_sampler_name].append(np.mean(
+                        losses[fold_name][biased_sampler_name][start:stop]))
+        print(p_values)
+        return p_values, sample_losses
+
+
+    def compute_pvals_and_loss(self, sample_size, test):
+        """
+
+        :param sample_size: sample size for the tests
+        :return: ind_p_values: p-values for ind fold for each sampler
+        :return ood_p_values: p-values for ood fold for each sampler
+        :return ind_sample_losses: losses for each sampler on ind fold, in correct order
+        :return ood_sample_losses: losses for each sampler on ood fold, in correct order
+        """
+        # sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
+        try:
+            ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        except FileNotFoundError:
+            ind_latents = self.get_encodings(self.testbed.ind_loader())
+            torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+
+        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size, test)
+        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size, test)
+        return ind_pvalues, ood_pvalues, ind_losses, ood_losses
+
+
+class TypicalitySD(BaseSD):
+    def __init__(self,rep_model, sample_selector):
+        super().__init__(rep_model, sample_selector)
+
+
+    def compute_entropy(self, data_loader):
+        log_likelihoods = []
+        for i, (x, y, _) in enumerate(data_loader):
+            x = x.to("cuda")
+            log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
+        entropies = -(torch.tensor(log_likelihoods))
+        return entropies
+
+
+    def compute_pvals_and_loss_for_loader(self, ind_entropy, dataloaders, sample_size, test):
+        entropies = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                         [self.get_entropies(loader)
+                          for sampler_name, loader in loader_w_sampler.items()]
+                         )) for
+                     loader_w_sampler in dataloaders.values()])) #dict of dicts of tensors; sidenote initializing nested dicts sucks
         losses =  dict(
             zip(dataloaders.keys(),
                 [dict(zip(loader_w_sampler.keys(),
@@ -68,75 +176,6 @@ class RabanserSD(BaseSD):
                      loader_w_sampler in dataloaders.values()]))
 
 
-        for fold_name, fold_encodings in encodings.items():
-            for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
-                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
-                                   :-1]:
-                    ood_samples = biased_sampler_encodings[start:stop]
-
-                    if test=="ks":
-                        p_value = np.min([ks_2samp(ind_encodings[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
-                    elif test=="mmd":
-                        mmd = tts.MMDStatistic(len(ind_encodings), len(ood_samples))
-                        print("computing...")
-                        value, matrix = mmd(torch.Tensor(ind_encodings), torch.Tensor(ood_samples),alphas=[0.5], ret_matrix=True)
-                        p_value = mmd.pval(matrix, n_permutations=1000)
-                        print(p_value)
-                    elif test=="knn":
-                        knn = tts.KNNStatistic(len(ind_encodings), len(ood_samples), k=sample_size)
-                        out = knn(torch.Tensor(ind_encodings), torch.Tensor(ood_samples), ret_matrix=True)
-                        p_value = knn.pval(out, n_permutations=1000)
-                        print(p_value)
-
-
-
-                    p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(np.mean(
-                        losses[fold_name][biased_sampler_name][start:stop]))
-
-        return p_values, sample_losses
-
-
-    def compute_pvals_and_loss(self, sample_size, test):
-        """
-
-        :param sample_size: sample size for the tests
-        :return: ind_p_values: p-values for ind fold for each sampler
-        :return ood_p_values: p-values for ood fold for each sampler
-        :return ind_sample_losses: losses for each sampler on ind fold, in correct order
-        :return ood_sample_losses: losses for each sampler on ood fold, in correct order
-        """
-        # sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
-        try:
-            ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        except FileNotFoundError:
-            ind_latents = self.get_encodings(self.testbed.ind_loader())
-            torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-
-        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size, test)
-
-        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size, test)
-        print(ood_pvalues)
-        return ind_pvalues, ood_pvalues, ind_losses, ood_losses
-
-
-class TypicalitySD(BaseSD):
-    def __init__(self,rep_model, sample_selector):
-        super().__init__(rep_model, sample_selector)
-
-
-    def compute_entropy(self, data_loader):
-        log_likelihoods = []
-        for i, (x, y, _) in enumerate(data_loader):
-            x = x.to("cuda")
-            log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
-        entropies = -(torch.tensor(log_likelihoods))
-        return entropies
-
-    # def compute_pvals_and_loss_for_loader(self, ind_entropy, dataloaders, sample_size):
-
-
     def compute_pvals_and_loss(self, sample_size):
         """
 
@@ -157,12 +196,11 @@ class TypicalitySD(BaseSD):
                 x = x.to("cuda")
                 loglikelihoods.append(self.rep_model.estimate_log_likelihood(x))
             torch.save(loglikelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        resub_entropy = -(torch.tensor(loglikelihoods)).mean().item()
+        # resub_entropy = -(torch.tensor(loglikelihoods)).mean().item()
 
         # compute ind_val pvalues for each sampler
         ind_val_entropies = dict([(loader.sampler.__class__.__name__, self.compute_entropy(loader)) for loader in self.testbed.ind_val_loaders()])
         ind_val_losses = dict([(loader.sampler.__class__.__name__, self.testbed.compute_losses(loader)) for loader in self.testbed.ind_val_loaders()])
-        print(ind_val_entropies)
         #bootstrap from ind_val to generate a distribution of entropies used to compute pvalues
         ind_val_entropy_nobias = ind_val_entropies["RandomSampler"] #assume bootstrapping from unbiased data
         bootstrap_entropy_distribution = sorted([np.random.choice(ind_val_entropy_nobias, sample_size).mean().item() for i in range(10000)])
