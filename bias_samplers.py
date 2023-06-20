@@ -61,8 +61,8 @@ class ClusterSampler(Sampler):
         np.save("reps.npy", self.reps)
         self.num_clusters = max(int(len(data_source)//(sample_size+0.1)),4)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
-        pca =PCA()
-        pca.fit_transform_show(X=self.reps, y=self.kmeans)
+        # pca =PCA()
+        # pca.fit_transform_show(X=self.reps, y=self.kmeans)
 
 
     def __iter__(self):

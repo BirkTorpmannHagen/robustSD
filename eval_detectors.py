@@ -470,25 +470,29 @@ def eval_njord():
     print(final.head(10))
 
 def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample_losses):
-    data = []
+    dataframe = []
+    print(f"ind: {ind_pvalues}")
+    print(f"ood: {ood_pvalues}")
     for fold, by_sampler in ind_pvalues.items():
         for sampler, data in by_sampler.items():
-            data.append({"fold": "ind", "sampler": sampler, "pvalue": ind_pvalues[fold][sampler], "loss": ind_sample_losses[fold][sampler]})
+            dataframe.append({"fold": fold, "sampler": sampler, "pvalue": ind_pvalues[fold][sampler], "loss": ind_sample_losses[fold][sampler]})
     for fold, by_sampler in ood_pvalues.items():
         for sampler, data in by_sampler.items():
-            data.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues[fold][sampler], "loss": ood_sample_losses[fold][sampler]})
-    df = pd.DataFrame(data)
+            dataframe.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues[fold][sampler], "loss": ood_sample_losses[fold][sampler]})
+    df = pd.DataFrame(dataframe)
+
     df = df.explode(["pvalue", "loss"])
     return df
 def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold, fname):
     df = convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold)
     df.to_csv(fname)
-    for sampler in ind_pvalues.keys():
-        for fold in ood_pvalues_fold.keys():
-            ood_pvalues, ood_losses = ood_pvalues_fold[fold][sampler]
-            auroc = metrics.auroc(ood_pvalues[sampler], ind_pvalues[sampler])
-            fpr = metrics.fprat95tpr(ood_pvalues[sampler], ind_pvalues[sampler])
-            accuracy = metrics.calibrated_detection_rate(ood_pvalues[sampler], ind_pvalues[sampler])
+    ind_pvalues_ready = list(ind_pvalues.values())[0]
+    for fold in ood_pvalues_fold.keys():
+        for sampler in ood_pvalues_fold[fold].keys():
+            ood_pvalues = ood_pvalues_fold[fold][sampler]
+            auroc = metrics.auroc(ood_pvalues, ind_pvalues_ready[sampler])
+            fpr = metrics.fprat95tpr(ood_pvalues, ind_pvalues_ready[sampler])
+            accuracy = metrics.calibrated_detection_rate(ood_pvalues, ind_pvalues_ready[sampler])
             print(f"{fold} : {sampler} AUROC: {auroc}")
             print(f"{fold} : {sampler} FPR: {fpr}")
             print(f"{fold} : {sampler} Accuracy: {accuracy}")
@@ -500,10 +504,11 @@ if __name__ == '__main__':
     # cifar10_bench = CIFAR10TestBed(10)
     # eval_nico()
     bench = NicoTestBed(100)
-    # tsd = TypicalitySD(bench.rep_model, None)
-    tsd = RabanserSD(bench.rep_model, None)
+    tsd = TypicalitySD(bench.rep_model, None)
+    # tsd = RabanserSD(bench.rep_model, None)
     tsd.register_testbed(bench)
-    compute_stats(*tsd.compute_pvals_and_loss(100, test="mmd"), "NICO_ResNet_mmd.csv")
+    for sample_size in [10, 20, 50, 100, 200, 500]:
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size), f"NICO_Typicality_{sample_size}.csv")
     # compute_stats(*tsd.compute_pvals_and_loss(100, test="ks"))
     # compute_stats(*tsd.compute_pvals_and_loss(100, test="knn"))
     # compute_stats()
