@@ -6,8 +6,8 @@ model_params:
 
 data_params:
   data_path: "folds/ind_fold.yaml"
-  train_batch_size: 4
-  val_batch_size:  4
+  train_batch_size: 16
+  val_batch_size:  16
   patch_size: 512
   num_workers: 4
 
@@ -20,7 +20,7 @@ exp_params:
   manual_seed: 1265
 
 trainer_params:
-  devices: [0]
+  devices: [1]
   max_epochs: 200
 
 logging_params:
