@@ -14,6 +14,7 @@ from njord.utils.general import check_dataset
 from njord.utils.dataloaders import create_dataloader
 
 
+# def get_cifar10_datase
 
 class KvasirSegmentationDataset(data.Dataset):
     """

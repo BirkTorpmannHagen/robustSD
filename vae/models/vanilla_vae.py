@@ -367,7 +367,7 @@ class ResNetVAE(BaseVAE):
         x = self.convTrans6(x)
         x = self.convTrans7(x)
         x = self.convTrans8(x)
-        x = F.interpolate(x, size=(512, 512), mode='bilinear')
+        x = F.interpolate(x, size=(32, 32), mode='bilinear')
         return x
 
     # def forward(self, x):
