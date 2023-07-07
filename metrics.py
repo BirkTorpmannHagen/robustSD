@@ -115,3 +115,28 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
     # test_loss_likelihoods = [pdf[0][np.clip(np.digitize(test_loss, pdf[1]), 0, 3)] for test_loss, pdf in zip(test_losses, test_loss_pdfs)]
     # print(test_loss_likelihoods)
     # return np.mean(test_loss_likelihoods)
+
+
+def risk(fname, fnr=0):
+    data = pd.read_csv(fname)
+    random_sampler_ind_data = data[(data["sampler"]=="RandomSampler")&(data["fold"]=="ind")]
+    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
+    threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
+
+    ind_data = data[data["fold"]=="ind"]
+    ood_data = data[(data["fold"]!="ind") & data["fold"]!="dim"]
+
+
+    total_risk = 0
+    for sampler in data["sampler"].unique():
+        subset = data[data["sampler"]==sampler]
+        subset_ind = subset[subset["fold"]=="ind"]
+        subset_ood = subset[(subset["fold"] != "ind") & (subset["fold"] != "dim")]
+        # risk is avg ood loss if false positive, relevant ood loss if false negative
+
+
+        #tp risk + fp risk + tn risk + fn risk
+
+        risk_val = ((subset_ind["pvalue"]<threshold)*subset_ood["loss"].mean()).mean()\
+                   + ((subset_ood["pvalue"]>threshold)*subset_ood["loss"]).mean()
+        print(f"{sampler} risk: {risk_val}")

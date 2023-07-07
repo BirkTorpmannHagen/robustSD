@@ -2,12 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch.nn
-
+import multiprocessing
 from scipy.stats import ks_2samp
 from sklearn.decomposition import PCA as sklearnPCA
 import metrics
 from bias_samplers import *
-
+from utils import *
 from tqdm import tqdm
 import pickle as pkl
 from domain_datasets import *
@@ -26,6 +26,7 @@ class BaseSD:
 class RabanserSD(BaseSD):
     def __init__(self, rep_model, sample_selector):
         super().__init__(rep_model, sample_selector)
+        torch.multiprocessing.set_start_method('spawn')
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
@@ -35,7 +36,32 @@ class RabanserSD(BaseSD):
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy() #mu from vae or features from classifier
         return encodings
 
+
+    def paralell_process(self, start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size):
+        # biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size = args
+        ood_samples = biased_sampler_encodings[start:stop]
+        if test == "ks":
+            p_value = np.min([ks_2samp(ind_encodings[:, i], ood_samples[:, i])[-1] for i in
+                              range(self.rep_model.latent_dim)])
+        else:
+            # PCA for computational tractibility; otherwise, the mmd test takes several minutes per sample
+            if test == "mmd":
+                mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
+                value, matrix = mmd(torch.Tensor(ind_encodings),
+                                    torch.Tensor(ood_samples), alphas=[0.5], ret_matrix=True)
+                p_value = mmd.pval(matrix, n_permutations=100)
+            elif test == "knn":
+                knn = tts.KNNStatistic(len(ind_encodings), sample_size, k=sample_size)
+                value, matrix = knn(torch.Tensor(ind_encodings), torch.Tensor(ood_samples),
+                                    ret_matrix=True)
+                p_value = knn.pval(matrix, n_permutations=100)
+            else:
+                raise NotImplementedError
+            return p_value, np.mean(losses[fold_name][biased_sampler_name][start:stop])
     def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size, test):
+
+
+
         encodings = dict(
             zip(dataloaders.keys(),
                 [dict(zip(loader_w_sampler.keys(),
@@ -43,9 +69,6 @@ class RabanserSD(BaseSD):
                           for sampler_name, loader in loader_w_sampler.items()]
                          )) for
                      loader_w_sampler in dataloaders.values()])) #dict of dicts of tensors; sidenote initializing nested dicts sucks
-
-
-
 
         losses =  dict(
             zip(dataloaders.keys(),
@@ -76,35 +99,23 @@ class RabanserSD(BaseSD):
 
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
-                print(biased_sampler_name)
-                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
+                pool = multiprocessing.Pool(processes=20)
+
+                startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
-                                   :-1]:
-                    ood_samples = biased_sampler_encodings[start:stop]
+                                   :-1]
+                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                pool.close()
+                # results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
 
-                    if test=="ks":
-                        p_value = np.min([ks_2samp(ind_encodings[:,i], ood_samples[:, i])[-1] for i in range(self.rep_model.latent_dim)])
-                    else:
-                        #PCA for computational tractibility; otherwise, the mmd test takes several minutes per sample
-                        pca = sklearnPCA(n_components=16)
-                        pca.fit(np.vstack((ind_encodings, ood_samples)))
-                        ind_encodings_t = pca.transform(ind_encodings)
-                        ood_samples = pca.transform(ood_samples)
-                        if test=="mmd":
-                            value, matrix = mmd(torch.Tensor(ind_encodings_t).to("cuda"), torch.Tensor(ood_samples).to("cuda"),alphas=[0.5], ret_matrix=True)
-                            p_value = mmd.pval(matrix, n_permutations=100)
-                            print(p_value)
-                        elif test=="knn":
-                            value, matrix = knn(torch.Tensor(ind_encodings_t).cuda(), torch.Tensor(ood_samples).cuda(), ret_matrix=True)
-                            p_value = knn.pval(matrix, n_permutations=100)
-                            print(p_value)
-
-
+                print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
+                # input()
+                for p_value, sample_loss in results:
 
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(np.mean(
-                        losses[fold_name][biased_sampler_name][start:stop]))
-        print(p_values)
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
+
         return p_values, sample_losses
 
 
@@ -219,7 +230,6 @@ class TypicalitySD(BaseSD):
         # compute ind_val pvalues for each sampler
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
                                                                          self.testbed.ind_val_loaders(), sample_size)
-        print(ind_pvalues)
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
                                                                          self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses

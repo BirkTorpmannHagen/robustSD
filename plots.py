@@ -458,4 +458,15 @@ def plot_bias_severity_impact(filename):
         # plt.show()
 
 if __name__ == '__main__':
-    get_nico_classification_metrics("nico_ResNetClassifier_k5_test.csv")
+    # get_nico_classification_metrics("nico_ResNetClassifier_k5_test.csv")
+    # fname = "NICO_ResNet_ks_100.csv"
+    fname = "NICO_Typicality_100.csv"
+    df = pd.read_csv(fname)
+    risk(fname)
+    df = df[df["fold"]!="dim"]
+    for sampler in df["sampler"].unique():
+        subset = df[df["sampler"]==sampler]
+
+        ind_ps = subset[subset["fold"]=="ind"]["pvalue"]
+        ood_ps = subset[subset["fold"]!="ind"]["pvalue"]
+        print(f"{sampler} has accuracy {calibrated_detection_rate(ood_ps, ind_ps)}")

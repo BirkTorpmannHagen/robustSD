@@ -49,3 +49,23 @@ def wrap_dataset(dataset):
             return len(self.dataset)
 
     return NewDataset(dataset)
+
+class ArgumentIterator:
+    #add arguments to an iterator for use in parallell processing
+    def __init__(self, iterable, variables):
+        self.iterable = iterable
+        self.index = 0
+        self.variables = variables
+
+    def __next__(self):
+        if self.index >= len(self.iterable):
+            raise StopIteration
+        else:
+            self.index += 1
+            return *self.iterable[self.index-1], *self.variables
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return len(self.iterable)

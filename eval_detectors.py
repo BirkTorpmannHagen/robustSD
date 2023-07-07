@@ -487,17 +487,17 @@ def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample
 def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold, fname):
     df = convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold)
     df.to_csv(fname)
-    ind_pvalues_ready = list(ind_pvalues.values())[0]
-    for fold in ood_pvalues_fold.keys():
-        for sampler in ood_pvalues_fold[fold].keys():
-            ood_pvalues = ood_pvalues_fold[fold][sampler]
-            auroc = metrics.auroc(ood_pvalues, ind_pvalues_ready[sampler])
-            fpr = metrics.fprat95tpr(ood_pvalues, ind_pvalues_ready[sampler])
-            accuracy = metrics.calibrated_detection_rate(ood_pvalues, ind_pvalues_ready[sampler])
-            print(f"{fold} : {sampler} AUROC: {auroc}")
-            print(f"{fold} : {sampler} FPR: {fpr}")
-            print(f"{fold} : {sampler} Accuracy: {accuracy}")
-            print()
+    # ind_pvalues_ready = list(ind_pvalues.values())[0]
+    # for fold in ood_pvalues_fold.keys():
+    #     for sampler in ood_pvalues_fold[fold].keys():
+    #         ood_pvalues = ood_pvalues_fold[fold][sampler]
+    #         auroc = metrics.auroc(ood_pvalues, ind_pvalues_ready[sampler])
+    #         fpr = metrics.fprat95tpr(ood_pvalues, ind_pvalues_ready[sampler])
+    #         accuracy = metrics.calibrated_detection_rate(ood_pvalues, ind_pvalues_ready[sampler])
+    #         print(f"{fold} : {sampler} AUROC: {auroc}")
+    #         print(f"{fold} : {sampler} FPR: {fpr}")
+    #         print(f"{fold} : {sampler} Accuracy: {accuracy}")
+    #         print()
 
 
 if __name__ == '__main__':
@@ -505,12 +505,21 @@ if __name__ == '__main__':
     # cifar10_bench = CIFAR10TestBed(10)
     # eval_nico()
     bench = NicoTestBed(100)
-    tsd = TypicalitySD(bench.rep_model, None)
-    # tsd = RabanserSD(bench.rep_model, None)
+    # tsd = TypicalitySD(bench.rep_model, None)
+    tsd = RabanserSD(bench.rep_model, None)
     tsd.register_testbed(bench)
-    for sample_size in [10, 20, 50, 100, 200, 500]:
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"NICO_ResNet_ks_{sample_size}.csv")
-    for sample_size in [10, 20, 50, 100, 200, 500]:
+    # for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"NICO_ResNet_ks_{sample_size}.csv")
+    for sample_size in [100, 200][::-1]:
+        print(sample_size)
         compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"NICO_ResNet_knn_{sample_size}.csv")
-    for sample_size in [10, 20, 50, 100, 200, 500]:
+    for sample_size in [100, 200, 500][::-1]:
+        print(sample_size)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"NICO_ResNet_mmd_{sample_size}.csv")
+
+    for sample_size in [10, 20, 50][::-1]:
+        print(sample_size)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"NICO_ResNet_knn_{sample_size}.csv")
+    for sample_size in [10, 20, 50][::-1]:
+        print(sample_size)
         compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"NICO_ResNet_mmd_{sample_size}.csv")

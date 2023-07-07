@@ -75,32 +75,33 @@ class NicoTestBed(BaseTestBed):
 
 
     def compute_losses(self, loader):
-        losses = []
-        for x, y, _ in loader:
+        losses = torch.zeros(len(loader)).to("cuda")
+        print("computing losses")
+        for i, (x, y, _) in tqdm(enumerate(loader), total=len(loader)):
             x = x.to("cuda")
             y = y.to("cuda")
             yhat = self.classifier(x)
-            losses.append(F.cross_entropy(yhat, y).item())
-        return losses
+            losses[i]=F.cross_entropy(yhat, y).item()
+        return losses.cpu().numpy()
 
     def ind_loader(self):
-        return DataLoader(self.ind, shuffle=False, num_workers=16)
+        return DataLoader(self.ind, shuffle=False, num_workers=20)
 
 
     def ood_loaders(self):
-        test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
+        test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts if context!="dim"]
 
-        oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=16),
+        oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=20),
                      DataLoader(test_dataset,
-                                sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=16),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=16)] for test_dataset in test_datasets]
+                                sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=20),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=20)] for test_dataset in test_datasets]
 
         dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
         double_dicted = dict([(context, dicted) for context, dicted in zip(self.contexts, dicted)])
         return double_dicted
 
     def ind_val_loaders(self):
-        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=16)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
+        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=20)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
                                                                               ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
                                                                               RandomSampler(self.ind_val)]])}
         return loaders
@@ -128,10 +129,10 @@ class CIFAR10TestBed(BaseTestBed):
 
     def ind_loader(self):
         return DataLoader(
-            wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=self.trans)), num_workers=16)
+            wrap_dataset(CIFAR10("../../Datasets/cifar10", train=True, transform=self.trans)), num_workers=20)
 
     def ind_val_loaders(self):
-        return DataLoader(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans)), num_workers=16)
+        return DataLoader(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans)), num_workers=20)
 
     def ood_loaders(self):
         ood_sets = [transform_dataset(wrap_dataset(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans))
@@ -141,8 +142,8 @@ class CIFAR10TestBed(BaseTestBed):
         #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
         #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
         oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
-                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=16),
-                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=16)] for test_dataset in ood_sets]
+                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=20),
+                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=20)] for test_dataset in ood_sets]
         dicts = dict(zip(["noise_{}".format(noise_val) for noise_val in np.linspace(0.1, 0.20, 3)], oods))
         return dicts
         # return 0 #DEBUG
