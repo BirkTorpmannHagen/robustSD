@@ -17,8 +17,8 @@ class ClassOrderSampler(Sampler):
         self.indices = [[] for i in range(num_classes)]
 
         #initial pass to sort the indices by class
-        for i, (x,y,_) in enumerate(data_source):
-            self.indices[y].append(i)
+        for i, data in enumerate(data_source):
+            self.indices[data[1]].append(i)
 
 
     def __iter__(self):
@@ -91,8 +91,8 @@ class ClusterSamplerWithSeverity(Sampler):
         self.rep_model = rep_model
         self.reps = np.zeros((len(data_source), rep_model.latent_dim))
         with torch.no_grad():
-            for i, (x,y,_) in tqdm(enumerate(DataLoader(self.data_source))):
-                x=x.to("cuda")
+            for i, data in tqdm(enumerate(DataLoader(self.data_source))):
+                x=data[0].to("cuda")
                 self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
         self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)

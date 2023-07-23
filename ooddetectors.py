@@ -30,7 +30,9 @@ class RabanserSD(BaseSD):
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
-        for i, (x, y, _) in enumerate(dataloader):
+        print(self.rep_model.latent_dim)
+        for i, data in enumerate(dataloader):
+            x = data[0]
             with torch.no_grad():
                 x = x.to("cuda")
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy() #mu from vae or features from classifier
@@ -47,17 +49,17 @@ class RabanserSD(BaseSD):
             # PCA for computational tractibility; otherwise, the mmd test takes several minutes per sample
             if test == "mmd":
                 mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
-                value, matrix = mmd(torch.Tensor(ind_encodings),
-                                    torch.Tensor(ood_samples), alphas=[0.5], ret_matrix=True)
+                value, matrix = mmd(ind_encodings,
+                                    ood_samples, alphas=[0.5], ret_matrix=True)
                 p_value = mmd.pval(matrix, n_permutations=100)
             elif test == "knn":
-                knn = tts.KNNStatistic(len(ind_encodings), sample_size, k=sample_size)
-                value, matrix = knn(torch.Tensor(ind_encodings), torch.Tensor(ood_samples),
+                knn = tts.KNNStatistic(ind_encodings, sample_size, k=sample_size)
+                value, matrix = knn(ind_encodings, ood_samples,
                                     ret_matrix=True)
                 p_value = knn.pval(matrix, n_permutations=100)
             else:
                 raise NotImplementedError
-            return p_value, np.mean(losses[fold_name][biased_sampler_name][start:stop])
+        return p_value, np.mean(losses[fold_name][biased_sampler_name][start:stop])
     def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size, test):
 
 
@@ -99,8 +101,11 @@ class RabanserSD(BaseSD):
 
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
+                ind_encodings = torch.Tensor(ind_encodings)
+                biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
+
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
-                pool = multiprocessing.Pool(processes=20)
+                pool = multiprocessing.Pool(processes=1)
 
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
