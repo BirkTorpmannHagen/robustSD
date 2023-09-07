@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 from os import listdir
 from os.path import join
 import albumentations as alb
-
+from torchvision.datasets import CIFAR10
 from njord.utils.general import check_dataset
 from njord.utils.dataloaders import create_dataloader
 
@@ -200,22 +200,19 @@ class CVC_ClinicDB(data.Dataset):
         return self.len
 
 
-# write a function which takes a dataset and a transform as parameters and returns a new dataset class that performs the transformation
-def transform_dataset(dataset, transform):
-    class NewDataset(data.Dataset):
-        def __init__(self, dataset):
-            super().__init__()
-            self.dataset = dataset
+class CIFAR10wNoise(CIFAR10):
+    def __init__(self, root, train, transform, noise_level=0, target_transform=None, download=False):
+        super().__init__(root, train, transform, target_transform, download)
+        self.noise_level = 0
 
-        def __getitem__(self, index):
-            image, label, _ = self.dataset[index]
-            image = transform(image)
-            return image, label, 0
+    def __getitem__(self, index):
+        x,y = super().__getitem__(index)
+        if self.noise_level!=0:
+            x = x + torch.randn_like(x)*self.noise_level
+        return x,y
 
-        def __len__(self):
-            return len(self.dataset)
-
-    return NewDataset(dataset)
+    def __len__(self):
+        return super().__len__()
 
 
 def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):

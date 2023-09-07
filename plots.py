@@ -13,7 +13,6 @@ from metrics import *
 from bias_samplers import ClusterSampler, ClusterSamplerWithSeverity, ClassOrderSampler
 from torch.utils.data import DataLoader
 from domain_datasets import build_nico_dataset
-from utils import wrap_dataset
 import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
@@ -458,15 +457,14 @@ def plot_bias_severity_impact(filename):
         # plt.show()
 
 if __name__ == '__main__':
-    # get_nico_classification_metrics("nico_ResNetClassifier_k5_test.csv")
-    # fname = "NICO_ResNet_ks_100.csv"
-    fname = "NICO_Typicality_100.csv"
-    df = pd.read_csv(fname)
-    risk(fname)
-    df = df[df["fold"]!="dim"]
-    for sampler in df["sampler"].unique():
-        subset = df[df["sampler"]==sampler]
-
-        ind_ps = subset[subset["fold"]=="ind"]["pvalue"]
-        ood_ps = subset[subset["fold"]!="ind"]["pvalue"]
-        print(f"{sampler} has accuracy {calibrated_detection_rate(ood_ps, ind_ps)}")
+    data = pd.read_csv("CIFAR10_ResNet_ks_50.csv")
+    print(calibrated_detection_rate(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
+    print(auroc(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
+    # risk_across_noises("CIFAR10_ResNet_ks_200.csv")
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     print(sample_size)
+    #     risk(f"NICO_ResNet_ks_{sample_size}.csv")
+    # print("mmd")
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     print(sample_size)
+    #     risk(f"NICO_ResNet_mmd_{sample_size}.csv")

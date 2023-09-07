@@ -1,54 +1,27 @@
 import torch
 from torch.utils import data
+import torch.nn as nn
 
+class WrappedCIFAR10Resnet(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self.latent_dim = self.get_encoding_size(32)
 
-def wrap_model(model):
-    class Wrapped:
-        def __init__(self):
-            self.model = model
-            self.latent_dim = self.get_encoding_size()
-            self.criterion = torch.nn.CrossEntropyLoss()
+    def get_encoding_size(self, input_size):
+        dummy = torch.zeros((1, 3, input_size, input_size)).to("cuda")
+        return self.get_encoding(dummy).shape[-1]
 
-        def forward(self, X):
-            return self.model(X)
+    def get_encoding(self, X):
+        return torch.nn.Sequential(*list(self.model.children())[:-2])(X).flatten(1)
 
-        def __call__(self, X):
-            return  self.model(X)
+    def forward(self, x):
+        return self.model(x)
 
-        def compute_loss(self, x,y):
-            return self.criterion(self.forward(x),y)
-
-        def get_encoding_size(self):
-            dummy = torch.zeros((1, 3, 512, 512)).to("cuda")
-            return torch.nn.Sequential(*list(self.model.children())[:-1])(dummy).flatten(1).shape[-1]
-
-        def encode(self, X):
-            return torch.nn.Sequential(*list(self.model.children())[:-1])(X).flatten(1)
-    return Wrapped()
 
 
 #write a method that takes an object as argument and returns a class that extends that object
-def wrap_dataset(dataset):
-    """
-    dumb utility function to make testing easier. standardizes datasets so that it works easier with the models and trainers
-    :param dataset:
-    :return:
-    """
-    class NewDataset(data.Dataset):
-        def __init__(self, dataset):
-            super().__init__()
-            self.dataset = dataset
 
-        def __getitem__(self, index):
-            image, label = self.dataset[index]
-            if image.shape[0]==1:
-                image = image.repeat(3,1,1)
-            return image, label, 0
-
-        def __len__(self):
-            return len(self.dataset)
-
-    return NewDataset(dataset)
 
 class ArgumentIterator:
     #add arguments to an iterator for use in parallell processing
