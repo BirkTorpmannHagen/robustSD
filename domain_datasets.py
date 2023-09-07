@@ -12,6 +12,7 @@ import albumentations as alb
 from torchvision.datasets import CIFAR10
 from njord.utils.general import check_dataset
 from njord.utils.dataloaders import create_dataloader
+from random import shuffle
 
 
 # def get_cifar10_datase
@@ -221,6 +222,8 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
         data_dir = os.path.join(track_data_dir, "public_dg_0416", "train")
         label_map_json = os.path.join(track_data_dir, "dg_label_id_mapping.json")
         image_path_list = glob(f"{data_dir}/{context}/*/*.jpg")
+        shuffle(image_path_list)
+
     else:
         track_data_dir = os.path.join(root, "track_2")
         data_dir = os.path.join(
@@ -228,6 +231,8 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
         )
         label_map_json = os.path.join(track_data_dir, "ood_label_id_mapping.json")
         image_path_list = glob(f"{data_dir}/*/*.jpg")
+        shuffle(image_path_list)
+
     if val_ratio==0:
         return NICODataset(image_path_list, label_map_json, train_transform), NICODataset(image_path_list, label_map_json, train_transform)
 

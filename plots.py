@@ -457,9 +457,11 @@ def plot_bias_severity_impact(filename):
         # plt.show()
 
 if __name__ == '__main__':
-    data = pd.read_csv("CIFAR10_ResNet_ks_50.csv")
-    print(calibrated_detection_rate(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
-    print(auroc(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
+    # data = pd.read_csv("NICO_ResNet_ks_50.csv")
+    risk("lp_nico_datak6.csv")
+
+    # print(calibrated_detection_rate(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
+    # print(auroc(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
     # risk_across_noises("CIFAR10_ResNet_ks_200.csv")
     # for sample_size in [10, 20, 50, 100, 200, 500]:
     #     print(sample_size)

@@ -119,6 +119,18 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
 
 def risk(fname, fnr=0):
     data = pd.read_csv(fname)
+
+    plt.hist(data[data["fold"]=="ind"]["loss"], alpha=0.5, label="ind")
+    plt.hist(data[data["fold"] != "ind"]["loss"], alpha=0.5, label="ood")
+    plt.legend()
+    plt.show()
+
+    print(data[data["fold"]=="ind"]["loss"].max())
+    print(data[data["fold"]=="ind"]["loss"].mean())
+    print(data[data["fold"]!="ind"]["loss"].max())
+    print(data[data["fold"]!="ind"]["loss"].mean())
+    data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].max()
+    print(data["oodness"])
     random_sampler_ind_data = data[(data["sampler"]=="RandomSampler")&(data["fold"]=="ind")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind

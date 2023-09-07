@@ -1,13 +1,10 @@
-from pytorch_lightning import Trainer
-from torchvision.models import resnet34
-from domain_datasets import build_nico_dataset
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
 
 import sys
 import warnings
 from pathlib import Path
 from argparse import ArgumentParser
+
+import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore')
 
@@ -25,7 +22,7 @@ import pytorch_lightning as pl
 
 class ResNetClassifier(pl.LightningModule):
     def __init__(self, num_classes, resnet_version,
-                 optimizer='adam', lr=1e-3, batch_size=16,
+                 optimizer='adam', lr=1e-5, batch_size=16,
                  transfer=False):
         super().__init__()
 
@@ -74,11 +71,9 @@ class ResNetClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y, context = batch
         preds = self(x)
-        y = F.one_hot(y, num_classes=self.num_classes).float()
-
-
         loss = self.criterion(preds, y)
-        acc = (torch.argmax(y, 1) == torch.argmax(preds, 1)) \
+
+        acc = (y == torch.argmax(preds, 1)) \
             .type(torch.FloatTensor).mean()
         # perform logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -88,10 +83,8 @@ class ResNetClassifier(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y, context = batch
         preds = self(x)
-        y = F.one_hot(y, num_classes=self.num_classes).float()
-
-        loss = self.criterion(preds, y)
-        acc = (torch.argmax(y, 1) == torch.argmax(preds, 1)) \
+        loss = self.compute_loss(x,y)
+        acc = (y == torch.argmax(preds, 1)) \
             .type(torch.FloatTensor).mean()
         # perform logging
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
@@ -99,11 +92,8 @@ class ResNetClassifier(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y, context = batch
         preds = self(x)
-        if self.num_classes == 2:
-            y = F.one_hot(y, num_classes=2).float()
-
         loss = self.criterion(preds, y)
-        acc = (torch.argmax(y, 1) == torch.argmax(preds, 1)) \
+        acc = (y== torch.argmax(preds, 1)) \
             .type(torch.FloatTensor).mean()
         # perform logging
         self.log("test_loss", loss, on_step=True, prog_bar=True, logger=True)
