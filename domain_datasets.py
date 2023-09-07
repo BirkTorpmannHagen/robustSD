@@ -206,8 +206,12 @@ class CIFAR10wNoise(CIFAR10):
 
     def __getitem__(self, index):
         x,y = super().__getitem__(index)
-        x = x + torch.randn_like(x)*self.noise_level
+        if self.noise_level!=0:
+            x = x + torch.randn_like(x)*self.noise_level
         return x,y
+
+    def __len__(self):
+        return super().__len__()
 
 
 def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):

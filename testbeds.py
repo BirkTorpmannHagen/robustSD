@@ -133,12 +133,12 @@ class CIFAR10TestBed(BaseTestBed):
         #     torch.load("vae_logs/nico_dim/version_4/checkpoints/epoch=2-step=37500.ckpt")[
         #         "state_dict"])
         self.num_classes = 10
-        self.ind_val = CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans)
+        self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans)
 
 
     def ind_loader(self):
         return DataLoader(
-            CIFAR10("../../Datasets/cifar10", train=True, transform=self.trans), shuffle=False, num_workers=20)
+            CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans), shuffle=False, num_workers=20)
 
     def ind_val_loaders(self):
         loaders = {"ind": dict(
@@ -150,7 +150,7 @@ class CIFAR10TestBed(BaseTestBed):
 
     def ood_loaders(self):
         ood_sets = [CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=noise_val)
-                                       for noise_val in np.linspace(0.1, 0.20, 3)]
+                                       for noise_val in np.linspace(0.1, 0.50, 5)]
         # self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
         #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
         #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]

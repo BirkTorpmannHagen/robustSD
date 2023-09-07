@@ -74,15 +74,16 @@ if __name__ == '__main__':
     # tsd = TypicalitySD(bench.rep_model, None)
     tsd = RabanserSD(bench.rep_model, None)
     tsd.register_testbed(bench)
+    for sample_size in [10, 20, 50, 100][::-1]:
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"CIFAR10_ResNet_ks_{sample_size}.csv")
+    #
     # for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"CIFAR10_ResNet_ks_{sample_size}.csv")
+    #     print(sample_size)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"CIFAR10_ResNet_mmd_{sample_size}.csv")
+    # for sample_size in[10, 20, 50, 100, 200, 500][::-1]:
+    #     print(sample_size)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"CIFAR10_ResNet_knn_{sample_size}.csv")
 
-    for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
-        print(sample_size)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"CIFAR10_ResNet_mmd_{sample_size}.csv")
-    for sample_size in[10, 20, 50, 100, 200, 500][::-1]:
-        print(sample_size)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"CIFAR10_ResNet_knn_{sample_size}.csv")
     # for sample_size in [10, 20, 50][::-1]:
     #     print(sample_size)
     #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"CIFAR10_ResNet_knn_{sample_size}.csv")

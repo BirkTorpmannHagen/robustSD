@@ -30,7 +30,7 @@ class RabanserSD(BaseSD):
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
-        print(self.rep_model.latent_dim)
+        print(encodings.shape)
         for i, data in enumerate(dataloader):
             x = data[0]
             with torch.no_grad():
@@ -46,7 +46,6 @@ class RabanserSD(BaseSD):
             p_value = np.min([ks_2samp(ind_encodings[:, i], ood_samples[:, i])[-1] for i in
                               range(self.rep_model.latent_dim)])
         else:
-            # PCA for computational tractibility; otherwise, the mmd test takes several minutes per sample
             if test == "mmd":
                 mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
                 value, matrix = mmd(ind_encodings,
@@ -105,7 +104,7 @@ class RabanserSD(BaseSD):
                 biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
 
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
-                pool = multiprocessing.Pool(processes=1)
+                pool = multiprocessing.Pool(processes=20)
 
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
@@ -136,6 +135,7 @@ class RabanserSD(BaseSD):
         # sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
         try:
             ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+            print("recomputing...")
         except FileNotFoundError:
             ind_latents = self.get_encodings(self.testbed.ind_loader())
             torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
