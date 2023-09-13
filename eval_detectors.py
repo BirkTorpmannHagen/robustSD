@@ -67,13 +67,14 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
 
 
 if __name__ == '__main__':
-    bench = NicoTestBed(100)
     # tsd = TypicalitySD(bench.rep_model, None)
-    tsd = RabanserSD(bench.rep_model, None)
-    tsd.register_testbed(bench)
+
     for sample_size in [10, 20, 50, 100, 200, 500]:
+        bench = NicoTestBed(sample_size)
+        tsd = RabanserSD(bench.rep_model, None)
+        tsd.register_testbed(bench)
         compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"NICO_ResNet_ks_{sample_size}.csv")
-    for sample_size in [10, 20, 50, 100, 200, 500]:
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"NICO_ResNet_knn_{sample_size}.csv")
-    for sample_size in [10, 20, 50, 100, 200, 500]:
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"NICO_ResNet_mmd_{sample_size}.csv")
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="knn"), fname=f"NICO_ResNet_knn_{sample_size}.csv")
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="mmd"), fname=f"NICO_ResNet_mmd_{sample_size}.csv")

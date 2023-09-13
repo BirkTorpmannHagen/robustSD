@@ -22,7 +22,7 @@ import pytorch_lightning as pl
 
 class ResNetClassifier(pl.LightningModule):
     def __init__(self, num_classes, resnet_version,
-                 optimizer='adam', lr=1e-5, batch_size=16,
+                 optimizer='adam', lr=1e-6, batch_size=16,
                  transfer=False):
         super().__init__()
 

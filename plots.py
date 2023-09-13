@@ -458,7 +458,7 @@ def plot_bias_severity_impact(filename):
 
 if __name__ == '__main__':
     # data = pd.read_csv("NICO_ResNet_ks_50.csv")
-    risk("lp_nico_datak6.csv")
+    risk("NICO_ResNet_ks_10.csv")
 
     # print(calibrated_detection_rate(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
     # print(auroc(data[((data["fold"]!="dim")|(data["fold"]!="ind"))]["pvalue"], data[data["fold"]=="ind"]["pvalue"]))
