@@ -40,8 +40,8 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 import val as validate  # for end-of-epoch mAP
-from models.experimental import attempt_load
-from models.yolo import Model
+from njord.models.experimental import attempt_load
+from njord.models.yolo import Model
 from njord.utils.autoanchor import check_anchors
 from njord.utils.autobatch import check_train_batch_size
 from njord.utils.callbacks import Callbacks
@@ -105,7 +105,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     # Config
     plots = not evolve and not opt.noplots  # create plots
     cuda = device.type != 'cpu'
-    init_seeds(opt.seed + 1 + RANK + len(os.listdir("/home/birk/Projects/BatchDiversitySampling/runs/train")), deterministic=False)
+    # init_seeds(opt.seed + 1 + RANK + len(os.listdir("/home/birk/Projects/robustSD/runs/train")), deterministic=False)
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
@@ -230,6 +230,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     # Model attributes
     nl = de_parallel(model).model[-1].nl  # number of detection layers (to scale hyps)
+
     hyp['box'] *= 3 / nl  # scale to layers
     hyp['cls'] *= nc / 80 * 3 / nl  # scale to classes and layers
     hyp['obj'] *= (imgsz / 640) ** 2 * 3 / nl  # scale to image size and layers

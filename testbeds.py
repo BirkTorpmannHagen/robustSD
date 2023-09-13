@@ -29,6 +29,11 @@ from classifier.resnetclassifier import ResNetClassifier
 from ooddetectors import *
 from torch.nn import functional as F
 from classifier.cifarresnet import get_cifar, cifar10_pretrained_weight_urls
+
+from njord.utils.loss import ComputeLoss
+from njord.val import fetch_model
+from njord.utils.dataloaders import LoadImagesAndLabels
+
 class BaseTestBed:
     def __init__(self, sample_size):
         self.sample_size = sample_size
@@ -51,25 +56,40 @@ class NjordTestBed(BaseTestBed):
         super().__init__(sample_size)
         ind, ind_val, ood = build_njord_dataset()
         self.rep_model = ResNetVAE().to("cuda").eval()
+        self.classifier = fetch_model("njord/runs/train/exp4/weights/best.pt")
 
+        self.classifier.hyp = yaml.safe_load(open("/home/birk/Projects/robustSD/njord/data/hyps/hyp.scratch-low.yaml", "r"))
+        self.loss = ComputeLoss(self.classifier)
         self.vae_exp = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
         self.vae_exp.load_state_dict(
             torch.load("vae_logs/Njord/version_3/checkpoints/last.ckpt")[
                 "state_dict"])
         self.ind, self.ind_val, self.ood = build_njord_dataset()
+        self.collate_fn = LoadImagesAndLabels.collate_fn
 
-    def compute_losses(self, loaders):
-        return [0]*len(loaders)
+    def loader(self, dataset, sampler):
+        return DataLoader(dataset, sampler=sampler, collate_fn=self.collate_fn, num_workers=0)
+
+    def compute_losses(self, loader):
+        losses = torch.zeros(len(loader))
+        for i, (x, targets, paths, shapes) in enumerate(loader):
+
+            x = x.half()/255
+            x = x.cuda()
+            targets = targets.cuda()
+            preds, train_out = self.classifier(x)
+            _, loss = self.loss(train_out, targets)
+            losses[i]=loss.mean().item()
+        return losses
 
     def ind_loader(self):
-        return DataLoader(self.ind)
+        return self.loader(self.ind, sampler=RandomSampler(self.ind))
 
     def ood_loaders(self):
         samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
                                   SequentialSampler(self.ood), RandomSampler(self.ood)]
-        loaders =  {"ood": dict([[sampler.__class__.__name__,  DataLoader(self.ood, sampler=sampler)] for sampler in
+        loaders =  {"ood": dict([[sampler.__class__.__name__,  self.loader(self.ood, sampler=sampler)] for sampler in
                                  samplers])}
-        print(loaders)
         return loaders
 
 
@@ -77,9 +97,8 @@ class NjordTestBed(BaseTestBed):
         samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
                                   SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
 
-        loaders =  {"ind": dict([ [sampler.__class__.__name__,  DataLoader(self.ind_val, sampler=sampler)] for sampler in
+        loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
                                  samplers])}
-        print(loaders)
         return  loaders
 
 

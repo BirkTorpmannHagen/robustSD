@@ -48,7 +48,8 @@ val: [
   ../../../Datasets/NjordYolo/05_hermes_dag3,
   ../../../Datasets/NjordYolo/05_hermes_dag7,
   ../../../Datasets/NjordYolo/06_hermes_dag7,
-  ../../../Datasets/NjordYolo/06_hermes_dag28
+  ../../../Datasets/NjordYolo/06_hermes_dag28,
+
 ]
 
 nc: 4

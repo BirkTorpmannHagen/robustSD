@@ -139,3 +139,9 @@ njord/Njord/
 *.png
 *.eps
 .idea/
+*.csv
+*.png
+*.npy
+*.pt
+njord_vae/*
+njord/runs/*

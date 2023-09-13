@@ -161,6 +161,38 @@ def create_dataloader(path,
                   worker_init_fn=seed_worker,
                   generator=generator), dataset
 
+def create_dataset(path,
+                      imgsz,
+                      batch_size,
+                      stride,
+                      single_cls=False,
+                      hyp=None,
+                      augment=False,
+                      cache=False,
+                      pad=0.0,
+                      rect=False,
+                      rank=-1,
+                      workers=8,
+                      image_weights=False,
+                      quad=False,
+                      prefix='',
+                      shuffle=False):
+    dataset = LoadImagesAndLabels(
+        path,
+        imgsz,
+        batch_size,
+        augment=augment,  # augmentation
+        hyp=hyp,  # hyperparameters
+        rect=rect,  # rectangular batches
+        cache_images=cache,
+        single_cls=single_cls,
+        stride=int(stride),
+        pad=pad,
+        image_weights=image_weights,
+        prefix=prefix)
+    return dataset
+
+
 # def create_diverse_dataloader(path,
 #                           imgsz,
 #                           batch_size,

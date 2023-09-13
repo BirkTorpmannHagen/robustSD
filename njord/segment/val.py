@@ -39,8 +39,8 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 import torch.nn.functional as F
 
-from models.common import DetectMultiBackend
-from models.yolo import SegmentationModel
+from njord.models.common import DetectMultiBackend
+from njord.models.yolo import SegmentationModel
 from njord.utils.callbacks import Callbacks
 from njord.utils.general import (LOGGER, NUM_THREADS, Profile, check_dataset, check_img_size, check_requirements, check_yaml,
                            coco80_to_coco91_class, colorstr, increment_path, non_max_suppression, print_args,

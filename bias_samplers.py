@@ -56,7 +56,7 @@ class ClusterSampler(Sampler):
 
         with torch.no_grad():
             for i, list in tqdm(enumerate(DataLoader(self.data_source))):
-                x=list[0].to("cuda")
+                x=list[0].to("cuda").float()
                 self.reps[i] = rep_model.get_encoding(x).cpu().numpy()
         np.save("reps.npy", self.reps)
         self.num_clusters = max(int(len(data_source)//(sample_size+0.1)),4)

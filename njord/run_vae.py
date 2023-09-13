@@ -2,7 +2,7 @@ import os
 import yaml
 import argparse
 from pathlib import Path
-from models import *
+from njord.models import *
 from vae_experiment import VAEXperiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger

@@ -1,46 +1,5 @@
 train: [
-  ../../../Datasets/NjordYolo/00_hermes_dag1,
-  ../../../Datasets/NjordYolo/00_hermes_dag2,
-  ../../../Datasets/NjordYolo/00_hermes_dag3,
-  ../../../Datasets/NjordYolo/00_hermes_dag6,
-  ../../../Datasets/NjordYolo/00_hermes_dag7,
-  ../../../Datasets/NjordYolo/00_hermes_dag9,
-  ../../../Datasets/NjordYolo/00_hermes_dag12,
-  ../../../Datasets/NjordYolo/00_hermes_dag16,
-  ../../../Datasets/NjordYolo/00_hermes_dag17,
-  ../../../Datasets/NjordYolo/00_hermes_dag18,
-  ../../../Datasets/NjordYolo/00_hermes_dag19,
-  ../../../Datasets/NjordYolo/00_hermes_dag20,
-  ../../../Datasets/NjordYolo/00_hermes_dag22,
-  ../../../Datasets/NjordYolo/00_hermes_dag23,
-  ../../../Datasets/NjordYolo/00_hermes_dag24,
-  ../../../Datasets/NjordYolo/00_hermes_dag25,
-  ../../../Datasets/NjordYolo/00_hermes_dag26,
-  ../../../Datasets/NjordYolo/00_hermes_dag27,
-  ../../../Datasets/NjordYolo/00_hermes_dag28,
-  ../../../Datasets/NjordYolo/00_hermes_dag34,
-  ../../../Datasets/NjordYolo/01_hermes_dag1,
-  ../../../Datasets/NjordYolo/01_hermes_dag2,
-  ../../../Datasets/NjordYolo/01_hermes_dag3,
-  ../../../Datasets/NjordYolo/01_hermes_dag6,
-  ../../../Datasets/NjordYolo/01_hermes_dag7,
-  ../../../Datasets/NjordYolo/01_hermes_dag8,
-  ../../../Datasets/NjordYolo/01_hermes_dag9,
-  ../../../Datasets/NjordYolo/01_hermes_dag12,
-  ../../../Datasets/NjordYolo/01_hermes_dag14,
-  ../../../Datasets/NjordYolo/01_hermes_dag16,
-  ../../../Datasets/NjordYolo/01_hermes_dag17,
-  ../../../Datasets/NjordYolo/01_hermes_dag18,
-  ../../../Datasets/NjordYolo/01_hermes_dag19,
-  ../../../Datasets/NjordYolo/01_hermes_dag20,
-  ../../../Datasets/NjordYolo/01_hermes_dag23,
-  ../../../Datasets/NjordYolo/02_hermes_dag1,
-  ../../../Datasets/NjordYolo/02_hermes_dag2,
-  ../../../Datasets/NjordYolo/02_hermes_dag31,
-  ../../../Datasets/NjordYolo/02_hermes_dag32,
-  ../../../Datasets/NjordYolo/02_hermes_dag33,
-  ../../../Datasets/NjordYolo/04_hermes_dag1,
-  ../../../Datasets/NjordYolo/04_hermes_dag7,
+
 ]
 
 val: [
@@ -49,7 +8,12 @@ val: [
     ../../../Datasets/NjordYolo/05_hermes_dag26,
     ../../../Datasets/NjordYolo/06_hermes_dag29,
     ../../../Datasets/NjordYolo/06_hermes_dag33,
-    ../../../Datasets/NjordYolo/06_hermes_dag34
+    ../../../Datasets/NjordYolo/06_hermes_dag34,
+  ../../../Datasets/NjordYolo/02_hermes_dag14,
+   ../../../Datasets/NjordYolo/03_hermes_dag6,
+   ../../../Datasets/NjordYolo/04_hermes_dag6,
+   ../../../Datasets/NjordYolo/04_hermes_dag17,
+   ../../../Datasets/NjordYolo/11_hermes_dag34
 ]
 
 nc: 4
