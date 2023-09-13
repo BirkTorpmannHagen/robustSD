@@ -4,8 +4,8 @@ import math
 import matplotlib.pyplot as plt
 import torch
 from torch import optim
-from models import BaseVAE
-from models.types_ import *
+from njord.models import BaseVAE
+from njord.models.types_ import *
 from vae_utils import data_loader
 import pytorch_lightning as pl
 from torchvision import transforms

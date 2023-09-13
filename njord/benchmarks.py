@@ -40,8 +40,8 @@ if str(ROOT) not in sys.path:
 # ROOT = ROOT.relative_to(Path.cwd())  # relative
 
 import export
-from models.experimental import attempt_load
-from models.yolo import SegmentationModel
+from njord.models.experimental import attempt_load
+from njord.models.yolo import SegmentationModel
 from segment.val import run as val_seg
 from njord.utils import notebook_init
 from njord.utils.general import LOGGER, check_yaml, file_size, print_args

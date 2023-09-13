@@ -13,6 +13,7 @@ import pickle as pkl
 from domain_datasets import *
 from vae.models.vanilla_vae import VanillaVAE
 import torch_two_sample as tts
+from sklearn.decomposition import PCA
 
 class BaseSD:
     def __init__(self, rep_model, sample_selector):
@@ -24,9 +25,12 @@ class BaseSD:
 
 
 class RabanserSD(BaseSD):
-    def __init__(self, rep_model, sample_selector):
+    def __init__(self, rep_model, sample_selector, select_samples=False, k=5):
         super().__init__(rep_model, sample_selector)
-        torch.multiprocessing.set_start_method('spawn')
+        self.select_samples = select_samples
+        self.k= k
+        # if set_start:
+        #     torch.multiprocessing.set_start_method('spawn') #bodge code, sorry.
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
@@ -34,16 +38,43 @@ class RabanserSD(BaseSD):
         for i, data in enumerate(dataloader):
             x = data[0]
             with torch.no_grad():
-                x = x.to("cuda")
+                x = x.to("cuda").float()
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy() #mu from vae or features from classifier
         return encodings
+
+    def get_k_nearest(self, ind_samples):
+        pass
 
 
     def paralell_process(self, start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size):
         # biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size = args
         ood_samples = biased_sampler_encodings[start:stop]
         if test == "ks":
-            p_value = np.min([ks_2samp(ind_encodings[:, i], ood_samples[:, i])[-1] for i in
+            if self.select_samples:
+                #ood x k
+                k_nearest_idx = np.concatenate(
+                    [np.argpartition(torch.sum((ood_samples[i].unsqueeze(0)- ind_encodings) ** 2, dim=-1).numpy(), self.k)[:self.k] for i in
+                     range(len(ood_samples))])
+                k_nearest_ind = ind_encodings[k_nearest_idx]
+                # pca = PCA()
+                # ind_transformed = pca.fit_transform(ind_encodings)
+                # nn_trans = pca.transform(k_nearest_ind)
+                # nn_ood = pca.transform(ood_samples)
+
+                #samples x
+                p_value = np.min([ks_2samp(k_nearest_ind[:, i], ood_samples[:, i])[-1] for i in
+                                  range(self.rep_model.latent_dim)])
+                # if fold_name == "ind":
+                #     plt.scatter(ind_transformed[:, 0], ind_transformed[:, 1], alpha=0.5, label="ind")
+                #     plt.scatter(nn_trans[:, 0], nn_trans[:, 1], alpha=0.5, label="nearest neighbours")
+                #     plt.scatter(nn_ood[:, 0], nn_ood[:, 1], alpha=0.5, label="sample")
+                #     plt.legend()
+                #     plt.savefig(f"test_{start}.png")
+                #     plt.title(p_value)
+                #     plt.clf()
+                #     plt.close()
+            else:
+                p_value = np.min([ks_2samp(ind_encodings[:, i], ood_samples[:, i])[-1] for i in
                               range(self.rep_model.latent_dim)])
         else:
             if test == "mmd":
@@ -58,7 +89,8 @@ class RabanserSD(BaseSD):
                 p_value = knn.pval(matrix, n_permutations=100)
             else:
                 raise NotImplementedError
-        return p_value, np.mean(losses[fold_name][biased_sampler_name][start:stop])
+        return p_value, losses[fold_name][biased_sampler_name][start:stop].mean()
+
     def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size, test):
 
 
@@ -97,20 +129,26 @@ class RabanserSD(BaseSD):
 
         mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
         knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
-
+        print(losses)
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
                 ind_encodings = torch.Tensor(ind_encodings)
                 biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
 
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
-                pool = multiprocessing.Pool(processes=20)
+                # pool = multiprocessing.Pool(processes=4)
 
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
                                    :-1]
-                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
-                pool.close()
+                # results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                # pool.close()
+                results = []
+                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                                   :-1]:
+                    results.append(self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size))
+
                 # results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
 
                 print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
@@ -118,7 +156,7 @@ class RabanserSD(BaseSD):
                 for p_value, sample_loss in results:
 
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss.item())
 
         return p_values, sample_losses
 
@@ -133,12 +171,12 @@ class RabanserSD(BaseSD):
         :return ood_sample_losses: losses for each sampler on ood fold, in correct order
         """
         # sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
-        try:
-            ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-            print("recomputing...")
-        except FileNotFoundError:
-            ind_latents = self.get_encodings(self.testbed.ind_loader())
-            torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        # try:
+        #     ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
+        # except FileNotFoundError:
+        #     print("recomputing...")
+        ind_latents = self.get_encodings(self.testbed.ind_loader())
+        torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
 
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size, test)
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size, test)

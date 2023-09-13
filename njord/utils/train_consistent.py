@@ -40,8 +40,8 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 import val as validate  # for end-of-epoch mAP
-from models.experimental import attempt_load
-from models.yolo import Model
+from njord.models.experimental import attempt_load
+from njord.models.yolo import Model
 from njord.utils.autoanchor import check_anchors
 from njord.utils.autobatch import check_train_batch_size
 from njord.utils.callbacks import Callbacks

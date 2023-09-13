@@ -129,29 +129,74 @@ def risk(fname, fnr=0):
     print(data[data["fold"]=="ind"]["loss"].mean())
     print(data[data["fold"]!="ind"]["loss"].max())
     print(data[data["fold"]!="ind"]["loss"].mean())
-    data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].max()
-    print(data["oodness"])
-    random_sampler_ind_data = data[(data["sampler"]=="RandomSampler")&(data["fold"]=="ind")]
+
+    #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
+    data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.99)
+
+
+
+    ood = data[data["oodness"]>=1]
+    ind = data[data["oodness"]<1]
+    ood = data[data["fold"]=="ood"]
+    ind = data[data["fold"]!="ood"]
+    # ood["loss"] = ood["loss"]/ind["loss"].max()
+    # ind["loss"] = ind["loss"]/ind["loss"].max()
+    random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
 
-    ind_data = data[data["fold"]=="ind"]
-    ood_data = data[(data["fold"]!="ind") & data["fold"]!="dim"]
-
 
     total_risk = 0
+    risks = {}
+
     for sampler in data["sampler"].unique():
-        subset = data[data["sampler"]==sampler]
-        subset_ind = subset[subset["fold"]=="ind"]
-        subset_ood = subset[(subset["fold"] != "ind") & (subset["fold"] != "dim")]
+        subset_ind = ind[ind["sampler"]==sampler]
+        subset_ood = ood[ood["sampler"]==sampler]
         # risk is avg ood loss if false positive, relevant ood loss if false negative
-
-
+        tp = len(subset_ood["pvalue"]<threshold)
+        tn = len(subset_ind["pvalue"]>threshold)
+        fp = len(subset_ind["pvalue"]<threshold)
+        fn = len(subset_ood["pvalue"]>threshold)
+        acc = (tp+tn)/(tp+tn+fp+fn)
+        print(f"acc for {sampler}: {acc}")
         #tp risk + fp risk + tn risk + fn risk
+        # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
+        # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
+        plt.scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+        plt.scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+        plt.yscale("log")
+        plt.legend()
+        plt.title(sampler)
+        plt.show()
+        # risk_val = (fn.mean() + fp.mean())/2
 
-        risk_val = ((subset_ind["pvalue"]<threshold)*subset_ood["loss"].mean()).mean()\
-                   + ((subset_ood["pvalue"]>threshold)*subset_ood["loss"]).mean()
-        print(f"{sampler} risk: {risk_val}")
+        # total_risk+=risk_val/len(data["sampler"].unique())
+        # risks[sampler]=risk_val
+        # print(f"{sampler} risk: {risk_val}")
+
+    # for sampler in data["sampler"].unique():
+    #     subset_ind = ind[ind["sampler"]==sampler]
+    #     subset_ood = ood[ood["sampler"]==sampler]
+    #     # risk is avg ood loss if false positive, relevant ood loss if false negative
+    #
+    #
+    #     #tp risk + fp risk + tn risk + fn risk
+    #     # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
+    #     # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
+    #     plt.scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+    #     plt.scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+    #     plt.yscale("log")
+    #     plt.legend()
+    #     plt.title(sampler)
+    #     plt.show()
+    #     # risk_val = (fn.mean() + fp.mean())/2
+    #     risk =
+    #
+    #     total_risk+=risk_val/len(data["sampler"].unique())
+    #     risks[sampler]=risk_val
+    #     print(f"{sampler} risk: {risk_val}")
+    return risks, total_risk
+
 
 def risk_across_noises(fname, fnr=0):
     data_full = pd.read_csv(fname)
