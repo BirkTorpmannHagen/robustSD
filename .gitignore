@@ -143,3 +143,5 @@ njord/Njord/
 *.png
 *.npy
 *.pt
+njord_vae/*
+njord/runs/*
