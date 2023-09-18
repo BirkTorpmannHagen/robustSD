@@ -138,8 +138,8 @@ def risk(fname, fnr=0):
 
     total_risk = 0
     risks = {}
-
-    for sampler in data["sampler"].unique():
+    fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8))
+    for i, sampler in enumerate(data["sampler"].unique()):
         subset_ind = ind[ind["sampler"]==sampler]
         subset_ood = ood[ood["sampler"]==sampler]
 
@@ -153,12 +153,14 @@ def risk(fname, fnr=0):
         #tp risk + fp risk + tn risk + fn risk
         # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
         # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
-        plt.scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
-        plt.scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
-        plt.yscale("log")
+        ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+        ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+        ax[i].set_yscale("log")
+        ax[i].set_ylim((1e-7, 0))
+        ax[i].set_title(sampler)
         plt.legend()
-        plt.title(sampler)
-        plt.show()
+    fig.suptitle(fname)
+    plt.show()
         # risk_val = (fn.mean() + fp.mean())/2
 
         # total_risk+=risk_val/len(data["sampler"].unique())

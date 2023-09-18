@@ -25,7 +25,7 @@ class BaseSD:
 
 
 class RabanserSD(BaseSD):
-    def __init__(self, rep_model, sample_selector, select_samples=False, k=5):
+    def __init__(self, rep_model, sample_selector, select_samples=False, k=1):
         super().__init__(rep_model, sample_selector)
         self.select_samples = select_samples
         self.k= k
@@ -56,23 +56,10 @@ class RabanserSD(BaseSD):
                     [np.argpartition(torch.sum((ood_samples[i].unsqueeze(0)- ind_encodings) ** 2, dim=-1).numpy(), self.k)[:self.k] for i in
                      range(len(ood_samples))])
                 k_nearest_ind = ind_encodings[k_nearest_idx]
-                # pca = PCA()
-                # ind_transformed = pca.fit_transform(ind_encodings)
-                # nn_trans = pca.transform(k_nearest_ind)
-                # nn_ood = pca.transform(ood_samples)
 
                 #samples x
                 p_value = np.min([ks_2samp(k_nearest_ind[:, i], ood_samples[:, i])[-1] for i in
                                   range(self.rep_model.latent_dim)])
-                # if fold_name == "ind":
-                #     plt.scatter(ind_transformed[:, 0], ind_transformed[:, 1], alpha=0.5, label="ind")
-                #     plt.scatter(nn_trans[:, 0], nn_trans[:, 1], alpha=0.5, label="nearest neighbours")
-                #     plt.scatter(nn_ood[:, 0], nn_ood[:, 1], alpha=0.5, label="sample")
-                #     plt.legend()
-                #     plt.savefig(f"test_{start}.png")
-                #     plt.title(p_value)
-                #     plt.clf()
-                #     plt.close()
             else:
                 p_value = np.min([ks_2samp(ind_encodings[:, i], ood_samples[:, i])[-1] for i in
                               range(self.rep_model.latent_dim)])
