@@ -459,3 +459,8 @@ def plot_bias_severity_impact(filename):
 if __name__ == '__main__':
     # data = pd.read_csv("NICO_ResNet_ks_50.csv")
     pass
+    print("vanilla")
+    risk("NICO_ResNet_ks_100.csv")
+    print("")
+    print("5nn")
+    risk("NICO_ResNet_ks_5NN_100.csv")
