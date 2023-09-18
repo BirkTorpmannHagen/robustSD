@@ -120,8 +120,10 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
 def risk(fname, fnr=0):
     data = pd.read_csv(fname)
 
+
     #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
     data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.99)
+
 
 
 
@@ -144,11 +146,14 @@ def risk(fname, fnr=0):
         subset_ood = ood[ood["sampler"]==sampler]
 
         # risk is avg ood loss if false positive, relevant ood loss if false negative
+
         tp = (subset_ood["pvalue"]<threshold).sum()
         tn = (subset_ind["pvalue"]>threshold).sum()
         fp = (subset_ind["pvalue"]<threshold).sum()
         fn = (subset_ood["pvalue"]>threshold).sum()
         acc = (tp+tn)/(tp+tn+fp+fn)
+        print(tp, tn, fn, fp)
+        print("total: ",(tp+tn+fp+fn) )
         print(f"acc for {sampler}: {acc}")
         #tp risk + fp risk + tn risk + fn risk
         # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
@@ -159,13 +164,12 @@ def risk(fname, fnr=0):
         ax[i].set_ylim((1e-7, 0))
         ax[i].set_title(sampler)
         plt.legend()
+
     fig.suptitle(fname)
     plt.show()
         # risk_val = (fn.mean() + fp.mean())/2
 
-        # total_risk+=risk_val/len(data["sampler"].unique())
-        # risks[sampler]=risk_val
-        # print(f"{sampler} risk: {risk_val}")
+
 
     # for sampler in data["sampler"].unique():
     #     subset_ind = ind[ind["sampler"]==sampler]
