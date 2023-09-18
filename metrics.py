@@ -120,27 +120,23 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
 def risk(fname, fnr=0):
     data = pd.read_csv(fname)
 
-    # plt.hist(data[data["fold"]=="ind"]["loss"], alpha=0.5, label="ind")
-    # plt.hist(data[data["fold"] != "ind"]["loss"], alpha=0.5, label="ood")
-    # plt.legend()
-    # plt.show()
-
 
     #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
     data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.99)
 
 
 
-    ood = data[data["oodness"]>=1]
-    ind = data[data["oodness"]<1]
-    # ood = data[data["fold"]=="ood"]
-    # ind = data[data["fold"]!="ood"]
+
+    # ood = data[data["oodness"]>=1]
+    # ind = data[data["oodness"]<1]
+    ood = data[(data["fold"]!="ind") & (data["fold"]!="ind")]
+    ind = data[data["fold"]=="ind"]
     # ood["loss"] = ood["loss"]/ind["loss"].max()
     # ind["loss"] = ind["loss"]/ind["loss"].max()
     random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
-
+    #problem: with bias, losses are averaged too aggressively.
 
     total_risk = 0
     risks = {}
@@ -148,11 +144,12 @@ def risk(fname, fnr=0):
     for sampler in data["sampler"].unique():
         subset_ind = ind[ind["sampler"]==sampler]
         subset_ood = ood[ood["sampler"]==sampler]
-        # risk is avg ood loss if false positive, relevant ood loss if false negative
-        tp = (subset_ood["pvalue"]<=threshold).sum()
 
+        # risk is avg ood loss if false positive, relevant ood loss if false negative
+
+        tp = (subset_ood["pvalue"]<threshold).sum()
         tn = (subset_ind["pvalue"]>threshold).sum()
-        fp = (subset_ind["pvalue"]<=threshold).sum()
+        fp = (subset_ind["pvalue"]<threshold).sum()
         fn = (subset_ood["pvalue"]>threshold).sum()
         acc = (tp+tn)/(tp+tn+fp+fn)
         print(tp, tn, fn, fp)

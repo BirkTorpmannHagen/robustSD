@@ -209,7 +209,7 @@ class CIFAR10wNoise(CIFAR10):
     def __getitem__(self, index):
         x,y = super().__getitem__(index)
         if self.noise_level!=0:
-            x = x + torch.randn_like(x)*self.noise_level
+            x = x + torch.randn_like(x)*self.noise_level*255
         return x,y
 
     def __len__(self):

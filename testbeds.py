@@ -118,15 +118,15 @@ class NicoTestBed(BaseTestBed):
             #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
             #     resnet_version=34).to("cuda").eval()
         self.classifier = ResNetClassifier.load_from_checkpoint(
-            "/home/birk/Projects/robustSD/lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
-            resnet_version=34).to("cuda").eval()
+           "NICODataset_logs/checkpoints_newer/epoch=398-step=3986409.ckpt", num_classes=num_classes,
+            resnet_version=101).to("cuda").eval()
 
 
         # self.rep_model = self.classifier
-        self.rep_model = ResNetVAE().to("cuda").eval()
-
-        self.vae_experiment = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
-        self.vae_experiment.load_state_dict(torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_6/checkpoints/last.ckpt")["state_dict"])
+        # self.rep_model = ResNetVAE().to("cuda").eval()
+        self.rep_model = self.classifier
+        # self.vae_experiment = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
+        # self.vae_experiment.load_state_dict(torch.load("/home/birk/Projects/robustSD/vae_logs/nico_dim/version_7/checkpoints/last.ckpt")["state_dict"])
 
 
     def compute_losses(self, loader):
