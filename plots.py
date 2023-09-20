@@ -460,10 +460,10 @@ if __name__ == '__main__':
     # data = pd.read_csv("NICO_ResNet_ks_50.csv")
 
     print("vanilla")
-    risk("NICO_ResNet_ks_10.csv")
+    risk("NICO_classifier_ks_100_fullloss.csv")
     print("")
     print("5nn")
-    risk("NICO_ResNet_ks_5NN_10.csv")
+    risk("NICO_classifier_ks_5NN_100_fullloss.csv")
 
     # for sample_size in [10, 20, 50, 100, 200, 500]:
     #     print(sample_size)

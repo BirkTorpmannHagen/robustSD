@@ -1,5 +1,7 @@
 import os
 import json
+
+import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from PIL import Image
@@ -204,12 +206,17 @@ class CVC_ClinicDB(data.Dataset):
 class CIFAR10wNoise(CIFAR10):
     def __init__(self, root, train, transform, noise_level=0, target_transform=None, download=False):
         super().__init__(root, train, transform, target_transform, download)
-        self.noise_level = 0
+        self.noise_level = noise_level
+        self.plotted = False
 
     def __getitem__(self, index):
         x,y = super().__getitem__(index)
-        if self.noise_level!=0:
-            x = x + torch.randn_like(x)*self.noise_level*255
+        if self.noise_level!=0 and not self.plotted:
+            x = x + torch.randn_like(x)*self.noise_level
+            print(x.max(), x.min())
+            plt.imshow(x.permute(1,2,0).numpy())
+            plt.show()
+            self.plotted = True
         return x,y
 
     def __len__(self):
@@ -249,7 +256,6 @@ def build_polyp_dataset(root, fold="Etis", seed=0):
     if fold=="Etis":
         train_set = EtisDataset(root, trans, split="train")
         val_set = EtisDataset(root, trans, split="val")
-        return train_set, val_set
     elif fold=="Kvasir":
         train_set = KvasirSegmentationDataset(root)
         val_set = KvasirSegmentationDataset(root, "val")

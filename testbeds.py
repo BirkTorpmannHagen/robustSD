@@ -33,6 +33,7 @@ from classifier.cifarresnet import get_cifar, cifar10_pretrained_weight_urls
 from njord.utils.loss import ComputeLoss
 from njord.val import fetch_model
 from njord.utils.dataloaders import LoadImagesAndLabels
+import segmentation_models_pytorch as smp
 
 class BaseTestBed:
     def __init__(self, sample_size):
@@ -114,6 +115,8 @@ class NicoTestBed(BaseTestBed):
         self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="dim", seed=0)
         self.num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
         self.contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
+        print(self.contexts)
+        self.contexts.remove("dim")
             # self.classifier = ResNetClassifier.load_from_checkpoint(
             #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
             #     resnet_version=34).to("cuda").eval()
@@ -144,7 +147,7 @@ class NicoTestBed(BaseTestBed):
 
 
     def ood_loaders(self):
-        test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts if context!="dim"]
+        test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
 
         oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=20),
                      DataLoader(test_dataset,
@@ -160,8 +163,6 @@ class NicoTestBed(BaseTestBed):
                                                                               ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
                                                                               RandomSampler(self.ind_val)]])}
         return loaders
-
-    
 
 class CIFAR10TestBed(BaseTestBed):
     def __init__(self, sample_size):
@@ -203,7 +204,7 @@ class CIFAR10TestBed(BaseTestBed):
 
     def ood_loaders(self):
         ood_sets = [CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=noise_val)
-                                       for noise_val in np.linspace(0.1, 0.50, 5)]
+                                       for noise_val in np.arange(0.1, 0.3, 0.05)]
         # self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
         #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
         #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
@@ -223,3 +224,49 @@ class CIFAR10TestBed(BaseTestBed):
             yhat = self.classifier(x)
             losses[i]=F.cross_entropy(yhat, y).item()
         return losses.cpu().numpy()
+
+class PolypTestBed(BaseTestBed):
+    def __init__(self, sample_size):
+        super().__init__(sample_size)
+        self.ind, self.val, self.ood = build_polyp_dataset("../../Datasets/Polyp")
+        self.rep_model = smp.DeepLabV3Plus()
+        dict = torch.load("dict")
+        self.rep_model.load_state_dict(dict)
+        trans = transforms.Compose([transforms.Resize((512, 512)),
+                                    transforms.ToTensor()])
+        cvc_train_set, cvc_val_set = build_polyp_dataset("../../Datasets/Polyps/CVC-ClinicDB", "CVC", 0)
+        kvasir_train_set, kvasir_val_set = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+        etis_train, etis_val = build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis", 0)
+        self.ind = ConcatDataset((cvc_train_set, kvasir_train_set, kvasir_val_set))
+        self.ind_val = cvc_val_set
+        self.ood = ConcatDataset([etis_train, etis_val])
+
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        model = ResNetVAE().to("cuda").eval()
+        vae_exp = VAEXperiment(model, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/nico_dim/version_41/checkpoints/last.ckpt")[
+                "state_dict"])
+        classifier = SegmentationModel.load_from_checkpoint(
+            "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
+        classifier.eval()
+        self.rep_model = classifier
+
+    def ind_loader(self):
+        return self.loader(self.ind, sampler=RandomSampler(self.ind))
+
+    def ood_loaders(self):
+        samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
+                                  SequentialSampler(self.ood), RandomSampler(self.ood)]
+        loaders =  {"ood": dict([[sampler.__class__.__name__,  self.loader(self.ood, sampler=sampler)] for sampler in
+                                 samplers])}
+        return loaders
+
+
+    def ind_val_loaders(self):
+        samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                                  SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
+
+        loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
+                                 samplers])}
+        return loaders

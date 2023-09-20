@@ -34,7 +34,6 @@ class RabanserSD(BaseSD):
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
-        print(encodings.shape)
         for i, data in enumerate(dataloader):
             x = data[0]
             with torch.no_grad():
@@ -76,7 +75,7 @@ class RabanserSD(BaseSD):
                 p_value = knn.pval(matrix, n_permutations=100)
             else:
                 raise NotImplementedError
-        return p_value, losses[fold_name][biased_sampler_name][start:stop].mean()
+        return p_value, losses[fold_name][biased_sampler_name][start:stop]
 
     def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size, test):
 
@@ -116,34 +115,33 @@ class RabanserSD(BaseSD):
 
         mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
         knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
-        print(losses)
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
                 ind_encodings = torch.Tensor(ind_encodings)
                 biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
 
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
-                # pool = multiprocessing.Pool(processes=4)
+                pool = multiprocessing.Pool(processes=20)
 
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
                                    :-1]
-                # results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
-                # pool.close()
-                results = []
-                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
-                                   :-1]:
-                    results.append(self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size))
+                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                pool.close()
+                # results = []
+                # for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                #                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                #                    :-1]:
+                #     results.append(self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size))
 
                 # results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
 
-                print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
+                # print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
                 # input()
                 for p_value, sample_loss in results:
 
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(sample_loss.item())
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
 
         return p_values, sample_losses
 
@@ -228,7 +226,7 @@ class KNNDSD(RabanserSD):
 
                     args = [biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses,
                             sample_size]
-                    # pool = multiprocessing.Pool(processes=4)
+                    pool = multiprocessing.Pool(processes=4)
 
                     startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                                   range(sample_size, len(biased_sampler_encodings) + sample_size,
@@ -236,16 +234,16 @@ class KNNDSD(RabanserSD):
                                          :-1]
                     # results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
                     # pool.close()
-                    results = []
-                    for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                                range(sample_size, len(biased_sampler_encodings) + sample_size,
-                                                      sample_size)))[
-                                       :-1]:
-                        results.append(
-                            self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name,
-                                                  biased_sampler_name, losses, sample_size))
+                    # results = []
+                    # for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                    #                             range(sample_size, len(biased_sampler_encodings) + sample_size,
+                    #                                   sample_size)))[
+                    #                    :-1]:
+                    #     results.append(
+                    #         self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name,
+                    #                               biased_sampler_name, losses, sample_size))
 
-                    # results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
+                    results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
 
                     print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
                     # input()
