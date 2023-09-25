@@ -16,7 +16,7 @@ import torch_two_sample as tts
 from sklearn.decomposition import PCA
 
 class BaseSD:
-    def __init__(self, rep_model, sample_selector):
+    def __init__(self, rep_model):
         self.sample_selector = sample_selector
         self.rep_model = rep_model
 
@@ -25,8 +25,8 @@ class BaseSD:
 
 
 class RabanserSD(BaseSD):
-    def __init__(self, rep_model, sample_selector, select_samples=False, k=5):
-        super().__init__(rep_model, sample_selector)
+    def __init__(self, rep_model,  select_samples=False, k=5):
+        super().__init__(rep_model)
         self.select_samples = select_samples
         self.k= k
         # if set_start:
@@ -295,8 +295,8 @@ class KNNDSD(RabanserSD):
 
                 # if fold_name == "ind":
 class TypicalitySD(BaseSD):
-    def __init__(self, rep_model, sample_selector):
-        super().__init__(rep_model, sample_selector)
+    def __init__(self, rep_model):
+        super().__init__(rep_model)
 
     def compute_entropy(self, data_loader):
         log_likelihoods = []
