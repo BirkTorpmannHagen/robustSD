@@ -2,11 +2,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.metrics import RocCurveDisplay
-import seaborn as sns
 from scipy.stats import spearmanr, pearsonr
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_percentage_error as mape
 import numpy as np
+import seaborn as sns
+from ast import literal_eval
+
 def fprat95tpr(ood_ps, ind_ps):
     """
     :param ood_ps
@@ -119,51 +121,76 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
 
 def risk(fname, fnr=0):
     data = pd.read_csv(fname)
+    data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
+    data = data.explode("loss", ignore_index=True)
+    print(data["loss"][0])
+    fig, ax = plt.subplots( len(data["fold"].unique()), 1, figsize=(8,16), sharex=True)
+    for i, fold in enumerate(data["fold"].unique()):
+        data_fold = data[data["fold"]==fold]
+        snsax = sns.histplot(data=data_fold, ax=ax[i], x="loss", hue="fold", bins=200)
+    # ax = sns.stripplot(x="loss", y="pvalue", hue="fold", data=data)
+    # plt.yscale("log")
+    print(data["loss"].max())
+    ax.set_xticks(np.arange(0, 1, 0.1), labels=np.arange(0, 1, 0.1))
+    plt.show()
 
 
-    #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
-    data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.99)
-
-
+    # data = pd.read_csv(fname)
+    # # data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
+    # # print(data["loss"])
+    # ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
+    # plt.yscale("log")
+    # print(data["loss"].max())
+    # ax.set_xticks(np.arange(0, 1, 0.1), labels=np.arange(0, 1, 0.1))
+    # plt.show()
+    # #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
+    # # data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
+    #
+    #
 
 
     # ood = data[data["oodness"]>=1]
     # ind = data[data["oodness"]<1]
-    ood = data[(data["fold"]!="ind") & (data["fold"]!="ind")]
-    ind = data[data["fold"]=="ind"]
-    # ood["loss"] = ood["loss"]/ind["loss"].max()
-    # ind["loss"] = ind["loss"]/ind["loss"].max()
-    random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
-    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
-    threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
-    #problem: with bias, losses are averaged too aggressively.
-
-    total_risk = 0
-    risks = {}
-
-    for sampler in data["sampler"].unique():
-        subset_ind = ind[ind["sampler"]==sampler]
-        subset_ood = ood[ood["sampler"]==sampler]
-
-        # risk is avg ood loss if false positive, relevant ood loss if false negative
-
-        tp = (subset_ood["pvalue"]<threshold).sum()
-        tn = (subset_ind["pvalue"]>threshold).sum()
-        fp = (subset_ind["pvalue"]<threshold).sum()
-        fn = (subset_ood["pvalue"]>threshold).sum()
-        acc = (tp+tn)/(tp+tn+fp+fn)
-        print(tp, tn, fn, fp)
-        print("total: ",(tp+tn+fp+fn) )
-        print(f"acc for {sampler}: {acc}")
-        #tp risk + fp risk + tn risk + fn risk
-        # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
-        # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
-        plt.scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
-        plt.scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
-        plt.yscale("log")
-        plt.legend()
-        plt.title(sampler)
-        plt.show()
+    # ood = data[(data["fold"]!="ind") & (data["fold"]!="dim")]
+    # ind = data[data["fold"]=="ind"]
+    # # ood["loss"] = ood["loss"]/ind["loss"].max()
+    # # ind["loss"] = ind["loss"]/ind["loss"].max()
+    # random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
+    # sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
+    # threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
+    # #problem: with bias, losses are averaged too aggressively.
+    #
+    # total_risk = 0
+    # risks = {}
+    # fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8))
+    # for i, sampler in enumerate(data["sampler"].unique()):
+    #     subset_ind = ind[ind["sampler"]==sampler]
+    #     subset_ood = ood[ood["sampler"]==sampler]
+    #     print(len(subset_ood))
+    #     # risk is avg ood loss if false positive, relevant ood loss if false negative
+    #
+    #     # tp = (subset_ood["pvalue"]<threshold).sum()
+    #     # tn = (subset_ind["pvalue"]>threshold).sum()
+    #     # fp = (subset_ind["pvalue"]<threshold).sum()
+    #     # fn = (subset_ood["pvalue"]>threshold).sum()
+    #     # acc = (tp+tn)/(tp+tn+fp+fn)
+    #     # print(tp, tn, fn, fp)
+    #     # print("total: ",(tp+tn+fp+fn) )
+    #     acc = calibrated_detection_rate(subset_ood["pvalue"], subset_ind["pvalue"])
+    #     print(f"acc for {sampler}: {acc}")
+    #     #tp risk + fp risk + tn risk + fn risk
+    #     # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
+    #     # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
+    #     ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+    #     ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+    #     ax[i].set_yscale("log")
+    #     # ax[i].set_ylim((1e-7, 0))
+    #     ax[i].set_title(sampler)
+    #     plt.legend()
+    #
+    # fig.suptitle(fname)
+    # plt.show()
+        # risk_val = (fn.mean() + fp.mean())/2
 
 
 
@@ -188,7 +215,7 @@ def risk(fname, fnr=0):
     #     total_risk+=risk_val/len(data["sampler"].unique())
     #     risks[sampler]=risk_val
     #     print(f"{sampler} risk: {risk_val}")
-    return risks, total_risk
+    # return risks, total_risk
 
 
 def risk_across_noises(fname, fnr=0):

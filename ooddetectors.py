@@ -17,7 +17,6 @@ from sklearn.decomposition import PCA
 
 class BaseSD:
     def __init__(self, rep_model):
-        self.sample_selector = sample_selector
         self.rep_model = rep_model
 
     def register_testbed(self, testbed):
@@ -27,6 +26,7 @@ class BaseSD:
 class RabanserSD(BaseSD):
     def __init__(self, rep_model,  select_samples=False, k=5):
         super().__init__(rep_model)
+
         self.select_samples = select_samples
         self.k= k
         # if set_start:
@@ -34,7 +34,6 @@ class RabanserSD(BaseSD):
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
-        print(encodings.shape)
         for i, data in enumerate(dataloader):
             x = data[0]
             with torch.no_grad():
@@ -56,23 +55,10 @@ class RabanserSD(BaseSD):
                     [np.argpartition(torch.sum((ood_samples[i].unsqueeze(0)- ind_encodings) ** 2, dim=-1).numpy(), self.k)[:self.k] for i in
                      range(len(ood_samples))])
                 k_nearest_ind = ind_encodings[k_nearest_idx]
-                # pca = PCA()
-                # ind_transformed = pca.fit_transform(ind_encodings)
-                # nn_trans = pca.transform(k_nearest_ind)
-                # nn_ood = pca.transform(ood_samples)
 
                 #samples x
                 p_value = np.min([ks_2samp(k_nearest_ind[:, i], ood_samples[:, i])[-1] for i in
                                   range(self.rep_model.latent_dim)])
-                # if fold_name == "ind":
-                #     plt.scatter(ind_transformed[:, 0], ind_transformed[:, 1], alpha=0.5, label="ind")
-                #     plt.scatter(nn_trans[:, 0], nn_trans[:, 1], alpha=0.5, label="nearest neighbours")
-                #     plt.scatter(nn_ood[:, 0], nn_ood[:, 1], alpha=0.5, label="sample")
-                #     plt.legend()
-                #     plt.savefig(f"test_{start}.png")
-                #     plt.title(p_value)
-                #     plt.clf()
-                #     plt.close()
             else:
                 p_value = np.min([ks_2samp(ind_encodings[:, i], ood_samples[:, i])[-1] for i in
                               range(self.rep_model.latent_dim)])
@@ -89,7 +75,7 @@ class RabanserSD(BaseSD):
                 p_value = knn.pval(matrix, n_permutations=100)
             else:
                 raise NotImplementedError
-        return p_value, losses[fold_name][biased_sampler_name][start:stop].mean()
+        return p_value, losses[fold_name][biased_sampler_name][start:stop]
 
     def compute_pvals_and_loss_for_loader(self,ind_encodings, dataloaders, sample_size, test):
 
@@ -129,34 +115,33 @@ class RabanserSD(BaseSD):
 
         mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
         knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
-        print(losses)
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
                 ind_encodings = torch.Tensor(ind_encodings)
                 biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
 
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
-                # pool = multiprocessing.Pool(processes=4)
+                pool = multiprocessing.Pool(processes=20)
 
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
                                    :-1]
-                # results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
-                # pool.close()
-                results = []
-                for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
-                                   :-1]:
-                    results.append(self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size))
+                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                pool.close()
+                # results = []
+                # for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                #                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                #                    :-1]:
+                #     results.append(self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size))
 
                 # results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
 
-                print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
+                # print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
                 # input()
                 for p_value, sample_loss in results:
 
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(sample_loss.item())
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
 
         return p_values, sample_losses
 
@@ -241,7 +226,7 @@ class KNNDSD(RabanserSD):
 
                     args = [biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses,
                             sample_size]
-                    # pool = multiprocessing.Pool(processes=4)
+                    pool = multiprocessing.Pool(processes=4)
 
                     startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                                   range(sample_size, len(biased_sampler_encodings) + sample_size,
@@ -249,16 +234,16 @@ class KNNDSD(RabanserSD):
                                          :-1]
                     # results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
                     # pool.close()
-                    results = []
-                    for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                                range(sample_size, len(biased_sampler_encodings) + sample_size,
-                                                      sample_size)))[
-                                       :-1]:
-                        results.append(
-                            self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name,
-                                                  biased_sampler_name, losses, sample_size))
+                    # results = []
+                    # for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                    #                             range(sample_size, len(biased_sampler_encodings) + sample_size,
+                    #                                   sample_size)))[
+                    #                    :-1]:
+                    #     results.append(
+                    #         self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name,
+                    #                               biased_sampler_name, losses, sample_size))
 
-                    # results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
+                    results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
 
                     print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
                     # input()
@@ -300,7 +285,7 @@ class TypicalitySD(BaseSD):
 
     def compute_entropy(self, data_loader):
         log_likelihoods = []
-        for i, (x, y, _) in enumerate(data_loader):
+        for i, (x, y) in enumerate(data_loader):
             x = x.to("cuda")
             log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
         entropies = -(torch.tensor(log_likelihoods))
@@ -347,11 +332,14 @@ class TypicalitySD(BaseSD):
                                                   sample_size)))[
                                    :-1]:
                     sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
-                    p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
 
+                    p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+                    if p_value==0:
+                        print(sample_entropy)
+                        print(max(bootstrap_entropy_distribution))
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(np.mean(
-                        losses[fold_name][biased_sampler_name][start:stop]))
+                    sample_losses[fold_name][biased_sampler_name].append(
+                        losses[fold_name][biased_sampler_name][start:stop])
 
         return p_values, sample_losses
 
@@ -367,16 +355,8 @@ class TypicalitySD(BaseSD):
         # sample_size=min(sample_size, len(self.testbed.ind_val_loaders()[0]))
 
         # resubstitution estimation of entropy
-        try:
-            loglikelihoods = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        except FileNotFoundError:
-            loglikelihoods = []
-            for x, y, _ in self.testbed.ind_loader():
-                x = x.to("cuda")
-                loglikelihoods.append(self.rep_model.estimate_log_likelihood(x))
-            torch.save(loglikelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        resub_entropy = -(torch.tensor(loglikelihoods)).mean().item()
-        ind_entropies = -(torch.tensor(loglikelihoods))
+
+        ind_entropies = self.compute_entropy(self.testbed.ind_loader())
         bootstrap_entropy_distribution = sorted(
             [np.random.choice(ind_entropies, sample_size).mean().item() for i in range(10000)])
         entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99)  # alpha of .99 quantile

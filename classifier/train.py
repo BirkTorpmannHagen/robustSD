@@ -39,7 +39,7 @@ def train_classifier(train_set, val_set):
 
     # val_set = CIFAR10("../../Datasets/cifar10", train=False, transform=trans)
     num_classes =  train_set.num_classes
-    model =  ResNetClassifier(num_classes, 101, transfer=True, batch_size=16, lr=1e-7).to("cuda")
+    model =  ResNetClassifier(num_classes, 101, transfer=False, batch_size=16, lr=1e-7).to("cuda")
     # model = ResNetClassifier.load_from_checkpoint("NICODataset_logs/checkpoints/epoch=38-step=389649.ckpt", num_classes=num_classes, resnet_version=101, batch_size=16, lr=1e-7).cuda()
     # train_set = MNIST("../../Datasets/mnist", train=True, download=True, transform=trans)
     # val_set = MNIST("../../Datasets/mnist", train=False, download=True, transform=trans)
@@ -47,11 +47,11 @@ def train_classifier(train_set, val_set):
     # train_set = wrap_dataset(train_set)
     # val_set = wrap_dataset(val_set)
     checkpoint_callback = ModelCheckpoint(
-        dirpath=f"{type(train_set).__name__}_logs/checkpoints_newer",
-        save_top_k=1,
+        dirpath=f"{type(train_set).__name__}_logs/checkpoints_nopretrain",
+        save_top_k=3,
         verbose=True,
-        monitor="val_loss",
-        mode="min"
+        monitor="val_acc",
+        mode="max"
     )
 
 
