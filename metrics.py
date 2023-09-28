@@ -32,12 +32,13 @@ def calibrated_detection_rate(ood_ps, ind_ps, tnr_threshold=0, threshold=0):
     :return:
     """
     sorted_ps = sorted(ind_ps)
-    threshold = sorted_ps[int(np.ceil(tnr_threshold*len(sorted_ps)))]
+    if threshold==0:
+        threshold = sorted_ps[int(np.ceil(tnr_threshold*len(sorted_ps)))]
     # threshold = min(sorted_ps)
 
     # print("t:", threshold)
 
-    return ((1-tnr_threshold)+(ood_ps<threshold).mean()) /2
+    return ((ind_ps>threshold).mean()+(ood_ps<threshold).mean()) /2
 
 def auroc(ood_ps, ind_ps):
     true = [0]*len(ood_ps)+[1]*len(ind_ps)
@@ -122,100 +123,74 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
 def risk(fname, fnr=0):
     data = pd.read_csv(fname)
     data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
-    data = data.explode("loss", ignore_index=True)
     print(data["loss"][0])
-    fig, ax = plt.subplots( len(data["fold"].unique()), 1, figsize=(8,16), sharex=True)
-    for i, fold in enumerate(data["fold"].unique()):
-        data_fold = data[data["fold"]==fold]
-        snsax = sns.histplot(data=data_fold, ax=ax[i], x="loss", hue="fold", bins=200)
-    # ax = sns.stripplot(x="loss", y="pvalue", hue="fold", data=data)
-    # plt.yscale("log")
-    print(data["loss"].max())
-    ax.set_xticks(np.arange(0, 1, 0.1), labels=np.arange(0, 1, 0.1))
-    plt.show()
+    data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+    print(data["loss"][0])
+    # data = data.explode("loss", ignore_index=True)
 
-
-    # data = pd.read_csv(fname)
-    # # data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
-    # # print(data["loss"])
-    # ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
-    # plt.yscale("log")
-    # print(data["loss"].max())
+    # print(data["loss"][0])
+    # fig, ax = plt.subplots( len(data["fold"].unique()), 1, figsize=(8,16), sharex=True)
+    # for i, fold in enumerate(data["fold"].unique()):
+    #     data_fold = data[data["fold"]==fold]
+    #
+    #     # snsax = sns.histplot(data=data_fold, ax=ax[i], x="loss", hue="fold", bins=200)
+    # # ax = sns.stripplot(x="loss", y="pvalue", hue="fold", data=data)
+    # # plt.yscale("log")
+    # plt.show()
     # ax.set_xticks(np.arange(0, 1, 0.1), labels=np.arange(0, 1, 0.1))
-    # plt.show()
+
+
+
     # #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
-    # # data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
+    # grouped = data.groupby(["fold", "pvalue", "sampler"]).mean().reset_index()
+    # print(grouped)
+    data = data[(data["fold"]=="ind")|(data["fold"]=="noise_0.1")]
+    data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
+
+    ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
+    plt.yscale("log")
+    plt.show()
     #
     #
 
-
-    # ood = data[data["oodness"]>=1]
-    # ind = data[data["oodness"]<1]
-    # ood = data[(data["fold"]!="ind") & (data["fold"]!="dim")]
+    ood = data[data["oodness"]>=1]
+    ind = data[data["oodness"]<1]
+    # ood = data[(data["fold"]!="ind")]
     # ind = data[data["fold"]=="ind"]
-    # # ood["loss"] = ood["loss"]/ind["loss"].max()
-    # # ind["loss"] = ind["loss"]/ind["loss"].max()
-    # random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
-    # sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
-    # threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
-    # #problem: with bias, losses are averaged too aggressively.
-    #
-    # total_risk = 0
-    # risks = {}
-    # fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8))
-    # for i, sampler in enumerate(data["sampler"].unique()):
-    #     subset_ind = ind[ind["sampler"]==sampler]
-    #     subset_ood = ood[ood["sampler"]==sampler]
-    #     print(len(subset_ood))
-    #     # risk is avg ood loss if false positive, relevant ood loss if false negative
-    #
-    #     # tp = (subset_ood["pvalue"]<threshold).sum()
-    #     # tn = (subset_ind["pvalue"]>threshold).sum()
-    #     # fp = (subset_ind["pvalue"]<threshold).sum()
-    #     # fn = (subset_ood["pvalue"]>threshold).sum()
-    #     # acc = (tp+tn)/(tp+tn+fp+fn)
-    #     # print(tp, tn, fn, fp)
-    #     # print("total: ",(tp+tn+fp+fn) )
-    #     acc = calibrated_detection_rate(subset_ood["pvalue"], subset_ind["pvalue"])
-    #     print(f"acc for {sampler}: {acc}")
-    #     #tp risk + fp risk + tn risk + fn risk
-    #     # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
-    #     # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
-    #     ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
-    #     ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
-    #     ax[i].set_yscale("log")
-    #     # ax[i].set_ylim((1e-7, 0))
-    #     ax[i].set_title(sampler)
-    #     plt.legend()
-    #
-    # fig.suptitle(fname)
-    # plt.show()
-        # risk_val = (fn.mean() + fp.mean())/2
 
+    random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
+    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
+    threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
+    #problem: with bias, losses are averaged too aggressively.
 
+    total_risk = 0
+    risks = {}
+    fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8), sharey=True)
+    for i, sampler in enumerate(data["sampler"].unique()):
+        subset_ind = ind[ind["sampler"]==sampler]
+        subset_ood = ood[ood["sampler"]==sampler]
+        print(len(subset_ood))
+        # risk is avg ood loss if false positive, relevant ood loss if false negative
 
-    # for sampler in data["sampler"].unique():
-    #     subset_ind = ind[ind["sampler"]==sampler]
-    #     subset_ood = ood[ood["sampler"]==sampler]
-    #     # risk is avg ood loss if false positive, relevant ood loss if false negative
+        # tp = (subset_ood["pvalue"]<threshold).sum()
+        # tn = (subset_ind["pvalue"]>threshold).sum()
+        # fp = (subset_ind["pvalue"]<threshold).sum()
+        # fn = (subset_ood["pvalue"]>threshold).sum()
+        # acc = (tp+tn)/(tp+tn+fp+fn)
+        # print(tp, tn, fn, fp)
+        # print("total: ",(tp+tn+fp+fn) )
+        acc = calibrated_detection_rate(subset_ood["pvalue"], subset_ind["pvalue"], threshold=threshold)
+        print(f"acc for {sampler}: {acc}")
+        ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+        ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+        ax[i].set_yscale("log")
+        ax[i].hlines(threshold, 0, 10, label="threshold")
+        # ax[i].set_ylim((1e-7, 0))
+        ax[i].set_title(sampler)
+        plt.legend()
     #
-    #
-    #     #tp risk + fp risk + tn risk + fn risk
-    #     # fn = (subset_ood["loss"])*(subset_ood["pvalue"]>=threshold) #false negative
-    #     # fp = (subset_ood["loss"].mean())*(subset_ind["pvalue"]<=threshold) #false positive
-    #     plt.scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
-    #     plt.scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
-    #     plt.yscale("log")
-    #     plt.legend()
-    #     plt.title(sampler)
-    #     plt.show()
-    #     # risk_val = (fn.mean() + fp.mean())/2
-    #     risk =
-    #
-    #     total_risk+=risk_val/len(data["sampler"].unique())
-    #     risks[sampler]=risk_val
-    #     print(f"{sampler} risk: {risk_val}")
-    # return risks, total_risk
+    fig.suptitle(fname)
+    plt.show()
 
 
 def risk_across_noises(fname, fnr=0):

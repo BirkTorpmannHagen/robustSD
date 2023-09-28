@@ -187,12 +187,12 @@ class CIFAR10TestBed(BaseTestBed):
         #     torch.load("vae_logs/nico_dim/version_4/checkpoints/epoch=2-step=37500.ckpt")[
         #         "state_dict"])
         self.num_classes = 10
-        self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans)
+        self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
 
 
     def ind_loader(self):
         return DataLoader(
-            CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans), shuffle=False, num_workers=20)
+            CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
 
     def ind_val_loaders(self):
         loaders = {"ind": dict(

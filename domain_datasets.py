@@ -211,12 +211,8 @@ class CIFAR10wNoise(CIFAR10):
 
     def __getitem__(self, index):
         x,y = super().__getitem__(index)
-        if self.noise_level!=0 and not self.plotted:
+        if self.noise_level!=0:
             x = x + torch.randn_like(x)*self.noise_level
-            print(x.max(), x.min())
-            plt.imshow(x.permute(1,2,0).numpy())
-            plt.show()
-            self.plotted = True
         return x,y
 
     def __len__(self):
