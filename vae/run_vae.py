@@ -56,7 +56,10 @@ model = ResNetVAE()
 experiment = VAEXperiment(model,
                           config['exp_params'])
 
-train, val, test = build_njord_dataset()
+# train, val, test = build_njord_dataset()
+
+train = CIFAR10("../../Datasets/CIFAR10", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
 
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
                                name="CIFAR10")
@@ -67,7 +70,7 @@ runner = Trainer(logger=tb_logger,
                  accelerator="gpu",
                  callbacks=[
                      LearningRateMonitor(),
-                     ModelCheckpoint(save_top_k=5,
+                     ModelCheckpoint(save_top_k=25,
                                      dirpath =os.path.join(tb_logger.log_dir , "checkpoints"), 
                                      monitor= "val_loss",
                                      save_last= True),

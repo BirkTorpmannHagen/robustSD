@@ -179,20 +179,22 @@ class CIFAR10TestBed(BaseTestBed):
         self.classifier = get_cifar("resnet32", layers= [5]*3, model_urls=cifar10_pretrained_weight_urls,progress=True, pretrained=True).cuda().eval()
 
         self.rep_model = WrappedCIFAR10Resnet(self.classifier)
-        # config = yaml.safe_load(open("vae/configs/vae.yaml"))
-        # self.rep_model = VanillaVAE(3,512).to("cuda").eval()
-        # self.rep_model = ResNetVAE().cuda().eval()
-        # vae_exp = VAEXperiment(self.rep_model, config)
-        # vae_exp.load_state_dict(
-        #     torch.load("vae_logs/nico_dim/version_4/checkpoints/epoch=2-step=37500.ckpt")[
-        #         "state_dict"])
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        self.vae = ResNetVAE().cuda().eval()
+        vae_exp = VAEXperiment(self.vae, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/CIFAR10/version_5/checkpoints/epoch=3-step=3128.ckpt")[
+                "state_dict"])
         self.num_classes = 10
-        self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
+        # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
+        self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
 
 
     def ind_loader(self):
+        # return DataLoader(
+        #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
         return DataLoader(
-            CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
+            self.ind, shuffle=False, num_workers=20)
 
     def ind_val_loaders(self):
         loaders = {"ind": dict(

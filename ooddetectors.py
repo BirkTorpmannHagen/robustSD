@@ -16,8 +16,7 @@ import torch_two_sample as tts
 from sklearn.decomposition import PCA
 
 class BaseSD:
-    def __init__(self, rep_model, sample_selector):
-        self.sample_selector = sample_selector
+    def __init__(self, rep_model):
         self.rep_model = rep_model
 
     def register_testbed(self, testbed):
@@ -25,8 +24,8 @@ class BaseSD:
 
 
 class RabanserSD(BaseSD):
-    def __init__(self, rep_model, sample_selector, select_samples=False, k=1, processes=20):
-        super().__init__(rep_model, sample_selector)
+    def __init__(self, rep_model,  select_samples=False, k=5, processes=5):
+        super().__init__(rep_model)
         self.select_samples = select_samples
         self.k= k
         self.processes = processes
@@ -281,12 +280,12 @@ class KNNDSD(RabanserSD):
 
                 # if fold_name == "ind":
 class TypicalitySD(BaseSD):
-    def __init__(self, rep_model, sample_selector):
-        super().__init__(rep_model, sample_selector)
+    def __init__(self, rep_model):
+        super().__init__(rep_model)
 
     def compute_entropy(self, data_loader):
         log_likelihoods = []
-        for i, (x, y, _) in enumerate(data_loader):
+        for i, (x, y) in enumerate(data_loader):
             x = x.to("cuda")
             log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
         entropies = -(torch.tensor(log_likelihoods))
@@ -333,11 +332,14 @@ class TypicalitySD(BaseSD):
                                                   sample_size)))[
                                    :-1]:
                     sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
-                    p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
 
+                    p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+                    if p_value==0:
+                        print(sample_entropy)
+                        print(max(bootstrap_entropy_distribution))
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(np.mean(
-                        losses[fold_name][biased_sampler_name][start:stop]))
+                    sample_losses[fold_name][biased_sampler_name].append(
+                        losses[fold_name][biased_sampler_name][start:stop])
 
         return p_values, sample_losses
 
@@ -353,16 +355,8 @@ class TypicalitySD(BaseSD):
         # sample_size=min(sample_size, len(self.testbed.ind_val_loaders()[0]))
 
         # resubstitution estimation of entropy
-        try:
-            loglikelihoods = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        except FileNotFoundError:
-            loglikelihoods = []
-            for x, y, _ in self.testbed.ind_loader():
-                x = x.to("cuda")
-                loglikelihoods.append(self.rep_model.estimate_log_likelihood(x))
-            torch.save(loglikelihoods, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-        resub_entropy = -(torch.tensor(loglikelihoods)).mean().item()
-        ind_entropies = -(torch.tensor(loglikelihoods))
+
+        ind_entropies = self.compute_entropy(self.testbed.ind_loader())
         bootstrap_entropy_distribution = sorted(
             [np.random.choice(ind_entropies, sample_size).mean().item() for i in range(10000)])
         entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99)  # alpha of .99 quantile
