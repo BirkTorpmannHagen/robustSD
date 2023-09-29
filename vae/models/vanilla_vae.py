@@ -16,6 +16,284 @@ def gaussian_likelihood(x, mu_x, sigma_x):
     # Calculate the likelihood for each data point and take the average across all data points
     return torch.mean(likelihood)
 
+class CIFARVAE(BaseVAE):
+    def __init__(self, image_size, channel_num, kernel_num, z_size):
+        # configurations
+        super().__init__()
+        self.image_size = image_size
+        self.channel_num = channel_num
+        self.kernel_num = kernel_num
+        self.z_size = self.latent_dim =  z_size
+
+        # encoder
+        self.encoder = nn.Sequential(
+            self._conv(channel_num, kernel_num // 4),
+            self._conv(kernel_num // 4, kernel_num // 2),
+            self._conv(kernel_num // 2, kernel_num),
+        )
+
+        # encoded feature's size and volume
+        self.feature_size = image_size // 8
+        self.feature_volume = kernel_num * (self.feature_size ** 2)
+
+        # q
+        self.q_mean = self._linear(self.feature_volume, z_size, relu=False)
+        self.q_logvar = self._linear(self.feature_volume, z_size, relu=False)
+
+        # projection
+        self.project = self._linear(z_size, self.feature_volume, relu=False)
+
+        # decoder
+        self.decoder = nn.Sequential(
+            self._deconv(kernel_num, kernel_num // 2),
+            self._deconv(kernel_num // 2, kernel_num // 4),
+            self._deconv(kernel_num // 4, channel_num),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # encode x
+        encoded = self.encoder(x)
+
+        # sample latent code z from q given x.
+        mean, logvar = self.q(encoded)
+        z = self.z(mean, logvar)
+
+        z_projected = self.project(z).view(
+            -1, self.kernel_num,
+            self.feature_size,
+            self.feature_size,
+        )
+
+        # reconstruct x from z
+        x_reconstructed = self.decoder(z_projected)
+
+        # return the parameters of distribution of q given x and the
+        # reconstructed image.
+        # return (mean, logvar), x_reconstructed
+        return  x_reconstructed, x, mean, logvar
+
+        # ==============
+        # VAE components
+        # ==============
+
+
+    def decode(self, z):
+        # z_projected = self.project(z).view(
+        #     -1, self.kernel_num,
+        #     self.feature_size,
+        #     self.feature_size,
+        # )
+        z_projected = z
+        # reconstruct x from z
+        x_reconstructed = self.decoder(z_projected)
+        return x_reconstructed
+    def q(self, encoded):
+        unrolled = encoded.view(-1, self.feature_volume)
+        return self.q_mean(unrolled), self.q_logvar(unrolled)
+
+    def z(self, mean, logvar):
+        std = logvar.mul(0.5).exp_()
+        eps = (
+            Variable(torch.randn(std.size())).cuda() if self._is_on_cuda else
+            Variable(torch.randn(std.size()))
+        )
+        return eps.mul(std).add_(mean)
+
+    def loss_function(self,
+                      *args,
+                      **kwargs) -> dict:
+        """
+        Computes the VAE loss function.
+        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        recons = args[0]
+        input = args[1]
+        mu = args[2]
+        log_var = args[3]
+
+        kld_weight = kwargs['M_N']  # Account for the minibatch samples from the dataset
+        recons_loss = F.mse_loss(recons, input)
+
+        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
+
+        loss = recons_loss + kld_weight * kld_loss
+        return {'loss': loss, 'Reconstruction_Loss': recons_loss.detach(), 'KLD': -kld_loss.detach()}
+
+        # =====
+        # Utils
+        # =====
+
+    def sample(self, size, current_device: int, **kwargs):
+        z = Variable(
+            torch.randn(size, self.z_size).cuda() if self._is_on_cuda() else
+            torch.randn(size, self.z_size)
+        )
+        z_projected = self.project(z).view(
+            -1, self.kernel_num,
+            self.feature_size,
+            self.feature_size,
+        )
+        return self.decoder(z_projected).data
+
+    def _is_on_cuda(self):
+        return next(self.parameters()).is_cuda
+
+    # ======
+    # Layers
+    # ======
+
+    def _conv(self, channel_size, kernel_num):
+        return nn.Sequential(
+            nn.Conv2d(
+                channel_size, kernel_num,
+                kernel_size=4, stride=2, padding=1,
+            ),
+            nn.BatchNorm2d(kernel_num),
+            nn.ReLU(),
+        )
+
+    def _deconv(self, channel_num, kernel_num):
+        return nn.Sequential(
+            nn.ConvTranspose2d(
+                channel_num, kernel_num,
+                kernel_size=4, stride=2, padding=1,
+            ),
+            nn.BatchNorm2d(kernel_num),
+            nn.ReLU(),
+        )
+
+    def _linear(self, in_size, out_size, relu=True):
+        return nn.Sequential(
+            nn.Linear(in_size, out_size),
+            nn.ReLU(),
+        ) if relu else nn.Linear(in_size, out_size)
+
+    def estimate_log_likelihood(self, sample, num_samples=100, prior_mean=0, prior_std=1):
+        """
+        Estimate the log likelihood for a given sample using a trained VAE and importance sampling.
+
+        Args:
+            vae: The trained VAE model.
+            sample: A single CIFAR10 image (shape: [3, 32, 32]).
+            num_samples: Number of samples to use for the Monte Carlo estimate (default: 100).
+            prior_mean: Mean of the prior distribution (default: 0).
+            prior_std: Standard deviation of the prior distribution (default: 1).
+
+        Returns:
+            log_likelihood: The estimated log likelihood for the given sample.
+        """
+
+
+
+        # Encode the sample to obtain the (mu, sigma) encoding
+        mu, log_sigma = self.encode(sample)
+        sigma = torch.exp(log_sigma)
+        sigma = sigma + 1e-5
+        # Compute the prior and learned distributions
+        prior_dist = Normal(prior_mean, prior_std)
+        learned_dist = Normal(mu, sigma)
+
+        # Sample multiple times from the learned latent distribution using the reparameterization trick
+        epsilon = torch.randn(num_samples, sigma.shape[-1]).to("cuda")
+        z = mu + epsilon * sigma
+
+        # Decode the latent variables to reconstruct the samples
+        reconstructions = self.decode(z)
+
+        # Compute the log probabilities of the reconstructions under the learned and prior distributions
+        log_probs_prior = prior_dist.log_prob(z).sum(dim=1)
+        log_probs_learned = learned_dist.log_prob(z).sum(dim=1)
+        log_probs_recon = -F.binary_cross_entropy(reconstructions, sample.repeat(num_samples, 1, 1, 1),
+                                                  reduction='none').view(num_samples, -1).sum(dim=1)
+
+        # Compute the importance weights for each sample
+        importance_weights = log_probs_recon + log_probs_prior - log_probs_learned
+
+        # Compute the log likelihood using the importance weights
+        log_likelihood = torch.logsumexp(importance_weights, dim=0) - torch.log(torch.tensor(float(num_samples)))
+
+        return log_likelihood.item()
+    def elbo_likelihood(self, sample):
+        """
+        Estimate the ELBO for a given sample using a trained VAE.
+
+        Args:
+            vae: The trained VAE model.
+            sample: A single CIFAR10 image (shape: [3, 32, 32]).
+            prior_mean: Mean of the prior distribution (default: 0).
+            prior_std: Standard deviation of the prior distribution (default: 1).
+
+        Returns:
+            elbo: The estimated ELBO for the given sample.
+        """
+
+        # Ensure the input sample has the correct shape
+        # Encode the sample to obtain the (mu, sigma) encoding
+        mu, log_sigma = self.encode(sample)
+        sigma = torch.exp(log_sigma)
+
+        # Sample from the learned latent distribution using the reparameterization trick
+        epsilon = torch.randn_like(sigma)
+        z = mu + epsilon * sigma
+
+        # Decode the latent variable to reconstruct the sample
+        reconstruction = self.decode(z)
+
+        # Compute the reconstruction loss (negative log likelihood of the sample)
+        recon_loss = F.binary_cross_entropy(reconstruction, sample, reduction='sum') / sample.size(0)
+
+        # Compute the KL divergence between the learned distribution and the prior
+        prior_dist = Normal(0, 1)
+        learned_dist = Normal(mu, sigma)
+        kl_div = torch.distributions.kl_divergence(learned_dist, prior_dist).sum() / sample.size(0)
+
+        # Compute the ELBO by subtracting the KL divergence from the reconstruction loss
+        elbo = recon_loss - kl_div
+
+        return elbo.item()
+    def entropy(self, prob_distribution):
+        # Calculate the entropy for a given probability distribution
+        prob_distribution = torch.tensor(prob_distribution)
+        non_zero_indices = prob_distribution > 0
+        entropy = -torch.sum(prob_distribution[non_zero_indices] * torch.log(prob_distribution[non_zero_indices]))
+        return entropy
+
+    def get_encoding(self, x):
+        return self.encode(x)[0]
+    def generate(self, x: Tensor, **kwargs) -> Tensor:
+        """
+        Given an input image x, returns the reconstructed image
+        :param x: (Tensor) [B x C x H x W]
+        :return: (Tensor) [B x C x H x W]
+        """
+
+        return self.forward(x)[0]
+    # def sample(self,
+    #            num_samples:int,
+    #            current_device: int, **kwargs) -> Tensor:
+    #     """
+    #     Samples from the latent space and return the corresponding
+    #     image space map.
+    #     :param num_samples: (Int) Number of samples
+    #     :param current_device: (Int) Device to run the model
+    #     :return: (Tensor)
+    #     """
+    #     z = Variable(
+    #                 torch.randn(num_samples, self.z_size).cuda() if self._is_on_cuda() else
+    #                 torch.randn(num_samples, self.z_size)
+    #             )
+    #     z_projected = self.project(z).view(
+    #         -1, self.kernel_num,
+    #         self.feature_size,
+    #         self.feature_size,
+    #     )
+    #
+    #     samples = self.decode(z)
+    #     return samples
 
 class VanillaVAE(BaseVAE):
 
@@ -258,13 +536,12 @@ class ResNetVAE(BaseVAE):
             log_likelihood: The estimated log likelihood for the given sample.
         """
 
-        # Ensure the input sample has the correct shape
-        # sample = sample.unsqueeze(0)
+
 
         # Encode the sample to obtain the (mu, sigma) encoding
         mu, log_sigma = self.encode(sample)
         sigma = torch.exp(log_sigma)
-
+        sigma = sigma + 1e-5
         # Compute the prior and learned distributions
         prior_dist = Normal(prior_mean, prior_std)
         learned_dist = Normal(mu, sigma)

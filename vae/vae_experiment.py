@@ -51,7 +51,7 @@ class VAEXperiment(pl.LightningModule):
         self.curr_device = real_img.device
         results = self.forward(real_img)
         val_loss = self.model.loss_function(*results,
-                                            M_N = 1.0, #real_img.shape[0]/ self.num_val_imgs,
+                                            M_N = 0.5, #real_img.shape[0]/ self.num_val_imgs,
                                             optimizer_idx = optimizer_idx,
                                             batch_idx = batch_idx)
 
