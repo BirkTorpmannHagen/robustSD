@@ -2,7 +2,7 @@ import os
 import yaml
 import argparse
 from pathlib import Path
-from models.vanilla_vae import VanillaVAE, ResNetVAE
+from models.vanilla_vae import VanillaVAE, ResNetVAE, CIFARVAE
 from vae_experiment import VAEXperiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -52,7 +52,8 @@ with open(args.filename, 'r') as file:
 
 
 
-model = ResNetVAE()
+# model = ResNetVAE()
+model = CIFARVAE(32, 3, 128, 128)
 experiment = VAEXperiment(model,
                           config['exp_params'])
 
@@ -70,7 +71,7 @@ runner = Trainer(logger=tb_logger,
                  accelerator="gpu",
                  callbacks=[
                      LearningRateMonitor(),
-                     ModelCheckpoint(save_top_k=25,
+                     ModelCheckpoint(save_top_k=3,
                                      dirpath =os.path.join(tb_logger.log_dir , "checkpoints"), 
                                      monitor= "val_loss",
                                      save_last= True),
