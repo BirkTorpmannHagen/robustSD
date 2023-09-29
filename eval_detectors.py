@@ -69,6 +69,7 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
 if __name__ == '__main__':
 
     torch.multiprocessing.set_start_method('spawn')
+
     for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
         # bench = NicoTestBed(sample_size)
         # tsd = RabanserSD(bench.rep_model, None, select_samples=True, processes=5)

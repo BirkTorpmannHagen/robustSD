@@ -120,38 +120,21 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
     # return np.mean(test_loss_likelihoods)
 
 
-def risk(fname, fnr=0):
+def risk(fname, fnr=0, ood_fold_name="ood"):
     data = pd.read_csv(fname)
+
+    #merge loss arrays
     data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
-    print(data["loss"][0])
     data["loss"] = data["loss"].apply(lambda x: np.mean(x))
-    print(data["loss"][0])
-    # data = data.explode("loss", ignore_index=True)
 
-    # print(data["loss"][0])
-    # fig, ax = plt.subplots( len(data["fold"].unique()), 1, figsize=(8,16), sharex=True)
-    # for i, fold in enumerate(data["fold"].unique()):
-    #     data_fold = data[data["fold"]==fold]
-    #
-    #     # snsax = sns.histplot(data=data_fold, ax=ax[i], x="loss", hue="fold", bins=200)
-    # # ax = sns.stripplot(x="loss", y="pvalue", hue="fold", data=data)
-    # # plt.yscale("log")
-    # plt.show()
-    # ax.set_xticks(np.arange(0, 1, 0.1), labels=np.arange(0, 1, 0.1))
-
-
-
-    # #how OOD a given sample is, from 0 (no loss) to 1 (max val loss); higher is ood
-    # grouped = data.groupby(["fold", "pvalue", "sampler"]).mean().reset_index()
-    # print(grouped)
-    data = data[(data["fold"]=="ind")|(data["fold"]=="noise_0.1")]
+    #select
+    data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
     data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
 
     ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
     plt.yscale("log")
     plt.show()
-    #
-    #
+
 
     ood = data[data["oodness"]>=1]
     ind = data[data["oodness"]<1]
