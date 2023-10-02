@@ -7,18 +7,22 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_percentage_error as mape
 import numpy as np
 import seaborn as sns
+import math
 from ast import literal_eval
 
-def fprat95tpr(ood_ps, ind_ps):
+def fprat95tpr(ood_ps, ind_ps, threshold=0):
     """
     :param ood_ps
     :param ind_ps
     Find p-value threshold that results in 95% TPR. Then find FPR.
+    If threshold is given, use that instead.
     :return:
     """
 
     sorted_ps = sorted(ood_ps) #from lowest to highest
-    threshold = sorted_ps[int(len(ood_ps)*0.95)]
+    if threshold==0:
+        threshold = sorted_ps[int(len(ood_ps)*0.95)]
+
     thresholded = ind_ps<threshold
     return thresholded.mean()
 
@@ -55,22 +59,24 @@ def aupr(ood_ps, ind_ps):
     auc = average_precision_score(true, probs)
     return auc
 
-# def sample_sensitivity():
-#     """
-#     Quantifies the sensitivity of a given method to sample size.
-#     Essentially: area under the detection-error v sample size curve.
-#     :return:
-#     """
+def correlation(pandas_df, plot=False, split_by_sampler=True):
+    # pandas_df["pvalue"]=pandas_df["pvalue"].apply(lambda x: math.log(x, 10))
+    pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
+    merged_p = pandas_df["pvalue"].apply(lambda x: math.log10(x) if x!=0 else -250)
+    merged_loss = pandas_df["loss"]
 
-def correlation_split(ood_ps, ind_ps, ood_loss, ind_loss):
-    merged_p = list(ood_ps)+list(ind_ps)
-    merged_loss = list(ood_loss)+list(ind_loss)
-    # sns.regplot(data=merged, x="P", y="loss")
+    if plot:
+        for sampler in pd.unique(pandas_df["sampler"]):
+            sns.scatterplot(data=pandas_df[pandas_df["sampler"]==sampler], x="pvalue", y="loss", label=sampler)
+        # assert len(pandas_df["sampler"].unique())==1
+        # plt.title(pandas_df["sampler"].unique()[0])
+        plt.xscale("log")
+        plt.show()
+    if split_by_sampler:
+        for sampler in pd.unique(pandas_df["sampler"]):
+            bysampler = pandas_df[pandas_df["sampler"]==sampler]
+            print(f"{sampler}: {pearsonr(bysampler['pvalue'].apply(lambda x: math.log10(x) if x!=0 else -250), bysampler['loss'])}")
     return spearmanr(merged_p, merged_loss)
-
-def correlation(ps, loss):
-
-    return spearmanr(ps, loss)
 
 def linreg_smape(ps, loss, ood_ps, ood_loss):
     lr = LinearRegression()
@@ -85,7 +91,6 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
         #todo: collect a new noise dataset with the right predictor
         :returns the average likelihood of the observed test-loss as bootstrapped from the pdf w/noise.
         Higher likelihood ~ more likely that the model is correct more often.
-        
     """
     #split ps into unevenly sized bins with equal number of entries
     pargsort = np.argsort(ps)
@@ -110,70 +115,62 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
         predicted_loss = np.mean(loss_samples_per_bin[np.clip(index, 0, len(loss_samples_per_bin)-1)])
         loss_diff.append(np.abs(loss-predicted_loss))
     return np.mean(loss_diff)
-    #index of the p-bin that each test point falls into
-
-    # print(np.max(test_p_indexes))
-    # print(len(loss_pdfs))
-    # test_loss_pdfs = [loss_pdfs[np.clip(i, 0,len(loss_pdfs)-1)] for i in test_p_indexes]
-    # test_loss_likelihoods = [pdf[0][np.clip(np.digitize(test_loss, pdf[1]), 0, 3)] for test_loss, pdf in zip(test_losses, test_loss_pdfs)]
-    # print(test_loss_likelihoods)
-    # return np.mean(test_loss_likelihoods)
 
 
-def risk(fname, fnr=0, ood_fold_name="ood"):
+
+def collect_losswise_metrics(fname, fnr=0, ood_fold_name="ood", plots=False):
     data = pd.read_csv(fname)
-
     #merge loss arrays
     data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
     data["loss"] = data["loss"].apply(lambda x: np.mean(x))
-
-    #select
-    data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
+    # data= data.explode("loss")
+    # print(data)
+    # input()
+    #determine sample oodness according to loss
+    if ood_fold_name!="ood":
+        data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
     data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
-
-    ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
-    plt.yscale("log")
-    plt.show()
-
-
     ood = data[data["oodness"]>=1]
     ind = data[data["oodness"]<1]
+
     # ood = data[(data["fold"]!="ind")]
     # ind = data[data["fold"]=="ind"]
 
+    if plots:
+        ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
+        plt.yscale("log")
+        plt.show()
+
+
+    #find threshold for ind/ood; simulate "naive" approach of not accounting for sample bias
     random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
-    #problem: with bias, losses are averaged too aggressively.
-
-    total_risk = 0
-    risks = {}
-    fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8), sharey=True)
+    corr = correlation(data, plot=True)
+    print(corr)
+    if plots:
+        fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8), sharey=True)
     for i, sampler in enumerate(data["sampler"].unique()):
         subset_ind = ind[ind["sampler"]==sampler]
         subset_ood = ood[ood["sampler"]==sampler]
-        print(len(subset_ood))
-        # risk is avg ood loss if false positive, relevant ood loss if false negative
-
-        # tp = (subset_ood["pvalue"]<threshold).sum()
-        # tn = (subset_ind["pvalue"]>threshold).sum()
-        # fp = (subset_ind["pvalue"]<threshold).sum()
-        # fn = (subset_ood["pvalue"]>threshold).sum()
-        # acc = (tp+tn)/(tp+tn+fp+fn)
-        # print(tp, tn, fn, fp)
-        # print("total: ",(tp+tn+fp+fn) )
+        merged = pd.concat([subset_ind, subset_ood])
         acc = calibrated_detection_rate(subset_ood["pvalue"], subset_ind["pvalue"], threshold=threshold)
-        print(f"acc for {sampler}: {acc}")
-        ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
-        ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
-        ax[i].set_yscale("log")
-        ax[i].hlines(threshold, 0, 10, label="threshold")
-        # ax[i].set_ylim((1e-7, 0))
-        ax[i].set_title(sampler)
-        plt.legend()
+        fpr = fprat95tpr(subset_ood["pvalue"], subset_ind["pvalue"], threshold=threshold)
+
+        # print(f"acc for {sampler}: {acc}")
+        # print(f"fpr for {sampler}: {fpr}")
+        if plots:
+            ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+            ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+            ax[i].set_yscale("log")
+            ax[i].hlines(threshold, 0, 10, label="threshold")
+            # ax[i].set_ylim((1e-7, 0))
+            ax[i].set_title(sampler)
+            plt.legend()
     #
-    fig.suptitle(fname)
-    plt.show()
+    if plots:
+        fig.suptitle(fname)
+        plt.show()
 
 
 def risk_across_noises(fname, fnr=0):

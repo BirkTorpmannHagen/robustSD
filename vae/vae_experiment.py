@@ -37,8 +37,8 @@ class VAEXperiment(pl.LightningModule):
 
         results = self.forward(real_img)
         #Annealing for better training
-        M_N = 0.003*math.exp(-0.01*self.current_epoch)*math.sin(2*math.pi * self.current_epoch/ 100-math.pi/2) + 0.005 + 0.0005
-        min(0.0005 + 0.00001 * self.current_epoch, 0.010)
+        # M_N = 0.003*math.exp(-0.01*self.current_epoch)*math.sin(2*math.pi * self.current_epoch/ 100-math.pi/2) + 0.005 + 0.0005
+        M_N = min(0.0005 + 0.00001 * self.current_epoch, 0.010)
         train_loss = self.model.loss_function(*results,
                                               M_N = M_N, #al_img.shape[0]/ self.num_train_imgs,
                                               optimizer_idx=optimizer_idx,
