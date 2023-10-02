@@ -186,10 +186,13 @@ class CIFAR10TestBed(BaseTestBed):
             torch.load("vae_logs/CIFAR10/version_5/checkpoints/epoch=3-step=3128.ckpt")[
                 "state_dict"])
         self.num_classes = 10
+        # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
 
 
     def ind_loader(self):
+        # return DataLoader(
+        #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
         return DataLoader(
             self.ind, shuffle=False, num_workers=20)
 

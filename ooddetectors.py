@@ -24,11 +24,11 @@ class BaseSD:
 
 
 class RabanserSD(BaseSD):
-    def __init__(self, rep_model,  select_samples=False, k=5):
+    def __init__(self, rep_model,  select_samples=False, k=5, processes=5):
         super().__init__(rep_model)
-
         self.select_samples = select_samples
         self.k= k
+        self.processes = processes
         # if set_start:
         #     torch.multiprocessing.set_start_method('spawn') #bodge code, sorry.
 
@@ -121,7 +121,7 @@ class RabanserSD(BaseSD):
                 biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
 
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
-                pool = multiprocessing.Pool(processes=20)
+                pool = multiprocessing.Pool(processes=self.processes)
 
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
@@ -311,7 +311,7 @@ class TypicalitySD(BaseSD):
 
         p_values = dict(
             zip(dataloaders.keys(),
-                [dict(zip(loader_w_sampler.keys(),
+                    [dict(zip(loader_w_sampler.keys(),
                           [[]
                            for _ in range(len(loader_w_sampler))]
                           )) for

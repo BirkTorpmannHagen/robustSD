@@ -53,7 +53,7 @@ with open(args.filename, 'r') as file:
 
 
 # model = ResNetVAE()
-model = CIFARVAE(32, 3, 128, 128)
+model = CIFARVAE()
 experiment = VAEXperiment(model,
                           config['exp_params'])
 
