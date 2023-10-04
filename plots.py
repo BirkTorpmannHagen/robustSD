@@ -458,9 +458,9 @@ def plot_bias_severity_impact(filename):
 
 if __name__ == '__main__':
     print("vanilla")
-    collect_losswise_metrics("CIFAR_classifier_ks_100_fullloss.csv")
-    print("NN")
-    collect_losswise_metrics("CIFAR_classifier_ks_5NN_100_fullloss.csv")
+    collect_losswise_metrics("CIFAR_classifier_typicality_100_fullloss.csv")
+    # print("NN")
+    # collect_losswise_metrics("CIFAR_classifier_ks_5NN_100_fullloss.csv")
     # print("")
     # print("5nn")
     # risk("NICO_classifier_ks_5NN_100_fullloss.csv")

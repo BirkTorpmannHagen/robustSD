@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+
 from vae.models.base import BaseVAE
 from torch import nn
 from .types_ import *
@@ -558,16 +560,21 @@ class ResNetVAE(BaseVAE):
         # Compute the log probabilities of the reconstructions under the learned and prior distributions
         log_probs_prior = prior_dist.log_prob(z).sum(dim=1)
         log_probs_learned = learned_dist.log_prob(z).sum(dim=1)
+
+        reconstructions = torch.clip(reconstructions, 0,1) #debug
+        sample = torch.clip(sample, 0, 1)
+
+
         log_probs_recon = -F.binary_cross_entropy(reconstructions, sample.repeat(num_samples, 1, 1, 1),
                                                   reduction='none').view(num_samples, -1).sum(dim=1)
 
         # Compute the importance weights for each sample
         importance_weights = log_probs_recon + log_probs_prior - log_probs_learned
 
-        # Compute the log likelihood using the importance weights
+        # Compute the log likelihood using the importance weightss<
         log_likelihood = torch.logsumexp(importance_weights, dim=0) - torch.log(torch.tensor(float(num_samples)))
-
         return log_likelihood.item()
+
     def elbo_likelihood(self, sample):
         """
         Estimate the ELBO for a given sample using a trained VAE.
