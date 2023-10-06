@@ -13,7 +13,7 @@ import torchvision
 from os.path import join
 from torchvision.datasets import CIFAR10, CIFAR100
 from njord.utils.general import check_dataset
-from njord.utils.dataloaders import create_dataset
+from njord.utils.dataloaders import create_dataset, create_dataloader
 from random import shuffle
 
 
@@ -121,20 +121,16 @@ class NICODataset(data.Dataset):
 #         pass
 
 def get_njordvid_datasets():
-    ind_data_dict = check_dataset("folds/ind_fold.yaml")
+    ind_data_dict = check_dataset("njord/folds/ind_fold.yaml")
     ind_train_path, ind_val_path = ind_data_dict['train'], ind_data_dict['val']
-    ind_dataloader, _ = create_dataloader(ind_train_path, 512,1,32)
-    ind_val_dataloader = create_dataloader(ind_val_path, 512,1,32)
+    ind_dataloader, _ = create_dataloader(ind_train_path, 512,1,32, image_weights=True)
+    ind_val_dataloader = create_dataloader(ind_val_path, 512,1,32, image_weights=True)
 
-    ood_data_dict = check_dataset("folds/ood_fold.yaml")
+    ood_data_dict = check_dataset("njord/folds/ood_fold.yaml")
     _, ood_val_path = ood_data_dict['train'], ood_data_dict['val']
-    ood_dataloader, _= create_dataloader(ood_val_path, 512, 1, 32)
+    ood_dataloader, _= create_dataloader(ood_val_path, 512, 1, 32, image_weights=True)
 
-    test_data_dict = check_dataset("folds/test_fold.yaml")
-    _, test_val_path = test_data_dict['train'], test_data_dict['val']
-    test_dataloader, _ = create_dataloader(test_val_path, 512, 1, 32)
-
-    return [ind_dataloader, ind_val_dataloader, ood_dataloader, test_dataloader]
+    return ind_dataloader, ind_val_dataloader, ood_dataloader
 
 # def get_cifar10_datase
 class EtisDataset(data.Dataset):
@@ -292,6 +288,11 @@ def build_njord_dataset():
     val_set =  create_dataset(ind["val"], 512, 16, 32)
     ood_set =  create_dataset(ood["val"], 512, 16, 32)
     return train_set, val_set, ood_set
+
+def build_njord_loaders():
+    ind = check_dataset("njord/folds/ind_fold.yaml")
+    ood = check_dataset("njord/folds/ood_fold.yaml")
+    train = c
 
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):

@@ -39,7 +39,7 @@ def train_classifier(train_set, val_set):
 
     # val_set = CIFAR10("../../Datasets/cifar10", train=False, transform=trans)
     num_classes =  train_set.num_classes
-    model =  ResNetClassifier(num_classes, 101, transfer=False, batch_size=16, lr=1e-7).to("cuda")
+    model =  ResNetClassifier(num_classes, 101, transfer=False, batch_size=16, lr=1e-3).to("cuda")
     # model = ResNetClassifier.load_from_checkpoint("NICODataset_logs/checkpoints/epoch=38-step=389649.ckpt", num_classes=num_classes, resnet_version=101, batch_size=16, lr=1e-7).cuda()
     # train_set = MNIST("../../Datasets/mnist", train=True, download=True, transform=trans)
     # val_set = MNIST("../../Datasets/mnist", train=False, download=True, transform=trans)
@@ -55,7 +55,7 @@ def train_classifier(train_set, val_set):
     )
 
 
-    trainer = Trainer(max_epochs=500, logger=tb_logger, accelerator="gpu",callbacks=checkpoint_callback)
+    trainer = Trainer(max_epochs=1000, logger=tb_logger, accelerator="gpu",callbacks=checkpoint_callback)
     trainer.fit(model, train_dataloaders=DataLoader(train_set, shuffle=True, num_workers=24),
                 val_dataloaders=DataLoader(val_set, shuffle=True, num_workers=24))
 

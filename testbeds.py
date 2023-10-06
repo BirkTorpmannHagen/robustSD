@@ -234,49 +234,57 @@ class CIFAR100TestBed(CIFAR10TestBed):
         self.ind, self.ind_val = torch.utils.data.random_split(
             CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, download=True), [0.5, 0.5])
 
+class PolypTestBed(BaseTestBed):
+    def __init__(self, sample_size):
+        super().__init__(sample_size)
+        self.ind, self.val, self.ood = build_polyp_dataset("../../Datasets/Polyp")
+        self.rep_model = SegmentationModel()
+        dict = torch.load("segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt")
+        self.rep_model.load_state_dict(dict)
+        trans = transforms.Compose([transforms.Resize((512, 512)),
+                                    transforms.ToTensor()])
+        cvc_train_set, cvc_val_set = build_polyp_dataset("../../Datasets/Polyps/CVC-ClinicDB", "CVC", 0)
+        kvasir_train_set, kvasir_val_set = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
+        etis_train, etis_val = build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis", 0)
+        self.ind = ConcatDataset((cvc_train_set, kvasir_train_set, kvasir_val_set))
+        self.ind_val = cvc_val_set
+        self.ood = ConcatDataset([etis_train, etis_val])
 
-# class PolypTestBed(BaseTestBed):
-#     def __init__(self, sample_size):
-#         super().__init__(sample_size)
-#         self.ind, self.val, self.ood = build_polyp_dataset("../../Datasets/Polyp")
-#         self.rep_model = smp.DeepLabV3Plus()
-#         dict = torch.load("dict")
-#         self.rep_model.load_state_dict(dict)
-#         trans = transforms.Compose([transforms.Resize((512, 512)),
-#                                     transforms.ToTensor()])
-#         cvc_train_set, cvc_val_set = build_polyp_dataset("../../Datasets/Polyps/CVC-ClinicDB", "CVC", 0)
-#         kvasir_train_set, kvasir_val_set = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
-#         etis_train, etis_val = build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis", 0)
-#         self.ind = ConcatDataset((cvc_train_set, kvasir_train_set, kvasir_val_set))
-#         self.ind_val = cvc_val_set
-#         self.ood = ConcatDataset([etis_train, etis_val])
-#
-#         config = yaml.safe_load(open("vae/configs/vae.yaml"))
-#         model = ResNetVAE().to("cuda").eval()
-#         vae_exp = VAEXperiment(model, config)
-#         vae_exp.load_state_dict(
-#             torch.load("vae_logs/nico_dim/version_41/checkpoints/last.ckpt")[
-#                 "state_dict"])
-#         classifier = SegmentationModel.load_from_checkpoint(
-#             "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
-#         classifier.eval()
-#         self.rep_model = classifier
-#
-#     def ind_loader(self):
-#         return self.loader(self.ind, sampler=RandomSampler(self.ind))
-#
-#     def ood_loaders(self):
-#         samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
-#                                   SequentialSampler(self.ood), RandomSampler(self.ood)]
-#         loaders =  {"ood": dict([[sampler.__class__.__name__,  self.loader(self.ood, sampler=sampler)] for sampler in
-#                                  samplers])}
-#         return loaders
-#
-#
-#     def ind_val_loaders(self):
-#         samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
-#                                   SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
-#
-#         loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
-#                                  samplers])}
-#         return loaders
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        model = ResNetVAE().to("cuda").eval()
+        vae_exp = VAEXperiment(model, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/nico_dim/version_41/checkpoints/last.ckpt")[
+                "state_dict"])
+        classifier = SegmentationModel.load_from_checkpoint(
+            "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
+        classifier.eval()
+        self.rep_model = classifier
+
+    def ind_loader(self):
+        return self.loader(self.ind, sampler=RandomSampler(self.ind))
+
+    def ood_loaders(self):
+        samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
+                                  SequentialSampler(self.ood), RandomSampler(self.ood)]
+        loaders =  {"ood": dict([[sampler.__class__.__name__,  self.loader(self.ood, sampler=sampler)] for sampler in
+                                 samplers])}
+        return loaders
+
+
+    def ind_val_loaders(self):
+        samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                                  SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
+
+        loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
+                                 samplers])}
+        return loaders
+
+    def compute_losses(self, loader):
+        losses = torch.zeros(len(loader) ).to("cuda")
+        print("computing losses")
+        for i, data in tqdm(enumerate(loader), total=len(loader)):
+            x = data[0].to("cuda")
+            y = data[1].to("cuda")
+            self.rep_model.compute_loss(x,y)
+        return losses.cpu().numpy()
