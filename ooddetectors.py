@@ -64,15 +64,17 @@ class RabanserSD(BaseSD):
                               range(self.rep_model.latent_dim)])
         else:
             if test == "mmd":
-                mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
-                value, matrix = mmd(ind_encodings,
-                                    ood_samples, alphas=[0.5], ret_matrix=True)
-                p_value = mmd.pval(matrix, n_permutations=100)
+                pass
+                # mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
+                # value, matrix = mmd(ind_encodings,
+                #                     ood_samples, alphas=[0.5], ret_matrix=True)
+                # p_value = mmd.pval(matrix, n_permutations=100)
             elif test == "knn":
-                knn = tts.KNNStatistic(ind_encodings, sample_size, k=sample_size)
-                value, matrix = knn(ind_encodings, ood_samples,
-                                    ret_matrix=True)
-                p_value = knn.pval(matrix, n_permutations=100)
+                pass
+                # knn = tts.KNNStatistic(ind_encodings, sample_size, k=sample_size)
+                # value, matrix = knn(ind_encodings, ood_samples,
+                #                     ret_matrix=True)
+                # p_value = knn.pval(matrix, n_permutations=100)
             else:
                 raise NotImplementedError
         return p_value, losses[fold_name][biased_sampler_name][start:stop]
@@ -113,8 +115,8 @@ class RabanserSD(BaseSD):
                          )) for
                      loader_w_sampler in dataloaders.values()]))
 
-        mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
-        knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
+        # mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
+        # knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
                 ind_encodings = torch.Tensor(ind_encodings)
@@ -167,118 +169,6 @@ class RabanserSD(BaseSD):
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size, test)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
-class KNNDSD(RabanserSD):
-
-    def paralell_process(self, start, stop, biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size):
-        # biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size = args
-        ood_samples = biased_sampler_encodings[start:stop]
-
-        k_nearest_dists= np.concatenate(
-            [np.partition(torch.sum((ood_samples[i].unsqueeze(0)- ind_encodings) ** 2, dim=-1).numpy(), self.k)[:self.k] for i in
-             range(len(ood_samples))])
-
-        dist = np.mean(k_nearest_dists, axis=1)
-        print(dist)
-        p_value = 1 - np.mean([1 if dist > i else 0 for i in self.ind_dist_distribution])
-
-        def compute_pvals_and_loss_for_loader(self, ind_encodings, dataloaders, sample_size, test):
-
-            encodings = dict(
-                zip(dataloaders.keys(),
-                    [dict(zip(loader_w_sampler.keys(),
-                              [self.get_encodings(loader)
-                               for sampler_name, loader in loader_w_sampler.items()]
-                              )) for
-                     loader_w_sampler in
-                     dataloaders.values()]))  # dict of dicts of tensors; sidenote initializing nested dicts sucks
-
-            losses = dict(
-                zip(dataloaders.keys(),
-                    [dict(zip(loader_w_sampler.keys(),
-                              [self.testbed.compute_losses(loader)
-                               for sampler_name, loader in loader_w_sampler.items()]
-                              )) for
-                     loader_w_sampler in dataloaders.values()]))
-
-            p_values = dict(
-                zip(dataloaders.keys(),
-                    [dict(zip(loader_w_sampler.keys(),
-                              [[]
-                               for _ in range(len(loader_w_sampler))]
-                              )) for
-                     loader_w_sampler in dataloaders.values()]))
-
-            sample_losses = dict(
-                zip(dataloaders.keys(),
-                    [dict(zip(loader_w_sampler.keys(),
-                              [[]
-                               for _ in range(len(loader_w_sampler))]
-                              )) for
-                     loader_w_sampler in dataloaders.values()]))
-
-            mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
-            knn = tts.KNNStatistic(len(ind_encodings), sample_size, k=sample_size)
-            print(losses)
-            for fold_name, fold_encodings in encodings.items():
-                for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
-                    ind_encodings = torch.Tensor(ind_encodings)
-                    biased_sampler_encodings = torch.Tensor(biased_sampler_encodings)
-
-                    args = [biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses,
-                            sample_size]
-                    pool = multiprocessing.Pool(processes=4)
-
-                    startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                                  range(sample_size, len(biased_sampler_encodings) + sample_size,
-                                                        sample_size)))[
-                                         :-1]
-                    # results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
-                    # pool.close()
-                    # results = []
-                    # for start, stop in list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                    #                             range(sample_size, len(biased_sampler_encodings) + sample_size,
-                    #                                   sample_size)))[
-                    #                    :-1]:
-                    #     results.append(
-                    #         self.paralell_process(start, stop, biased_sampler_encodings, ind_encodings, test, fold_name,
-                    #                               biased_sampler_name, losses, sample_size))
-
-                    results = map(self.paralell_process,ArgumentIterator(startstop_iterable, args))
-
-                    print(f"the results for {fold_name}:{biased_sampler_name} are {results} ")
-                    # input()
-                    for p_value, sample_loss in results:
-                        p_values[fold_name][biased_sampler_name].append(p_value)
-                        sample_losses[fold_name][biased_sampler_name].append(sample_loss.item())
-
-            return p_values, sample_losses
-
-        def compute_pvals_and_loss(self, sample_size, test):
-            """
-
-            :param sample_size: sample size for the tests
-            :return: ind_p_values: p-values for ind fold for each sampler
-            :return ood_p_values: p-values for ood fold for each sampler
-            :return ind_sample_losses: losses for each sampler on ind fold, in correct order
-            :return ood_sample_losses: losses for each sampler on ood fold, in correct order
-            """
-            # sample_size = min(sample_size, len(self.testbed.ind_val_loaders()[0]))
-            # try:
-            #     ind_latents = torch.load(f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-            # except FileNotFoundError:
-            #     print("recomputing...")
-            ind_latents = self.get_encodings(self.testbed.ind_loader())
-            torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-
-            ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents,
-                                                                             self.testbed.ind_val_loaders(),
-                                                                             sample_size, test)
-            ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(),
-                                                                             sample_size, test)
-            return ind_pvalues, ood_pvalues, ind_losses, ood_losses
-
-
-                # if fold_name == "ind":
 class TypicalitySD(BaseSD):
     def __init__(self, rep_model):
         super().__init__(rep_model)

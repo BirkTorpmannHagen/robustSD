@@ -3,13 +3,13 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
+import itertools
 from matplotlib.animation import FuncAnimation
 from tqdm import tqdm
 from vae.vae_experiment import VAEXperiment
 from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
 from classifier.resnetclassifier import ResNetClassifier
 import yaml
-from metrics import *
 from bias_samplers import ClusterSampler, ClusterSamplerWithSeverity, ClassOrderSampler
 from torch.utils.data import DataLoader
 from domain_datasets import build_nico_dataset
@@ -18,6 +18,212 @@ from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
 import os
 from bias_samplers import *
+
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import RocCurveDisplay
+from scipy.stats import spearmanr, pearsonr
+from sklearn.linear_model import LinearRegression, QuantileRegressor
+from sklearn.metrics import mean_absolute_percentage_error as mape
+import numpy as np
+import seaborn as sns
+import math
+from ast import literal_eval
+def open_and_process(fname):
+    try:
+        data = pd.read_csv(fname)
+        if "noise" in str(pd.unique(data["fold"])):
+            data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
+        if "fullloss" in fname:
+            data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
+            data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+        return data
+    except FileNotFoundError:
+        print(f"File {fname} not found")
+        return None
+
+def get_threshold(data, fpr=0):
+    ood = data[data["oodness"]>=1]
+    ind = data[data["oodness"]<1]
+    random_sampler_ind_data = ind[(ind["sampler"] == "RandomSampler")]
+    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
+    threshold = sorted_ind_ps[0]
+    return threshold
+
+
+def fpr(data, threshold=0):
+    """
+    :param ood_ps
+    :param ind_ps
+    Find p-value threshold that results in 95% TPR. Then find FPR.
+    If threshold is given, use that instead.
+    :return:
+    """
+    ood_ps = data[data["oodness"]>=1]["pvalue"]
+    ind_ps = data[data["oodness"]<1]["pvalue"]
+    thresholded = ind_ps<threshold
+    return thresholded.mean()
+
+def calibrated_detection_rate(data, threshold):
+    ood_ps = data[data["oodness"]>=1]["pvalue"]
+    ind_ps = data[data["oodness"]<1]["pvalue"]
+    sorted_ps = sorted(ind_ps)
+    return ((ind_ps>=threshold).mean()+(ood_ps<threshold).mean()) /2
+
+def auroc(data):
+    ood_ps = data[data["oodness"]>=1]["pvalue"]
+    ind_ps = data[data["oodness"]<1]["pvalue"]
+    true = [0]*len(ood_ps)+[1]*len(ind_ps)
+    probs = list(ood_ps)+list(ind_ps)
+    auc = roc_auc_score(true, probs)
+    return auc
+
+def aupr(data):
+    ood_ps = data[data["oodness"]>=1]["pvalue"]
+    ind_ps = data[data["oodness"]<1]["pvalue"]
+    true = [0] * len(ood_ps) + [1] * len(ind_ps)
+    probs = list(ood_ps) + list(ind_ps)
+    auc = average_precision_score(true, probs)
+    return auc
+
+def correlation(pandas_df, plot=False, split_by_sampler=True):
+    # pandas_df["pvalue"]=pandas_df["pvalue"].apply(lambda x: math.log(x, 10))
+    pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
+    merged_p = pandas_df["pvalue"].apply(lambda x: math.log10(x) if x!=0 else -250)
+    merged_loss = pandas_df["loss"]
+
+    if plot:
+        for sampler in pd.unique(pandas_df["sampler"]):
+            sns.scatterplot(data=pandas_df[pandas_df["sampler"]==sampler], x="pvalue", y="loss", label=sampler)
+        plt.xscale("log")
+        plt.show()
+    if split_by_sampler:
+        for sampler in pd.unique(pandas_df["sampler"]):
+            bysampler = pandas_df[pandas_df["sampler"]==sampler]
+            print(f"{sampler}: {pearsonr(bysampler['pvalue'].apply(lambda x: math.log10(x) if x!=0 else -250), bysampler['loss'])}")
+    return spearmanr(merged_p, merged_loss)
+
+def linreg_smape(pandas_df):
+    pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
+    ps = pandas_df["pvalue"].apply(lambda x: math.log10(x) if x!=0 else -250)
+    sns.regplot(x=ps, y=pandas_df["loss"])
+    plt.show()
+    losses = pandas_df["loss"]
+    lr = QuantileRegressor()
+    ps_r = np.array(ps).reshape(-1, 1)
+    lr.fit(ps_r, losses)
+    preds = lr.predict(ps_r)
+    return mape(preds, losses)
+
+
+def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
+    """
+        Computes a pdf for the given number of bins, and gets the likelihood of the test loss at the given test_ps bin.
+        #todo: collect a new noise dataset with the right predictor
+        :returns the average likelihood of the observed test-loss as bootstrapped from the pdf w/noise.
+        Higher likelihood ~ more likely that the model is correct more often.
+    """
+    #split ps into unevenly sized bins with equal number of entries
+    pargsort = np.argsort(ps)
+    sorted_ps = np.array(ps)[pargsort]
+    sorted_loss = np.array(loss)[pargsort]
+    p_bins = sorted_ps[::len(sorted_ps)//bins] #defines bin limits
+    [min_val, max_val] = [sorted_ps[0], sorted_ps[-1]]
+    p_bins = np.append(p_bins, max_val)
+
+    #there are now 15 bins
+    # print(p_bins)
+    loss_samples_per_bin = [sorted_loss[i:j] for i, j in zip(range(0, len(sorted_loss), len(sorted_loss)//bins),
+                                                             range(len(sorted_loss)//bins, len(sorted_loss)+len(sorted_loss)//bins, len(sorted_loss)//bins))]
+
+    loss_pdfs = [np.histogram(losses_in_pbin, bins=len(loss_samples_per_bin[0])//10) for losses_in_pbin in loss_samples_per_bin]
+    #loss_pdfs is essentially a probability funciton for each bin that shows the likelihood of some loss value given a certain p
+
+    test_p_indexes = np.digitize(test_ps, p_bins[:-1])
+    loss_diff = []
+    for p, loss in zip(test_ps, test_losses):
+        index = np.digitize(p, p_bins[:-1])
+        predicted_loss = np.mean(loss_samples_per_bin[np.clip(index, 0, len(loss_samples_per_bin)-1)])
+        loss_diff.append(np.abs(loss-predicted_loss))
+    return np.mean(loss_diff)
+
+
+def risk(data, threshold):
+
+    ood = data[data["oodness"]>=1]
+    ind = data[data["oodness"]<1]
+    random_sampler_ind_data = ind[(ind["sampler"] == "RandomSampler")]
+    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
+    threshold_new = sorted_ind_ps[0]  # min p_value for a sample to be considered ind
+    nopredcosts = ind["loss"].median() #median for outlier robustness
+    data["risk"]=0
+    data.loc[((data["pvalue"] < threshold) & (data["oodness"]>1)), "risk"] = nopredcosts
+    data.loc[((data["pvalue"] < threshold) & (data["oodness"]<1)), "risk"] = data[data["oodness"]>1]["loss"].median ()
+    data.loc[data["pvalue"] >= threshold, "risk"] = data.loc[data["pvalue"] >= threshold, "loss"]
+    # for sampler in pd.unique(data["sampler"]):
+    #     bysampler = data[data["sampler"]==sampler]
+    #     print(f"{sampler}: {bysampler['risk'].mean()}")
+
+    return data["risk"].mean()
+
+
+
+
+
+
+def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
+    data = pd.read_csv(fname)
+    #merge loss arrays
+    # data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
+    # data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+    # data= data.explode("loss")
+    # print(data)
+    # input()
+    #determine sample oodness according to loss
+    if ood_fold_name!="ood":
+        data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
+    data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
+    ood = data[data["oodness"]>=1]
+    ind = data[data["oodness"]<1]
+
+    # ood = data[(data["fold"]!="ind")]
+    # ind = data[data["fold"]=="ind"]
+
+    # if plots:
+    #     ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
+    #     plt.yscale("log")
+    #     plt.show()
+
+
+    #find threshold for ind/ood; simulate "naive" approach of not accounting for sample bias
+    random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
+    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
+    threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
+    # corr = correlation(data, plot=True)
+    # print("corr: ", corr)
+    # pred = linreg_smape(data)
+    # print("smape: ", pred)
+    print("wee")
+    if plots:
+        fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8), sharey=True)
+    for i, sampler in enumerate(data["sampler"].unique()):
+        subset = data[data["sampler"]==sampler]
+        subset_ood = subset[subset["oodness"]>=1]
+        subset_ind = subset[subset["oodness"]<1]
+        # print(f"fpr for {sampler}: {fpr}")
+        if plots:
+            ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
+            ax[i].scatter(subset_ind["loss"], subset_ind["pvalue"], label="ind")
+            ax[i].set_yscale("log")
+            ax[i].hlines(threshold, 0, 1, label="threshold")
+            ax[i].set_title(sampler)
+            plt.legend()
+    #
+    if plots:
+        fig.suptitle(fname)
+        plt.show()
 
 
 def plot_nico_class_bias():
@@ -115,8 +321,8 @@ def get_nico_classification_metrics(filename):
             ood = subset[subset["ood_dataset"] != "nico_dim"]
             ind = subset[subset["ood_dataset"] == "nico_dim"]
             print("sample size ",sample_size)
-            fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
-            fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+            fpr_van = fpr(ood["vanilla_p"], ind["vanilla_p"])
+            fpr_kn = fpr(ood["kn_p"], ind["kn_p"])
             print("vanilla FPR: ", fpr_van)
             print("kn FPR:", fpr_kn)
             aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
@@ -144,8 +350,8 @@ def get_polyp_classification_metrics(filename):
             subset = dataset[dataset["sample_size"] == sample_size]
             ood = subset[subset["ood_dataset"] == "polyp_ood"]
             ind = subset[subset["ood_dataset"] == "polyp_ind"]
-            fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
-            fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+            fpr_van = fpr(ood["vanilla_p"], ind["vanilla_p"])
+            fpr_kn = fpr(ood["kn_p"], ind["kn_p"])
             print("vanilla FPR: ", fpr_van)
             print("kn FPR:", fpr_kn)
             aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
@@ -177,8 +383,8 @@ def get_cifar10_classification_metrics(filename):
                 ood = subset[subset["ood_dataset"] == noise_val]
                 ind = subset[subset["ood_dataset"] == "cifar10_0.0"]
                 print(f"{noise_val} has loss {ood['loss'].mean()} compared to {ind['loss'].mean()}")
-                fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
-                fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+                fpr_van = fpr(ood["vanilla_p"], ind["vanilla_p"])
+                fpr_kn = fpr(ood["kn_p"], ind["kn_p"])
                 print("vanilla FPR: ", fpr_van)
                 print("kn FPR:", fpr_kn)
                 aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
@@ -360,8 +566,8 @@ def get_njord_classification_metrics(filename):
             if sample_size==100:
                 subset.to_csv("debug.csv")
                 input()
-            fpr_van = fprat95tpr(ood["vanilla_p"], ind["vanilla_p"])
-            fpr_kn = fprat95tpr(ood["kn_p"], ind["kn_p"])
+            fpr_van = fpr(ood["vanilla_p"], ind["vanilla_p"])
+            fpr_kn = fpr(ood["kn_p"], ind["kn_p"])
             print("vanilla FPR: ", fpr_van)
             print("kn FPR:", fpr_kn)
             aupr_van = aupr(ood["vanilla_p"], ind["vanilla_p"])
@@ -456,11 +662,48 @@ def plot_bias_severity_impact(filename):
         # plt.legend()
         # plt.show()
 
+
+def summarize_results():
+    #summarize overall results;
+    table_data = []
+    for dataset in ["CIFAR10", "CIFAR100", "NICO", "Njord", "Polyp"]:
+        for dsd in ["ks", "ks_5NN", "typicality"]:
+            for sample_size in [10, 20, 50, 100, 200, 500]:
+                if dataset=="Polyp":
+                    fname = f"data/{dataset}_{dsd}_{sample_size}.csv"
+                    print(fname)
+                else:
+                    fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
+                data = open_and_process(fname)
+                if data is None:
+                    # print(f"skipping {fname}")
+                    # table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
+                    #                    "FPR": -1,
+                    #                    "DR": -1,
+                    #                    "Risk": -1})
+                    continue
+                threshold = get_threshold(data)
+                table_data.append({"Dataset":dataset, "OOD Detector":dsd, "Sample Size":sample_size,
+                                   "FPR":fpr(data, threshold=threshold),
+                                    "DR":calibrated_detection_rate(data, threshold=threshold),
+                                   "Risk":risk(data, threshold=threshold)})
+    df = pd.DataFrame(data=table_data).drop(columns="Sample Size").replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace("typicality", "Typicality")
+    merged = df.groupby(["Dataset", "OOD Detector"]).mean()
+    print(merged)
+
+
+
+
 if __name__ == '__main__':
-    print("vanilla")
-    collect_losswise_metrics("CIFAR_classifier_typicality_100_fullloss.csv")
+    summarize_results()
+    # collect_losswise_metrics("Polyp_ks_10.csv")
+    # collect_losswise_metrics("Polyp_ks_5NN_10.csv")
+    # print("typicality")
+    # risk("CIFAR_classifier_typicality_200_fullloss.csv")
+    # print("vanilla")
+    # risk("CIFAR_classifier_ks_200_fullloss.csv")
     # print("NN")
-    # collect_losswise_metrics("CIFAR_classifier_ks_5NN_100_fullloss.csv")
+    # risk("CIFAR_classifier_ks_5NN_200_fullloss.csv")
     # print("")
     # print("5nn")
     # risk("NICO_classifier_ks_5NN_100_fullloss.csv")

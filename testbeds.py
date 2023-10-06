@@ -7,7 +7,7 @@ from torch.utils.data import RandomSampler
 from classifier.resnetclassifier import ResNetClassifier
 from ooddetectors import *
 from torch.nn import functional as F
-from classifier.cifarresnet import get_cifar, cifar10_pretrained_weight_urls
+from classifier.cifarresnet import get_cifar, cifar10_pretrained_weight_urls, cifar100_pretrained_weight_urls
 
 from njord.utils.loss import ComputeLoss
 from njord.val import fetch_model
@@ -144,6 +144,7 @@ class NicoTestBed(BaseTestBed):
                                                                               RandomSampler(self.ind_val)]])}
         return loaders
 
+
 class CIFAR10TestBed(BaseTestBed):
     def __init__(self, sample_size):
         super().__init__(sample_size)
@@ -169,7 +170,6 @@ class CIFAR10TestBed(BaseTestBed):
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
 
-
     def ind_loader(self):
         # return DataLoader(
         #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
@@ -186,7 +186,7 @@ class CIFAR10TestBed(BaseTestBed):
 
     def ood_loaders(self):
         ood_sets = [CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=noise_val)
-                                       for noise_val in np.arange(0.1, 0.3, 0.05)]
+                                       for noise_val in np.arange(0.05, 0.3, 0.05)]
         # self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
         #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
         #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
@@ -206,6 +206,34 @@ class CIFAR10TestBed(BaseTestBed):
             yhat = self.classifier(x)
             losses[i]=F.cross_entropy(yhat, y).item()
         return losses.cpu().numpy()
+
+class CIFAR100TestBed(CIFAR10TestBed):
+    def __init__(self, sample_size):
+        super().__init__(sample_size)
+        self.trans = transforms.Compose([
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(), ])
+
+        # classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to(
+        #     "cuda").eval()
+        # torch.save(classifier, "cifar10_model.pt")
+        # for module in classifier.modules():
+        #     print(module)
+        self.classifier = get_cifar("resnet32", layers=[5] * 3, model_urls=cifar100_pretrained_weight_urls,
+                                    progress=True, pretrained=True, num_classes=100).cuda().eval()
+
+        self.rep_model = WrappedCIFAR10Resnet(self.classifier)
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        self.vae = CIFARVAE().cuda().eval()
+        vae_exp = VAEXperiment(self.vae, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/CIFAR100/version_0/checkpoints/epoch=89-step=281250.ckpt")[
+                "state_dict"])
+        self.num_classes = 100
+        # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
+        self.ind, self.ind_val = torch.utils.data.random_split(
+            CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, download=True), [0.5, 0.5])
+
 
 # class PolypTestBed(BaseTestBed):
 #     def __init__(self, sample_size):

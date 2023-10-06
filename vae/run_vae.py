@@ -10,7 +10,7 @@ from domain_datasets import *
 # from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning_dataset import VAEDataset
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, CIFAR100
 # from pytorch_lightning.plugins import DDPPlugin
 
 def wrap_dataset(dataset):
@@ -59,11 +59,13 @@ experiment = VAEXperiment(model,
 
 # train, val, test = build_njord_dataset()
 
-train = CIFAR10("../../Datasets/CIFAR10", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+# train = CIFAR10("../../Datasets/CIFAR10", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+# val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
 
+train = CIFAR100("../../Datasets/CIFAR100", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+val = CIFAR100("../../Datasets/CIFAR100", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
-                               name="CIFAR10")
+                               name="CIFAR100")
 data = VAEDataset(**config["data_params"], train_set=train, val_set=val )
 
 data.setup()

@@ -1,6 +1,6 @@
 from pytorch_lightning import Trainer
 from torchvision.models import resnet34
-from domain_datasets import build_nico_dataset
+from domain_datasets import build_nico_dataset, build_imagenette_dataset
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -61,15 +61,17 @@ def train_classifier(train_set, val_set):
 
 if __name__ == '__main__':
     #NICO
+    size = 256
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
-                        transforms.Resize((512,512)),
-                        transforms.RandomCrop(256),
+                        transforms.Resize((size,size)),
+                        transforms.RandomCrop(size/2),
                         transforms.ToTensor(), ])
     val_trans = transforms.Compose([
-                        transforms.Resize((512,512)),
+                        transforms.Resize((size,size)),
                         transforms.ToTensor(), ])
 
-    train_set, val_set = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, val_trans, context="dim", seed=0)
+    # train_set, val_set = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, val_trans, context="dim", seed=0)
+    train_set, val_set = build_imagenette_dataset("../../Datasets/imagenette2", train_trans=trans, val_trans=val_trans)
     train_classifier(train_set, val_set)
     # CIAR10 and MNIST are already trained :D
 

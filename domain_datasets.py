@@ -9,14 +9,14 @@ from glob import glob
 from torch.utils import data
 import torchvision.transforms as transforms
 from os import listdir
+import torchvision
 from os.path import join
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, CIFAR100
 from njord.utils.general import check_dataset
 from njord.utils.dataloaders import create_dataset
 from random import shuffle
 
 
-# def get_cifar10_datase
 
 # class KvasirSegmentationDataset(data.Dataset):
 #     """
@@ -64,6 +64,13 @@ from random import shuffle
 #         image, mask = transforms.ToTensor()(Image.fromarray(image)), transforms.ToTensor()(Image.fromarray(mask))
 #         mask = torch.mean(mask,dim=0,keepdim=True).int()
 #         return image,mask, "Kvasir"
+
+class Imagenette(torchvision.datasets.ImageFolder):
+    def __init__(self, root, transform=None, split="train"):
+        super().__init__(os.path.join(root, split), transform=transform)
+        self.num_classes = 10
+
+
 class NICODataset(data.Dataset):
     def __init__(self, image_path_list, label_map_json, transform):
         super().__init__()
@@ -129,6 +136,7 @@ def get_njordvid_datasets():
 
     return [ind_dataloader, ind_val_dataloader, ood_dataloader, test_dataloader]
 
+# def get_cifar10_datase
 class EtisDataset(data.Dataset):
     """
         Dataset class that fetches Etis-LaribPolypDB images with the associated segmentation mask.
@@ -217,6 +225,21 @@ class CIFAR10wNoise(CIFAR10):
     def __len__(self):
         return super().__len__()
 
+class CIFAR100wNoise(CIFAR100):
+    def __init__(self, root, train, transform, noise_level=0, target_transform=None, download=False):
+        super().__init__(root, train, transform, target_transform, download)
+        self.noise_level = noise_level
+        self.plotted = False
+
+    def __getitem__(self, index):
+        x,y = super().__getitem__(index)
+        if self.noise_level!=0:
+            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
+        return x,y
+
+    def __len__(self):
+        return super().__len__()
+
 
 def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
     if use_track == 1:
@@ -286,11 +309,15 @@ class NICOTestDataset(data.Dataset):
         return image
 
 
+def build_imagenette_dataset(root, train_trans, val_trans):
+    train = Imagenette(root, transform=train_trans, split="train")
+    val = Imagenette(root, transform=val_trans, split="val")
+    return train, val
 
 
 if __name__ == '__main__':
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
-                                              transforms.Resize((512,512)),
+                                              transforms.Resize((256,256)),
                                               transforms.ToTensor(),])
-    build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="autumn", biased=True, seed=0)[0]
+    train, val= build_imagenette_dataset("../../Datasets/imagenette2", trans)
