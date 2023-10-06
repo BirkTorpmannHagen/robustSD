@@ -4,7 +4,7 @@ from torch.utils.data import Sampler, DataLoader
 from sklearn.cluster import KMeans
 import numpy as np
 from tqdm import tqdm
-from yellowbrick.features import PCA
+
 
 class ClassOrderSampler(Sampler):
     """
@@ -98,8 +98,6 @@ class ClusterSamplerWithSeverity(Sampler):
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         self.sample_size = sample_size
         self.bias_severity = bias_severity
-        pca =PCA()
-        pca.fit_transform_show(X=self.reps, y=self.kmeans)
 
 
     def __iter__(self):

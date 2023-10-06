@@ -1,18 +1,9 @@
-from pytorch_lightning import Trainer
-from torchvision.models import resnet34
-from domain_datasets import build_polyp_dataset
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
+
 from segmentation_models_pytorch import DeepLabV3Plus
-from segmentation_models_pytorch.decoders.deeplabv3.decoder import DeepLabV3PlusDecoder
 from segmentation_models_pytorch.losses import JaccardLoss
 from segmentation_models_pytorch.metrics import get_stats, iou_score
-import sys
 import warnings
 from segmentation_models_pytorch.base import SegmentationHead
-from torch.nn.functional import  interpolate
-from pathlib import Path
-from argparse import ArgumentParser
 
 warnings.filterwarnings('ignore')
 

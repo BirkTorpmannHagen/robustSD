@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.metrics import RocCurveDisplay
 from scipy.stats import spearmanr, pearsonr
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, QuantileRegressor
 from sklearn.metrics import mean_absolute_percentage_error as mape
 import numpy as np
 import seaborn as sns
@@ -78,11 +78,17 @@ def correlation(pandas_df, plot=False, split_by_sampler=True):
             print(f"{sampler}: {pearsonr(bysampler['pvalue'].apply(lambda x: math.log10(x) if x!=0 else -250), bysampler['loss'])}")
     return spearmanr(merged_p, merged_loss)
 
-def linreg_smape(ps, loss, ood_ps, ood_loss):
-    lr = LinearRegression()
-    lr.fit(np.array(np.log10(ps)).reshape(-1, 1), loss)
-    preds = lr.predict(np.array(np.log10(ood_ps)).reshape(-1, 1))
-    return mape(preds, ood_loss)
+def linreg_smape(pandas_df):
+    pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
+    ps = pandas_df["pvalue"].apply(lambda x: math.log10(x) if x!=0 else -250)
+    sns.regplot(x=ps, y=pandas_df["loss"])
+    plt.show()
+    losses = pandas_df["loss"]
+    lr = QuantileRegressor()
+    ps_r = np.array(ps).reshape(-1, 1)
+    lr.fit(ps_r, losses)
+    preds = lr.predict(ps_r)
+    return mape(preds, losses)
 
 
 def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
@@ -146,18 +152,25 @@ def collect_losswise_metrics(fname, fnr=0, ood_fold_name="ood", plots=False):
     random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
-    corr = correlation(data, plot=True)
-    print(corr)
+    # corr = correlation(data, plot=True)
+    # print("corr: ", corr)
+    # pred = linreg_smape(data)
+    # print("smape: ", pred)
+
     if plots:
         fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8), sharey=True)
     for i, sampler in enumerate(data["sampler"].unique()):
         subset_ind = ind[ind["sampler"]==sampler]
         subset_ood = ood[ood["sampler"]==sampler]
+        sns.scatterplot(data=data[data["sampler"]==sampler], x="pvalue", y="loss", hue="fold")
+        plt.xscale("log")
+        plt.title(sampler)
+        plt.show()
         merged = pd.concat([subset_ind, subset_ood])
         acc = calibrated_detection_rate(subset_ood["pvalue"], subset_ind["pvalue"], threshold=threshold)
         fpr = fprat95tpr(subset_ood["pvalue"], subset_ind["pvalue"], threshold=threshold)
 
-        # print(f"acc for {sampler}: {acc}")
+        print(f"acc for {sampler}: {acc}")
         # print(f"fpr for {sampler}: {fpr}")
         if plots:
             ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")

@@ -2,16 +2,9 @@ import os
 from torch.utils.data import ConcatDataset
 import multiprocessing, logging
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from metrics import *
-from yellowbrick.features import PCA
-from vae.vae_experiment import VAEXperiment
-from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
-import yaml
+# from yellowbrick.features import PCA
+from testbeds import CIFAR10TestBed, NicoTestBed
 import torch
-from segmentor.deeplab import SegmentationModel
 from torch.utils.data import DataLoader
 from utils import *
 from yellowbrick.features.manifold import Manifold
@@ -73,9 +66,10 @@ if __name__ == '__main__':
     for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
         # bench = NicoTestBed(sample_size)
         # tsd = RabanserSD(bench.rep_model, None, select_samples=True, processes=5)
-        bench =CIFAR10TestBed(sample_size)
-        tsd = RabanserSD(bench.rep_model, select_samples=False)
-        # tsd = TypicalitySD(bench.vae)
+        # bench =CIFAR10TestBed(sample_size)
+        bench = NjordTestBed(sample_size)
+        # tsd = RabanserSD(bench.rep_model, select_samples=False)
+        tsd = TypicalitySD(bench.vae)
         tsd.register_testbed(bench)
         compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"CIFAR_classifier_typicality_{sample_size}_fullloss.csv")
     #

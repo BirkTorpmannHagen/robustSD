@@ -12,7 +12,7 @@ from tqdm import tqdm
 import pickle as pkl
 from domain_datasets import *
 from vae.models.vanilla_vae import VanillaVAE
-import torch_two_sample as tts
+# import torch_two_sample as tts
 from sklearn.decomposition import PCA
 
 class BaseSD:
@@ -284,6 +284,8 @@ class TypicalitySD(BaseSD):
         super().__init__(rep_model)
 
     def compute_entropy(self, data_loader):
+        print(data_loader.sampler)
+        print(data_loader)
         log_likelihoods = []
         for i, (x, y) in enumerate(data_loader):
             x = x.to("cuda")
@@ -334,9 +336,6 @@ class TypicalitySD(BaseSD):
                     sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
 
                     p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
-                    if p_value==0:
-                        print(sample_entropy)
-                        print(max(bootstrap_entropy_distribution))
                     p_values[fold_name][biased_sampler_name].append(p_value)
                     sample_losses[fold_name][biased_sampler_name].append(
                         losses[fold_name][biased_sampler_name][start:stop])
@@ -364,6 +363,8 @@ class TypicalitySD(BaseSD):
         # compute ind_val pvalues for each sampler
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
                                                                          self.testbed.ind_val_loaders(), sample_size)
+
+
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
                                                                          self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
