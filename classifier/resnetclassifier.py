@@ -66,7 +66,10 @@ class ResNetClassifier(pl.LightningModule):
         return self.criterion(self(x), y)
 
     def configure_optimizers(self):
-        return self.optimizer(self.parameters(), lr=self.lr)
+        optimizer = self.optimizer(self.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,100, 2)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+
 
     def training_step(self, batch, batch_idx):
         x, y, context = batch

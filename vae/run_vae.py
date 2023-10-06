@@ -52,18 +52,21 @@ with open(args.filename, 'r') as file:
 
 
 
-# model = ResNetVAE()
-model = CIFARVAE()
+model = ResNetVAE()
+# model = CIFARVAE()
 experiment = VAEXperiment(model,
                           config['exp_params'])
 
-# train, val, test = build_njord_dataset()
+train, val, test = get_njordvid_datasets()
+# from torch.utils.data import DataLoader
 
-train = CIFAR10("../../Datasets/CIFAR10", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+
+# train = CIFAR10("../../Datasets/CIFAR10", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+# val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+
 
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
-                               name="CIFAR10")
+                               name="Njord")
 data = VAEDataset(**config["data_params"], train_set=train, val_set=val )
 
 data.setup()

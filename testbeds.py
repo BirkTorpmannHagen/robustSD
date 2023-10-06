@@ -231,8 +231,8 @@ class PolypTestBed(BaseTestBed):
     def __init__(self, sample_size):
         super().__init__(sample_size)
         self.ind, self.val, self.ood = build_polyp_dataset("../../Datasets/Polyp")
-        self.rep_model = smp.DeepLabV3Plus()
-        dict = torch.load("dict")
+        self.rep_model = SegmentationModel()
+        dict = torch.load("segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt")
         self.rep_model.load_state_dict(dict)
         trans = transforms.Compose([transforms.Resize((512, 512)),
                                     transforms.ToTensor()])
@@ -272,3 +272,12 @@ class PolypTestBed(BaseTestBed):
         loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
                                  samplers])}
         return loaders
+
+    def compute_losses(self, loader):
+        losses = torch.zeros(len(loader) ).to("cuda")
+        print("computing losses")
+        for i, data in tqdm(enumerate(loader), total=len(loader)):
+            x = data[0].to("cuda")
+            y = data[1].to("cuda")
+            self.rep_model.compute_loss(x,y)
+        return losses.cpu().numpy()
