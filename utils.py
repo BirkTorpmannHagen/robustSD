@@ -2,11 +2,11 @@ import torch
 from torch.utils import data
 import torch.nn as nn
 
-class WrappedCIFAR10Resnet(nn.Module):
-    def __init__(self, model):
+class WrappedResnet(nn.Module):
+    def __init__(self, model, input_size=32):
         super().__init__()
         self.model = model
-        self.latent_dim = self.get_encoding_size(32)
+        self.latent_dim = self.get_encoding_size(input_size)
 
     def get_encoding_size(self, input_size):
         dummy = torch.zeros((1, 3, input_size, input_size)).to("cuda")

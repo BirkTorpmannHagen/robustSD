@@ -18,52 +18,52 @@ from random import shuffle
 
 
 
-# class KvasirSegmentationDataset(data.Dataset):
-#     """
-#         Dataset class that fetches images with the associated segmentation mask.
-#     """
-#     def __init__(self, path, split="train"):
-#         super(KvasirSegmentationDataset, self).__init__()
-#         self.path = path
-#         self.fnames = listdir(join(self.path,"segmented-images", "images"))
-#         self.split = split
-#         self.train_transforms = alb.Compose([alb.Flip(), alb.Resize(512,512)])
-#         self.val_transforms = alb.Compose([alb.Resize(512,512)])
-#         train_size = int(len(self.fnames) * 0.8)
-#         val_size = (len(self.fnames) - train_size) // 2
-#         test_size = len(self.fnames) - train_size - val_size
-#         self.fnames_train = self.fnames[:train_size]
-#         self.fnames_val = self.fnames[train_size:train_size + val_size]
-#         self.fnames_test = self.fnames[train_size + val_size:]
-#         self.split_fnames = None  # iterable for selected split
-#         if self.split == "train":
-#             self.size = train_size
-#             self.split_fnames = self.fnames_train
-#         elif self.split == "val":
-#             self.size = val_size
-#             self.split_fnames = self.fnames_val
-#         elif self.split == "test":
-#             self.size = test_size
-#             self.split_fnames = self.fnames_test
-#         else:
-#             raise ValueError("Choices are train/val/test")
-#
-#     def __len__(self):
-#         return self.size
-#
-#     def __getitem__(self, index):
-#         # img = Image.open(join(self.path, "segmented-images", "images/", self.split_fnames[index]))
-#         # mask = Image.open(join(self.path, "segmented-images", "masks/", self.split_fnames[index]))
-#
-#         image = np.asarray(Image.open(join(self.path, "segmented-images", "images/", self.split_fnames[index])))
-#         mask =  np.asarray(Image.open(join(self.path, "segmented-images", "masks/", self.split_fnames[index])))
-#         if self.split=="train":
-#             image, mask = self.train_transforms(image=image, mask=mask).values()
-#         else:
-#             image, mask = self.val_transforms(image=image, mask=mask).values()
-#         image, mask = transforms.ToTensor()(Image.fromarray(image)), transforms.ToTensor()(Image.fromarray(mask))
-#         mask = torch.mean(mask,dim=0,keepdim=True).int()
-#         return image,mask, "Kvasir"
+class KvasirSegmentationDataset(data.Dataset):
+    """
+        Dataset class that fetches images with the associated segmentation mask.
+    """
+    def __init__(self, path, split="train"):
+        super(KvasirSegmentationDataset, self).__init__()
+        self.path = path
+        self.fnames = listdir(join(self.path,"segmented-images", "images"))
+        self.split = split
+        self.train_transforms = transforms.Compose([transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.Resize((512,512))])
+        self.val_transforms = transforms.Compose([transforms.Resize({512, 512})])
+        train_size = int(len(self.fnames) * 0.8)
+        val_size = (len(self.fnames) - train_size) // 2
+        test_size = len(self.fnames) - train_size - val_size
+        self.fnames_train = self.fnames[:train_size]
+        self.fnames_val = self.fnames[train_size:train_size + val_size]
+        self.fnames_test = self.fnames[train_size + val_size:]
+        self.split_fnames = None  # iterable for selected split
+        if self.split == "train":
+            self.size = train_size
+            self.split_fnames = self.fnames_train
+        elif self.split == "val":
+            self.size = val_size
+            self.split_fnames = self.fnames_val
+        elif self.split == "test":
+            self.size = test_size
+            self.split_fnames = self.fnames_test
+        else:
+            raise ValueError("Choices are train/val/test")
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, index):
+        # img = Image.open(join(self.path, "segmented-images", "images/", self.split_fnames[index]))
+        # mask = Image.open(join(self.path, "segmented-images", "masks/", self.split_fnames[index]))
+
+        image = np.asarray(Image.open(join(self.path, "segmented-images", "images/", self.split_fnames[index])))
+        mask =  np.asarray(Image.open(join(self.path, "segmented-images", "masks/", self.split_fnames[index])))
+        if self.split=="train":
+            image, mask = self.train_transforms(image=image, mask=mask).values()
+        else:
+            image, mask = self.val_transforms(image=image, mask=mask).values()
+        image, mask = transforms.ToTensor()(Image.fromarray(image)), transforms.ToTensor()(Image.fromarray(mask))
+        mask = torch.mean(mask,dim=0,keepdim=True).int()
+        return image,mask, "Kvasir"
 
 class Imagenette(torchvision.datasets.ImageFolder):
     def __init__(self, root, transform=None, split="train"):
@@ -205,6 +205,19 @@ class CVC_ClinicDB(data.Dataset):
     def __len__(self):
         return self.len
 
+class ImagenettewNoise(Imagenette):
+    def __init__(self, root,transform,train, noise_level=0):
+        super().__init__(root, transform, train)
+        self.noise_level = noise_level
+
+    def __getitem__(self, index):
+        x,y = super().__getitem__(index)
+        if self.noise_level!=0:
+            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
+        return x,y
+
+    def __len__(self):
+        return super().__len__()
 
 class CIFAR10wNoise(CIFAR10):
     def __init__(self, root, train, transform, noise_level=0, target_transform=None, download=False):

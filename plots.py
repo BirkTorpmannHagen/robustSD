@@ -30,14 +30,21 @@ import numpy as np
 import seaborn as sns
 import math
 from ast import literal_eval
-def open_and_process(fname):
+def open_and_process(fname, filter_noise=False, combine_losses=True, filter_by_sampler=""):
     try:
         data = pd.read_csv(fname)
-        if "noise" in str(pd.unique(data["fold"])):
+        # data = data[data["sampler"] != "ClassOrderSampler"]
+        # print(pd.unique(data["sampler"]))
+        if filter_by_sampler!="":
+            data = data[data["sampler"]==filter_by_sampler]
+        if "noise" in str(pd.unique(data["fold"])) and filter_noise:
             data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
         if "fullloss" in fname:
             data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
-            data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+            if combine_losses:
+                data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+            else:
+                data=data.explode("loss")
         data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
         return data
     except FileNotFoundError:
@@ -90,7 +97,7 @@ def aupr(data):
 
 def correlation(pandas_df, plot=False, split_by_sampler=True):
     # pandas_df["pvalue"]=pandas_df["pvalue"].apply(lambda x: math.log(x, 10))
-    pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
+    # pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
     merged_p = pandas_df["pvalue"].apply(lambda x: math.log10(x) if x!=0 else -250)
     merged_loss = pandas_df["loss"]
 
@@ -103,7 +110,7 @@ def correlation(pandas_df, plot=False, split_by_sampler=True):
         for sampler in pd.unique(pandas_df["sampler"]):
             bysampler = pandas_df[pandas_df["sampler"]==sampler]
             print(f"{sampler}: {pearsonr(bysampler['pvalue'].apply(lambda x: math.log10(x) if x!=0 else -250), bysampler['loss'])}")
-    return spearmanr(merged_p, merged_loss)
+    return spearmanr(merged_p, merged_loss)[0]
 
 def linreg_smape(pandas_df):
     pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
@@ -174,7 +181,12 @@ def risk(data, threshold):
 
 
 def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
-    data = pd.read_csv(fname)
+    data = open_and_process(fname, filter_noise=False, combine_losses=True)
+    sns.scatterplot(data=data, x="pvalue", y="loss", hue="fold")
+    plt.xscale("log")
+    plt.show()
+    data.to_csv(f"{fname}_inspect.csv")
+
     #merge loss arrays
     # data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
     # data["loss"] = data["loss"].apply(lambda x: np.mean(x))
@@ -201,7 +213,7 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
     random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
-    # corr = correlation(data, plot=True)
+    corr = correlation(data, plot=True)
     # print("corr: ", corr)
     # pred = linreg_smape(data)
     # print("smape: ", pred)
@@ -212,6 +224,10 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
         subset = data[data["sampler"]==sampler]
         subset_ood = subset[subset["oodness"]>=1]
         subset_ind = subset[subset["oodness"]<1]
+        if sampler=="RandomSampler":
+            print(subset)
+        acc =calibrated_detection_rate(subset, threshold)
+        print(f"acc for {sampler}: {acc}")
         # print(f"fpr for {sampler}: {fpr}")
         if plots:
             ax[i].scatter(subset_ood["loss"], subset_ood["pvalue"], label="ood")
@@ -666,7 +682,7 @@ def plot_bias_severity_impact(filename):
 def summarize_results():
     #summarize overall results;
     table_data = []
-    for dataset in ["CIFAR10", "CIFAR100", "NICO", "Njord", "Polyp"]:
+    for dataset in ["CIFAR10", "CIFAR100", "NICO", "Njord", "Polyp", "imagenette"]:
         for dsd in ["ks", "ks_5NN", "typicality"]:
             for sample_size in [10, 20, 50, 100, 200, 500]:
                 if dataset=="Polyp":
@@ -686,16 +702,81 @@ def summarize_results():
                 table_data.append({"Dataset":dataset, "OOD Detector":dsd, "Sample Size":sample_size,
                                    "FPR":fpr(data, threshold=threshold),
                                     "DR":calibrated_detection_rate(data, threshold=threshold),
-                                   "Risk":risk(data, threshold=threshold)})
+                                   "Risk":risk(data, threshold=threshold),
+                                   "Correlation":correlation(data)})
     df = pd.DataFrame(data=table_data).drop(columns="Sample Size").replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace("typicality", "Typicality")
     merged = df.groupby(["Dataset", "OOD Detector"]).mean()
     print(merged)
 
+def experiment_prediction(fname):
+    data = open_and_process(fname, combine_losses=True)
+    data["pvalue"]=data["pvalue"].apply(lambda x: np.log10(x))
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data.dropna(axis=1, how='any', inplace=True)
 
+    # probability approach
+    num_bins = 10
+    labels = range(1, num_bins + 1)  # The bin labels; ensures unique labels for each bin
+    data["bin"], bin_edges = pd.qcut(data["pvalue"], q=num_bins, retbins=True, labels=labels)
+
+    # Convert the bin labels back to integers for consistency
+    data["bin"] = data["bin"].astype(int)
+    # bins = np.linspace(min(data["pvalue"]), max(data["pvalue"]), num_bins)
+    # data["bin"] = np.digitize(data["pvalue"], bins)
+    data["bin"] = data["bin"].apply(lambda x: round(bin_edges[x-1]))
+    print(data["bin"])
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.regplot(data=data, x="bin", y="loss", scatter=False)
+    sns.violinplot(data=data, ax=ax, x="bin", y="loss", positions=np.unique(data["bin"]))
+    plt.show()
+    x = data["loss"]
+    g = data["bin"]
+    # df = pd.DataFrame(dict(x=x, g=g))
+
+    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+    # Initialize the FacetGrid object
+    pal = sns.cubehelix_palette(10, rot=-.25, light=.7)
+    g = sns.FacetGrid(data, row="bin", hue="bin", aspect=7, height=1, palette=pal)
+
+    # Draw the densities in a few steps
+    g.map(sns.kdeplot, "loss",
+          bw_adjust=.4, clip_on=False,
+          fill=True, alpha=1, linewidth=1.5, clip=(0,None))
+    g.map(sns.kdeplot, "loss", clip_on=False, color="w", lw=2, bw_adjust=.4)
+
+    # passing color=None to refline() uses the hue mapping
+    g.refline(y=0, linewidth=2, linestyle="-", color=None, clip_on=False)
+
+    # Define and use a simple function to label the plot in axes coordinates
+    def label(x, color, label):
+        ax = plt.gca()
+        ax.text(0, .2, label, fontweight="bold", color=color,
+                ha="left", va="center", transform=ax.transAxes, fontsize=16)
+
+    g.map(label, "loss")
+
+
+    # Set the subplots to overlap
+    g.figure.subplots_adjust(hspace=-.25)
+    g.set_titles("")
+    g.set(yticks=[], ylabel="")
+    g.despine(bottom=True, left=True)
+    ylabel= g.axes[0][0].set_ylabel("log(p) bins", fontsize=16)
+    ylabel.set_position((ylabel.get_position()[0], -3))
+    plt.xlabel("Loss", fontsize=16)
+    plt.savefig(f"figures/{fname.split('/')[-1]}_loss_vs_pvalue_pdf.eps")
+    plt.show()
 
 
 if __name__ == '__main__':
-    summarize_results()
+    # collect_losswise_metrics("data/imagenette_ks_5NN_500_fullloss.csv")
+    # experiment_prediction("data/imagenette_ks_5NN_500_fullloss.csv")
+    # experiment_prediction("data/CIFAR10_ks_5NN_100_fullloss.csv")
+
+    experiment_prediction("data/CIFAR100_ks_100_fullloss.csv")
+    experiment_prediction("data/CIFAR100_ks_5NN_100_fullloss.csv")
+    # summarize_results()
     # collect_losswise_metrics("Polyp_ks_10.csv")
     # collect_losswise_metrics("Polyp_ks_5NN_10.csv")
     # print("typicality")

@@ -65,11 +65,14 @@ experiment = VAEXperiment(model,
 # val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
 
 
+# train = CIFAR100("../../Datasets/CIFAR100", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+# val = CIFAR100("../../Datasets/CIFAR100", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+train_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
 
-train = CIFAR100("../../Datasets/CIFAR100", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-val = CIFAR100("../../Datasets/CIFAR100", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
-                               name="CIFAR100")
+                               name=train.__class__.__name__)
 data = VAEDataset(**config["data_params"], train_set=train, val_set=val)
 
 data.setup()

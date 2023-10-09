@@ -18,6 +18,7 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
+from torchmetrics import Accuracy
 
 
 class ResNetClassifier(pl.LightningModule):
@@ -45,6 +46,8 @@ class ResNetClassifier(pl.LightningModule):
         self.resnet_model.fc = nn.Linear(linear_size, num_classes)
 
         self.latent_dim = self.get_encoding_size(-2)
+        self.accuracy = Accuracy("multiclass", num_classes=num_classes)
+
 
 
 
@@ -54,10 +57,6 @@ class ResNetClassifier(pl.LightningModule):
 
     def get_encoding_size(self, depth):
         dummy = torch.zeros((1,3,512,512))
-        print(list(self.resnet_model.children())[-1])
-        print(
-            torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).shape
-        )
         return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).flatten(1).shape[-1]
     def get_encoding(self, X, depth=-2):
         return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(X).flatten(1)
@@ -72,32 +71,35 @@ class ResNetClassifier(pl.LightningModule):
 
 
     def training_step(self, batch, batch_idx):
-        x, y, context = batch
+        x = batch[0]
+        y = batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
-
-        acc = (y == torch.argmax(preds, 1)) \
-            .type(torch.FloatTensor).mean()
-        # perform logging
+        acc = self.accuracy(preds, y)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y, context = batch
+        x = batch[0]
+        y = batch[1]
         preds = self(x)
-        loss = self.compute_loss(x,y)
-        acc = (y == torch.argmax(preds, 1)) \
-            .type(torch.FloatTensor).mean()
-        # perform logging
+        loss = self.criterion(preds,y)
+        acc = self.accuracy(preds, y)
+
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_acc", acc, on_epoch=True, prog_bar=True, logger=True)
+
+
+
+
     def test_step(self, batch, batch_idx):
-        x, y, context = batch
+        x = batch[0]
+        y = batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
-        acc = (y== torch.argmax(preds, 1)) \
-            .type(torch.FloatTensor).mean()
+        acc = self.accuracy(preds, y)
+
         # perform logging
         self.log("test_loss", loss, on_step=True, prog_bar=True, logger=True)
         self.log("test_acc", acc, on_step=True, prog_bar=True, logger=True)

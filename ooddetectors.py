@@ -34,7 +34,8 @@ class RabanserSD(BaseSD):
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
-        for i, data in enumerate(dataloader):
+        print(encodings.shape)
+        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0]
             with torch.no_grad():
                 x = x.to("cuda").float()
@@ -164,9 +165,12 @@ class RabanserSD(BaseSD):
         #     print("recomputing...")
         ind_latents = self.get_encodings(self.testbed.ind_loader())
         torch.save(ind_latents, f"{type(self).__name__}_{type(self.testbed).__name__}.pt")
-
+        print("got latents")
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ind_val_loaders(), sample_size, test)
+        print("got ind")
+
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_latents, self.testbed.ood_loaders(), sample_size, test)
+        print("got ood")
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 class TypicalitySD(BaseSD):
