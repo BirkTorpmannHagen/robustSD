@@ -113,8 +113,8 @@ class RabanserSD(BaseSD):
                          )) for
                      loader_w_sampler in dataloaders.values()]))
 
-        mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
-        knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
+        # mmd = tts.MMDStatistic(len(ind_encodings), sample_size)
+        # knn = tts.KNNStatistic(len(ind_encodings),sample_size, k=sample_size)
         for fold_name, fold_encodings in encodings.items():
             for biased_sampler_name, biased_sampler_encodings in fold_encodings.items():
                 ind_encodings = torch.Tensor(ind_encodings)

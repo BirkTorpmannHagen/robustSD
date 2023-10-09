@@ -18,8 +18,7 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-
-
+from torchmetrics import Accuracy
 class ResNetClassifier(pl.LightningModule):
     def __init__(self, num_classes, resnet_version,
                  optimizer='adam', lr=1e-6, batch_size=16,
@@ -45,6 +44,7 @@ class ResNetClassifier(pl.LightningModule):
         self.resnet_model.fc = nn.Linear(linear_size, num_classes)
 
         self.latent_dim = self.get_encoding_size(-2)
+        self.acc = Accuracy(top_k=5)
 
 
 
@@ -76,8 +76,7 @@ class ResNetClassifier(pl.LightningModule):
         preds = self(x)
         loss = self.criterion(preds, y)
 
-        acc = (y == torch.argmax(preds, 1)) \
-            .type(torch.FloatTensor).mean()
+        acc = self.acc(preds, y)
         # perform logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -87,9 +86,7 @@ class ResNetClassifier(pl.LightningModule):
         x, y, context = batch
         preds = self(x)
         loss = self.compute_loss(x,y)
-        acc = (y == torch.argmax(preds, 1)) \
-            .type(torch.FloatTensor).mean()
-        # perform logging
+        acc = self.acc(preds, y)# perform logging
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_acc", acc, on_epoch=True, prog_bar=True, logger=True)
     def test_step(self, batch, batch_idx):

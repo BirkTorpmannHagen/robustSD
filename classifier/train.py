@@ -47,7 +47,7 @@ def train_classifier(train_set, val_set):
     # train_set = wrap_dataset(train_set)
     # val_set = wrap_dataset(val_set)
     checkpoint_callback = ModelCheckpoint(
-        dirpath=f"{type(train_set).__name__}_logs/checkpoints_nopretrain",
+        dirpath=f"{type(train_set).__name__}_logs/checkpoints",
         save_top_k=3,
         verbose=True,
         monitor="val_acc",
@@ -56,8 +56,8 @@ def train_classifier(train_set, val_set):
 
 
     trainer = Trainer(max_epochs=1000, logger=tb_logger, accelerator="gpu",callbacks=checkpoint_callback)
-    trainer.fit(model, train_dataloaders=DataLoader(train_set, shuffle=True, num_workers=24),
-                val_dataloaders=DataLoader(val_set, shuffle=True, num_workers=24))
+    trainer.fit(model, train_dataloaders=DataLoader(train_set, shuffle=True, batch_size=16, num_workers=24),
+                val_dataloaders=DataLoader(val_set, batch_size=16, shuffle=True, num_workers=24))
 
 if __name__ == '__main__':
     #NICO

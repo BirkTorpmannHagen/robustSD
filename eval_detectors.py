@@ -64,14 +64,16 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
 
     for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
-        # bench = NicoTestBed(sample_size)
-        # tsd = RabanserSD(bench.rep_model, None, select_samples=True, processes=5)
-        # bench =CIFAR10TestBed(sample_size)
-        bench = NjordTestBed(sample_size)
-        # tsd = RabanserSD(bench.rep_model, select_samples=False)
-        tsd = TypicalitySD(bench.vae)
+        bench = NicoTestBed(sample_size)
+        tsd = RabanserSD(bench.rep_model, select_samples=False)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"CIFAR_classifier_typicality_{sample_size}_fullloss.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"NICO_ks_{sample_size}_fullloss.csv")
+
+    for sample_size in [10, 20, 50, 100, 200, 500][::-1]:
+        bench = NicoTestBed(sample_size)
+        tsd = RabanserSD(bench.rep_model, select_samples=True)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"NICO_ks_5NN_{sample_size}_fullloss.csv")
     #
     # for sample_size in [10, 20, 50, 100, 200, 500]:
     #     bench =CIFAR10TestBed(sample_size)

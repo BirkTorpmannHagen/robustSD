@@ -101,7 +101,7 @@ class NicoTestBed(BaseTestBed):
             #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
             #     resnet_version=34).to("cuda").eval()
         self.classifier = ResNetClassifier.load_from_checkpoint(
-           "NICODataset_logs/checkpoints_newer/epoch=398-step=3986409.ckpt", num_classes=num_classes,
+           "NICODataset_logs/checkpoints/epoch=279-step=175000.ckpt", num_classes=num_classes,
             resnet_version=101).to("cuda").eval()
 
 
