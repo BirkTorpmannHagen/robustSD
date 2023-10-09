@@ -10,7 +10,7 @@ from domain_datasets import *
 # from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning_dataset import VAEDataset
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, CIFAR100
 # from pytorch_lightning.plugins import DDPPlugin
 
 def wrap_dataset(dataset):
@@ -57,7 +57,7 @@ model = ResNetVAE()
 experiment = VAEXperiment(model,
                           config['exp_params'])
 
-train, val, test = get_njordvid_datasets()
+# train, val, test = get_njordvid_datasets()
 # from torch.utils.data import DataLoader
 
 
@@ -65,9 +65,15 @@ train, val, test = get_njordvid_datasets()
 # val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
 
 
+# train = CIFAR100("../../Datasets/CIFAR100", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+# val = CIFAR100("../../Datasets/CIFAR100", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
+train_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
+
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
-                               name="Njord")
-data = VAEDataset(**config["data_params"], train_set=train, val_set=val )
+                               name=train.__class__.__name__)
+data = VAEDataset(**config["data_params"], train_set=train, val_set=val)
 
 data.setup()
 runner = Trainer(logger=tb_logger,

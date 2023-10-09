@@ -19,6 +19,7 @@ from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from torchmetrics import Accuracy
+
 class ResNetClassifier(pl.LightningModule):
     def __init__(self, num_classes, resnet_version,
                  optimizer='adam', lr=1e-6, batch_size=16,
@@ -54,10 +55,6 @@ class ResNetClassifier(pl.LightningModule):
 
     def get_encoding_size(self, depth):
         dummy = torch.zeros((1,3,512,512))
-        print(list(self.resnet_model.children())[-1])
-        print(
-            torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).shape
-        )
         return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(dummy).flatten(1).shape[-1]
     def get_encoding(self, X, depth=-2):
         return torch.nn.Sequential(*list(self.resnet_model.children())[:-1])(X).flatten(1)
@@ -72,7 +69,8 @@ class ResNetClassifier(pl.LightningModule):
 
 
     def training_step(self, batch, batch_idx):
-        x, y, context = batch
+        x = batch[0]
+        y = batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
 
@@ -83,18 +81,24 @@ class ResNetClassifier(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y, context = batch
+        x = batch[0]
+        y = batch[1]
         preds = self(x)
-        loss = self.compute_loss(x,y)
-        acc = self.acc(preds, y)# perform logging
+        loss = self.criterion(preds,y)
+        acc = self.accuracy(preds, y)
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_acc", acc, on_epoch=True, prog_bar=True, logger=True)
+
+
+
+
     def test_step(self, batch, batch_idx):
-        x, y, context = batch
+        x = batch[0]
+        y = batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
-        acc = (y== torch.argmax(preds, 1)) \
-            .type(torch.FloatTensor).mean()
+        acc = self.accuracy(preds, y)
+
         # perform logging
         self.log("test_loss", loss, on_step=True, prog_bar=True, logger=True)
         self.log("test_acc", acc, on_step=True, prog_bar=True, logger=True)

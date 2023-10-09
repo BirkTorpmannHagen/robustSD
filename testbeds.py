@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from torch.utils.data import ConcatDataset
 
 from vae.vae_experiment import VAEXperiment
@@ -7,7 +8,7 @@ from torch.utils.data import RandomSampler
 from classifier.resnetclassifier import ResNetClassifier
 from ooddetectors import *
 from torch.nn import functional as F
-from classifier.cifarresnet import get_cifar, cifar10_pretrained_weight_urls
+from classifier.cifarresnet import get_cifar, cifar10_pretrained_weight_urls, cifar100_pretrained_weight_urls
 
 from njord.utils.loss import ComputeLoss
 from njord.val import fetch_model
@@ -31,6 +32,50 @@ class BaseTestBed:
 
     def ind_val_loaders(self):
         pass
+
+class NoiseTestBed(BaseTestBed):
+    def __init__(self, sample_size, num_workers=20):
+        super().__init__(sample_size, num_workers)
+        self.noise_range = np.arange(0.05, 0.3, 0.05)
+
+
+    def ind_loader(self):
+        # return DataLoader(
+        #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
+        return DataLoader(
+            self.ind, shuffle=True, num_workers=self.num_workers)
+
+    def ind_val_loaders(self):
+        loaders = {"ind": dict(
+            [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers)) for sampler in
+             [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
+              ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+              RandomSampler(self.ind_val)]])}
+        return loaders
+
+    def ood_loaders(self):
+
+
+        oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10), num_workers=self.num_workers),
+                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
+                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for test_dataset in self.ood_sets]
+        dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+        double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
+        return double_dicted
+    def compute_losses(self, loader):
+        losses = torch.zeros(len(loader) ).to("cuda")
+        # accs = torch.zeros(len(loader) ).to("cuda")
+        # from torchmetrics import Accuracy
+        # acc = Accuracy("multiclass", num_classes=self.num_classes).cuda()
+        criterion = nn.CrossEntropyLoss()
+        for i, data in tqdm(enumerate(loader), total=len(loader)):
+
+            x = data[0].to("cuda")
+            y = data[1].to("cuda")
+            yhat = self.classifier(x)
+            # accs[i] =acc(yhat, y).item()
+            losses[i]=criterion(yhat, y).item()
+        return losses.cpu().numpy()
 
 class NjordTestBed(BaseTestBed):
     def __init__(self, sample_size):
@@ -144,7 +189,8 @@ class NicoTestBed(BaseTestBed):
                                                                               RandomSampler(self.ind_val)]])}
         return loaders
 
-class CIFAR10TestBed(BaseTestBed):
+
+class CIFAR10TestBed(NoiseTestBed):
     def __init__(self, sample_size):
         super().__init__(sample_size)
         self.trans = transforms.Compose([
@@ -158,7 +204,7 @@ class CIFAR10TestBed(BaseTestBed):
         #     print(module)
         self.classifier = get_cifar("resnet32", layers= [5]*3, model_urls=cifar10_pretrained_weight_urls,progress=True, pretrained=True).cuda().eval()
 
-        self.rep_model = WrappedCIFAR10Resnet(self.classifier)
+        self.rep_model = WrappedResnet(self.classifier)
         config = yaml.safe_load(open("vae/configs/vae.yaml"))
         self.vae = CIFARVAE().cuda().eval()
         vae_exp = VAEXperiment(self.vae, config)
@@ -168,44 +214,67 @@ class CIFAR10TestBed(BaseTestBed):
         self.num_classes = 10
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
+        self.oods = [CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=noise_val)
+                                       for noise_val in self.noise_range]
 
-
-    def ind_loader(self):
-        # return DataLoader(
-        #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
-        return DataLoader(
-            self.ind, shuffle=False, num_workers=self.num_workers)
-
-    def ind_val_loaders(self):
-        loaders = {"ind": dict(
-            [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers)) for sampler in
-             [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
-              ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
-              RandomSampler(self.ind_val)]])}
-        return loaders
-
-    def ood_loaders(self):
-        ood_sets = [CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=noise_val)
-                                       for noise_val in np.arange(0.1, 0.3, 0.05)]
-        # self.oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10)),
-        #          DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.classifier, sample_size=self.sample_size)),
-        #          DataLoader(test_dataset, sampler=RandomSampler(test_dataset))] for test_dataset in ood_sets]
-        oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10), num_workers=self.num_workers),
-                 DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
-                 DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for test_dataset in ood_sets]
-        dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
-        double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in np.linspace(0.1, 0.20, 3)], dicted))
-        return double_dicted
         # return 0 #DEBUG
-    def compute_losses(self, loader):
-        losses = torch.zeros(len(loader) ).to("cuda")
-        print("computing losses")
-        for i, data in tqdm(enumerate(loader), total=len(loader)):
-            x = data[0].to("cuda")
-            y = data[1].to("cuda")
-            yhat = self.classifier(x)
-            losses[i]=F.cross_entropy(yhat, y).item()
-        return losses.cpu().numpy()
+
+class CIFAR100TestBed(NoiseTestBed):
+    def __init__(self, sample_size):
+        super().__init__(sample_size)
+        self.trans = transforms.Compose([
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(), ])
+        self.classifier = get_cifar("resnet32", layers=[5] * 3, model_urls=cifar100_pretrained_weight_urls,
+                                    progress=True, pretrained=True, num_classes=100).cuda().eval()
+
+        self.rep_model = WrappedResnet(self.classifier)
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        self.vae = CIFARVAE().cuda().eval()
+        vae_exp = VAEXperiment(self.vae, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/CIFAR100/version_0/checkpoints/epoch=89-step=281250.ckpt")[
+                "state_dict"])
+        self.num_classes = 100
+        # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
+        self.ind, self.ind_val = torch.utils.data.random_split(
+            CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, download=True), [0.5, 0.5])
+        self.oods = [CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, noise_level=noise_val)
+                                       for noise_val in self.noise_range]
+
+class ImagenetteTestBed(NoiseTestBed):
+    def __init__(self, sample_size: object) -> object:
+        """
+
+        :type sample_size: object
+        """
+        super().__init__(sample_size)
+
+        self.trans = transforms.Compose([
+            transforms.Resize((256, 256)),
+            transforms.ToTensor(), ])
+
+        # classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to(
+        #     "cuda").eval()
+        # torch.save(classifier, "cifar10_model.pt")
+        # for module in classifier.modules():
+        #     print(module)
+        # self.classifier = ResNetClassifier(num_classes=10, resnet_version=101).cuda().eval()
+        self.classifier = ResNetClassifier.load_from_checkpoint("Imagenette_logs/checkpoints/epoch=82-step=24568.ckpt", resnet_version=101,num_classes=10)
+        self.classifier.eval().to("cuda")
+        self.rep_model = self.classifier
+
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        self.vae = ResNetVAE().cuda().eval()
+        vae_exp = VAEXperiment(self.vae, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/Imagenette/version_2/checkpoints/last.ckpt")[
+                "state_dict"])
+
+        self.num_classes = 10
+        self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
+        self.ood_sets =  [ImagenettewNoise("../../Datasets/imagenette2", train="val", transform=self.trans, noise_level=noise_val)
+                                       for noise_val in self.noise_range]
 
 class PolypTestBed(BaseTestBed):
     def __init__(self, sample_size):
