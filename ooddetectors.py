@@ -91,7 +91,7 @@ class RabanserSD(BaseSD):
                           for sampler_name, loader in loader_w_sampler.items()]
                          )) for
                      loader_w_sampler in dataloaders.values()])) #dict of dicts of tensors; sidenote initializing nested dicts sucks
-
+        print("encoded")
         losses =  dict(
             zip(dataloaders.keys(),
                 [dict(zip(loader_w_sampler.keys(),
@@ -99,6 +99,7 @@ class RabanserSD(BaseSD):
                           for sampler_name, loader in loader_w_sampler.items()]
                          )) for
                      loader_w_sampler in dataloaders.values()]))
+        print("losses computed)")
 
         p_values = dict(
             zip(dataloaders.keys(),

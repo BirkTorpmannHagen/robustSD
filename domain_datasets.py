@@ -1,6 +1,6 @@
 import os
 import json
-
+import albumentations as alb
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -27,8 +27,8 @@ class KvasirSegmentationDataset(data.Dataset):
         self.path = path
         self.fnames = listdir(join(self.path,"segmented-images", "images"))
         self.split = split
-        self.train_transforms = transforms.Compose([transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.Resize((512,512))])
-        self.val_transforms = transforms.Compose([transforms.Resize({512, 512})])
+        self.train_transforms = alb.Compose([alb.Flip(), alb.Resize(512,512)])
+        self.val_transforms = alb.Compose([alb.Resize(512, 512)])
         train_size = int(len(self.fnames) * 0.8)
         val_size = (len(self.fnames) - train_size) // 2
         test_size = len(self.fnames) - train_size - val_size

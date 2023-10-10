@@ -47,8 +47,8 @@ class SegmentationModel(pl.LightningModule):
 
     def get_encoding_size(self):
         dummy = torch.zeros((1,3,512,512))
-        return self.encode(dummy).shape[-1]
-    def encode(self, X):
+        return self.get_encoding(dummy).shape[-1]
+    def get_encoding(self, X):
         code =  torch.mean(self.segmentor.encoder(X)[-2], [-1, -2]).flatten(1).squeeze(-1)
         return code
 
