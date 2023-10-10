@@ -1,5 +1,8 @@
+import pickle
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas
 import pandas as pd
 import torch.nn
 import multiprocessing
@@ -14,6 +17,39 @@ from domain_datasets import *
 from vae.models.vanilla_vae import VanillaVAE
 # import torch_two_sample as tts
 from sklearn.decomposition import PCA
+
+
+def process_dataframe(data, filter_noise=False, combine_losses=True, filter_by_sampler=""):
+    # data = data[data["sampler"] != "ClassOrderSampler"]
+    # print(pd.unique(data["sampler"]))
+    if filter_by_sampler!="":
+        data = data[data["sampler"]==filter_by_sampler]
+    if "noise" in str(pd.unique(data["fold"])) and filter_noise:
+        data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
+    if isinstance(data["loss"], str):
+        data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
+        if combine_losses:
+            data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+        else:
+            data=data.explode("loss")
+    data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+    return data
+
+def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample_losses):
+    dataset = []
+    for fold, by_sampler in ind_pvalues.items():
+        for sampler, data in by_sampler.items():
+            dataset.append({"fold": fold, "sampler": sampler, "pvalue": ind_pvalues[fold][sampler], "loss": ind_sample_losses[fold][sampler]})
+
+    for fold, by_sampler in ood_pvalues.items():
+        for sampler, data in by_sampler.items():
+            dataset.append({"fold": fold, "sampler": sampler, "pvalue": ood_pvalues[fold][sampler], "loss": ood_sample_losses[fold][sampler]})
+    pkl.dump(dataset, open("data_nico_debug.pkl", "wb"))
+    df = pd.DataFrame(dataset)
+
+    df = df.explode(["pvalue", "loss"])
+    return df
+
 
 class BaseSD:
     def __init__(self, rep_model):
@@ -262,3 +298,25 @@ class TypicalitySD(BaseSD):
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
                                                                          self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
+
+
+def open_and_process(fname, filter_noise=False, combine_losses=True, filter_by_sampler=""):
+    try:
+        data = pd.read_csv(fname)
+        # data = data[data["sampler"] != "ClassOrderSampler"]
+        # print(pd.unique(data["sampler"]))
+        if filter_by_sampler!="":
+            data = data[data["sampler"]==filter_by_sampler]
+        if "noise" in str(pd.unique(data["fold"])) and filter_noise:
+            data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
+        if "fullloss" in fname:
+            data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
+            if combine_losses:
+                data["loss"] = data["loss"].apply(lambda x: np.mean(x))
+            else:
+                data=data.explode("loss")
+        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+        return data
+    except FileNotFoundError:
+        print(f"File {fname} not found")
+        return None

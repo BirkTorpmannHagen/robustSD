@@ -1,17 +1,8 @@
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import torch
-import itertools
-from matplotlib.animation import FuncAnimation
-from tqdm import tqdm
+from ooddetectors import open_and_process
 from vae.vae_experiment import VAEXperiment
-from vae.models.vanilla_vae import VanillaVAE, ResNetVAE
+from vae.models.vanilla_vae import ResNetVAE
 from classifier.resnetclassifier import ResNetClassifier
 import yaml
-from bias_samplers import ClusterSampler, ClusterSamplerWithSeverity, ClassOrderSampler
-from torch.utils.data import DataLoader
 from domain_datasets import build_nico_dataset
 import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
@@ -22,34 +13,13 @@ from bias_samplers import *
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
-from sklearn.metrics import RocCurveDisplay
 from scipy.stats import spearmanr, pearsonr
-from sklearn.linear_model import LinearRegression, QuantileRegressor
+from sklearn.linear_model import QuantileRegressor
 from sklearn.metrics import mean_absolute_percentage_error as mape
 import numpy as np
 import seaborn as sns
 import math
-from ast import literal_eval
-def open_and_process(fname, filter_noise=False, combine_losses=True, filter_by_sampler=""):
-    try:
-        data = pd.read_csv(fname)
-        # data = data[data["sampler"] != "ClassOrderSampler"]
-        # print(pd.unique(data["sampler"]))
-        if filter_by_sampler!="":
-            data = data[data["sampler"]==filter_by_sampler]
-        if "noise" in str(pd.unique(data["fold"])) and filter_noise:
-            data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
-        if "fullloss" in fname:
-            data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
-            if combine_losses:
-                data["loss"] = data["loss"].apply(lambda x: np.mean(x))
-            else:
-                data=data.explode("loss")
-        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
-        return data
-    except FileNotFoundError:
-        print(f"File {fname} not found")
-        return None
+
 
 def get_threshold(data, fpr=0):
     ood = data[data["oodness"]>=1]
@@ -95,7 +65,7 @@ def aupr(data):
     auc = average_precision_score(true, probs)
     return auc
 
-def correlation(pandas_df, plot=False, split_by_sampler=True):
+def correlation(pandas_df, plot=False, split_by_sampler=False):
     # pandas_df["pvalue"]=pandas_df["pvalue"].apply(lambda x: math.log(x, 10))
     # pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
     merged_p = pandas_df["pvalue"].apply(lambda x: math.log10(x) if x!=0 else -250)
@@ -161,14 +131,30 @@ def risk(data, threshold):
 
     ood = data[data["oodness"]>=1]
     ind = data[data["oodness"]<1]
-    random_sampler_ind_data = ind[(ind["sampler"] == "RandomSampler")]
-    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
-    threshold_new = sorted_ind_ps[0]  # min p_value for a sample to be considered ind
-    nopredcosts = ind["loss"].median() #median for outlier robustness
+    # fp = len(ind[ind["pvalue"]<threshold])
+    # tp = len(ood[ood["pvalue"]<threshold])
+    # fn = len(ind[ind["pvalue"]>=threshold])
+    # tn = len(ood[ood["pvalue"]>=threshold])
+    #
+    # assert fp+tp+fn+tn == len(data)
+    # # tncosts = ind["loss"].median() #cost of predictive model not predicting
+    # tncosts = 0
+    # fpcost = ood["loss"].median() # cost of predictive model not predicting when it should have, as bad as predicting wrong
+    # fncost = ood["loss"].median() # cost of predictive model predicting when it shouldn't have; ie predicting incorrectly
+    # tpcost = 0
+    # # tpcost = ind["loss"].median() # cost of predictive model predicting correctly
+    # risk = (fp*fpcost+tp*tpcost+fn*fncost+tn*tncosts)/len(data)
+
+
+    nopredcost = ind["loss"].median()
     data["risk"]=0
-    data.loc[((data["pvalue"] < threshold) & (data["oodness"]>1)), "risk"] = nopredcosts
-    data.loc[((data["pvalue"] < threshold) & (data["oodness"]<1)), "risk"] = data[data["oodness"]>1]["loss"].median ()
-    data.loc[data["pvalue"] >= threshold, "risk"] = data.loc[data["pvalue"] >= threshold, "loss"]
+    data.loc[((data["pvalue"] < threshold) & (data["oodness"] >= 1)), "risk"] = nopredcost #true positive
+    data.loc[((data["pvalue"] < threshold) & (data["oodness"] < 1)), "risk"] = data[data["oodness"]>=1]["loss"].mean() #false positive
+    data.loc[((data["pvalue"] >= threshold) & (data["oodness"] >= 1))] = data[data["oodness"]>=1]["loss"].mean() #false negative, cost is the average loss of the ood samples
+    data.loc[((data["pvalue"] >= threshold) & (data["oodness"] < 1))] = nopredcost #true negative, cost is the average loss of the ind samples
+    assert 0 not in pd.unique(data["risk"]) #sanity check
+    data.loc[data["pvalue"] >= threshold, "risk"] = data.loc[data["pvalue"] >= threshold, "loss"] #true negative, cost
+
     # for sampler in pd.unique(data["sampler"]):
     #     bysampler = data[data["sampler"]==sampler]
     #     print(f"{sampler}: {bysampler['risk'].mean()}")
@@ -185,14 +171,7 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
     sns.scatterplot(data=data, x="pvalue", y="loss", hue="fold")
     plt.xscale("log")
     plt.show()
-    data.to_csv(f"{fname}_inspect.csv")
 
-    #merge loss arrays
-    # data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
-    # data["loss"] = data["loss"].apply(lambda x: np.mean(x))
-    # data= data.explode("loss")
-    # print(data)
-    # input()
     #determine sample oodness according to loss
     if ood_fold_name!="ood":
         data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
@@ -203,29 +182,18 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
     # ood = data[(data["fold"]!="ind")]
     # ind = data[data["fold"]=="ind"]
 
-    # if plots:
-    #     ax = sns.scatterplot(x="loss", y="pvalue", hue="fold", data=data)
-    #     plt.yscale("log")
-    #     plt.show()
-
-
     #find threshold for ind/ood; simulate "naive" approach of not accounting for sample bias
     random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
     sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
     threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
     corr = correlation(data, plot=True)
-    # print("corr: ", corr)
-    # pred = linreg_smape(data)
-    # print("smape: ", pred)
-    print("wee")
+
     if plots:
         fig, ax = plt.subplots(1, len(data["sampler"].unique()), figsize=(16,8), sharey=True)
     for i, sampler in enumerate(data["sampler"].unique()):
         subset = data[data["sampler"]==sampler]
         subset_ood = subset[subset["oodness"]>=1]
         subset_ind = subset[subset["oodness"]<1]
-        if sampler=="RandomSampler":
-            print(subset)
         acc =calibrated_detection_rate(subset, threshold)
         print(f"acc for {sampler}: {acc}")
         # print(f"fpr for {sampler}: {fpr}")
@@ -679,34 +647,53 @@ def plot_bias_severity_impact(filename):
         # plt.show()
 
 
-def summarize_results():
+def breakdown_by_sample_size(placeholder=False, metric="DR"):
+    df = get_metrics_for_all_experiments(placeholder=placeholder)
+    df = df.groupby([ "Dataset", "Sample Size", "OOD Detector"])[metric].mean()
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(df)
+    df = df.reset_index()
+    sns.lineplot(data=df, x="Sample Size", y="DR", hue="OOD Detector")
+    plt.show()
+
+    g = sns.FacetGrid(data=df, col="Dataset", col_wrap=3, sharey=False, sharex=False)
+    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="OOD Detector")
+    g.add_legend()
+    plt.show()
+
+def breakdown_by_sampler(placeholder=False, metric="DR"):
+    df = get_metrics_for_all_experiments(placeholder=placeholder)
+    df = df.groupby(["Dataset", "Sampler", "OOD Detector"])[metric].mean()
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(df)
+
+def get_metrics_for_all_experiments(placeholder=False):
     #summarize overall results;
     table_data = []
     for dataset in ["CIFAR10", "CIFAR100", "NICO", "Njord", "Polyp", "imagenette"]:
         for dsd in ["ks", "ks_5NN", "typicality"]:
             for sample_size in [10, 20, 50, 100, 200, 500]:
-                if dataset=="Polyp":
-                    fname = f"data/{dataset}_{dsd}_{sample_size}.csv"
-                    print(fname)
-                else:
-                    fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
+                fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
                 data = open_and_process(fname)
                 if data is None:
-                    # print(f"skipping {fname}")
-                    # table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
-                    #                    "FPR": -1,
-                    #                    "DR": -1,
-                    #                    "Risk": -1})
+                    if placeholder:
+                        table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
+                                           "FPR": -1,
+                                           "DR": -1,
+                                           "Risk": -1})
                     continue
                 threshold = get_threshold(data)
-                table_data.append({"Dataset":dataset, "OOD Detector":dsd, "Sample Size":sample_size,
-                                   "FPR":fpr(data, threshold=threshold),
-                                    "DR":calibrated_detection_rate(data, threshold=threshold),
-                                   "Risk":risk(data, threshold=threshold),
-                                   "Correlation":correlation(data)})
-    df = pd.DataFrame(data=table_data).drop(columns="Sample Size").replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace("typicality", "Typicality")
-    merged = df.groupby(["Dataset", "OOD Detector"]).mean()
-    print(merged)
+                for sampler in pd.unique(data["sampler"]):
+                    subset = data[data["sampler"] == sampler]
+                    table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
+                                       "Sampler": sampler,
+                                       "FPR": fpr(subset, threshold=threshold),
+                                       "DR": calibrated_detection_rate(subset, threshold=threshold),
+                                       "Risk": risk(subset, threshold=threshold),
+                                       "Correlation": correlation(subset)})
+    df = pd.DataFrame(data=table_data).replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace(
+        "typicality", "Typicality")
+    return df
 
 def experiment_prediction(fname):
     data = open_and_process(fname, combine_losses=True)
@@ -770,13 +757,17 @@ def experiment_prediction(fname):
 
 
 if __name__ == '__main__':
-    # collect_losswise_metrics("data/imagenette_ks_5NN_500_fullloss.csv")
+    # print("vanilla")
+    # collect_losswise_metrics("data/Polyp_ks_100_fullloss.csv")
+    # print("knndsd")
+    # collect_losswise_metrics("data/Polyp_ks_1NN_100_fullloss.csv")
     # experiment_prediction("data/imagenette_ks_5NN_500_fullloss.csv")
     # experiment_prediction("data/CIFAR10_ks_5NN_100_fullloss.csv")
 
-    experiment_prediction("data/CIFAR100_ks_100_fullloss.csv")
-    experiment_prediction("data/CIFAR100_ks_5NN_100_fullloss.csv")
+    # experiment_prediction("data/NICO_ks_100_fullloss.csv")
+    # experiment_prediction("data/CIFAR100_ks_5NN_100_fullloss.csv")
     # summarize_results()
+    breakdown_by_sampler()
     # collect_losswise_metrics("Polyp_ks_10.csv")
     # collect_losswise_metrics("Polyp_ks_5NN_10.csv")
     # print("typicality")

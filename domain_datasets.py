@@ -17,7 +17,6 @@ from njord.utils.dataloaders import create_dataset, create_dataloader
 from random import shuffle
 
 
-
 class KvasirSegmentationDataset(data.Dataset):
     """
         Dataset class that fetches images with the associated segmentation mask.

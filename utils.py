@@ -1,6 +1,28 @@
 import torch
 from torch.utils import data
+import torchvision.transforms as transforms
 import torch.nn as nn
+
+def repeat_dataset_with_transforms(dataset, transforms_list):
+    """this method returns a new dataset object that inherits all properties from the dataset parameter,
+    but each new dataset is transformed by one of the transforms in transforms_list
+    """
+    class NewDataset(data.Dataset):
+        def __init__(self, dataset, transforms):
+            self.dataset = dataset
+            self.transforms = transforms
+
+        def __getitem__(self, index):
+            x, y = self.dataset[index]
+            image, mask = self.train_transforms(image=x, mask=y).values()
+            return image, mask
+
+        def __len__(self):
+            return len(self.dataset)
+
+    return data.ConcatDataset([NewDataset(dataset, transform) for transform in transforms_list])
+
+
 
 class WrappedResnet(nn.Module):
     def __init__(self, model, input_size=32):
