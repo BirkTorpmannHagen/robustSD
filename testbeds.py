@@ -284,15 +284,30 @@ class PolypTestBed(BaseTestBed):
         # self.rep_model = SegmentationModel()
         # dict = torch.load("segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt")
         # self.rep_model.load_state_dict(dict)
-        self.trans = transforms.Compose([
-            transforms.Resize((512, 512)),
-            transforms.ToTensor(), ])
-        cvc_train_set, cvc_val_set = build_polyp_dataset("../../Datasets/Polyps/CVC-ClinicDB", "CVC", 0)
-        kvasir_train_set, kvasir_val_set = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", "Kvasir", 0)
-        etis_train, etis_val = build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", "Etis", 0)
-        self.ind = ConcatDataset((kvasir_train_set, kvasir_val_set))
-        self.ind_val = ConcatDataset((cvc_val_set, cvc_train_set))
-        self.ood = ConcatDataset([etis_train, etis_val])
+        self.trans = [alb.Compose([
+            i,
+            alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True), alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True)]]
+
+
+        inds = []
+        vals = []
+        oods = []
+        for i in self.trans:
+
+            cvc_train_set, cvc_val_set = build_polyp_dataset("../../Datasets/Polyps/CVC-ClinicDB", trans=i,fold="CVC", seed=0)
+            kvasir_train_set, kvasir_val_set = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir",trans=i, fold="Kvasir", seed=0)
+            etis_train, etis_val = build_polyp_dataset("../../Datasets/Polyps/ETIS-LaribPolypDB", trans=i, fold="Etis", seed=0)
+            inds.append(kvasir_train_set)
+            inds.append(kvasir_val_set)
+            vals.append(cvc_val_set)
+            vals.append(cvc_train_set)
+            oods.append(etis_train)
+            oods.append(etis_val)
+
+
+        self.ind = ConcatDataset(inds)
+        self.ind_val = ConcatDataset(vals)
+        self.ood = ConcatDataset(oods)
 
         # config = yaml.safe_load(open("vae/configs/vae.yaml"))
         # model = ResNetVAE().to("cuda").eval()

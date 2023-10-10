@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from PIL import Image
 from glob import glob
+from torchvision.transforms import ToTensor
 from torch.utils import data
 import torchvision.transforms as transforms
 from os import listdir
@@ -17,18 +18,17 @@ from njord.utils.dataloaders import create_dataset, create_dataloader
 from random import shuffle
 
 
-
 class KvasirSegmentationDataset(data.Dataset):
     """
         Dataset class that fetches images with the associated segmentation mask.
     """
-    def __init__(self, path, split="train"):
+    def __init__(self, path, train_alb, val_alb, split="train"):
         super(KvasirSegmentationDataset, self).__init__()
         self.path = path
         self.fnames = listdir(join(self.path,"segmented-images", "images"))
         self.split = split
-        self.train_transforms = alb.Compose([alb.Flip(), alb.Resize(512,512)])
-        self.val_transforms = alb.Compose([alb.Resize(512, 512)])
+        self.train_transforms = train_alb
+        self.val_transforms = val_alb
         train_size = int(len(self.fnames) * 0.8)
         val_size = (len(self.fnames) - train_size) // 2
         test_size = len(self.fnames) - train_size - val_size
@@ -47,6 +47,8 @@ class KvasirSegmentationDataset(data.Dataset):
             self.split_fnames = self.fnames_test
         else:
             raise ValueError("Choices are train/val/test")
+        self.tensor = ToTensor()
+
 
     def __len__(self):
         return self.size
@@ -106,19 +108,6 @@ class NICODataset(data.Dataset):
         """
         pass
 
-# class NjordVid(data.Dataset):
-#     """
-#     Samples selected according to recency wrt frames
-#     """
-#     def __init__(self):
-#         super().__init__()
-#
-#
-#     def __getitem__(self, item):
-#         pass
-#
-#     def __len__(self):
-#         pass
 
 def get_njordvid_datasets():
     ind_data_dict = check_dataset("njord/folds/ind_fold.yaml")
@@ -139,19 +128,20 @@ class EtisDataset(data.Dataset):
         Used for testing.
     """
 
-    def __init__(self, path, transforms, split="train"):
+    def __init__(self, path, val_alb, split="train"):
         super(EtisDataset, self).__init__()
         self.path = path
         self.len = len(listdir(join(self.path, "Original")))
         indeces = range(self.len)
         self.train_indeces = indeces[:int(0.8*self.len)]
         self.val_indeces = indeces[int(0.8*self.len):]
-        self.transforms = transforms
+        self.transforms = val_alb
         self.split = split
         if self.split=="train":
             self.len=len(self.train_indeces)
         else:
             self.len=len(self.val_indeces)
+        self.tensor = ToTensor()
 
     def __len__(self):
         return self.len
@@ -165,11 +155,11 @@ class EtisDataset(data.Dataset):
 
         img_path = join(self.path, "Original/{}.jpg".format(index + 1))
         mask_path = join(self.path, "GroundTruth/p{}.jpg".format(index + 1))
-        image = Image.open(img_path)
-        mask = Image.open(mask_path)
-        image = self.transforms(image)
-        mask = (self.transforms(mask)>0.5).int()
-        return image, mask, index + 1
+        image = np.asarray(Image.open(img_path))
+        mask = np.asarray(Image.open(mask_path))
+        image, mask = self.transforms(image=image, mask=mask).values()
+
+        return self.tensor(image), self.tensor(mask)[0].unsqueeze(0), index + 1
 
 class CVC_ClinicDB(data.Dataset):
     def __init__(self, path, transforms, split="train"):
@@ -186,6 +176,7 @@ class CVC_ClinicDB(data.Dataset):
         else:
             self.len=len(self.val_indeces)
         self.common_transforms = transforms
+        self.tensor = ToTensor()
 
     def __getitem__(self, i):
         if self.split=="train":
@@ -196,11 +187,11 @@ class CVC_ClinicDB(data.Dataset):
 
         img_path = join(self.path, "Original/{}.png".format(index + 1))
         mask_path = join(self.path, "Ground Truth/{}.png".format(index + 1))
-        image = Image.open(img_path)
-        mask = Image.open(mask_path)
-        image = self.transforms(image)
-        mask = (self.transforms(mask)>0.5).int()[0].unsqueeze(0)
-        return image, mask, index + 1
+        image = np.asarray(Image.open(img_path))
+        mask = np.asarray(Image.open(mask_path))
+        image, mask = self.transforms(image=image, mask=mask).values()
+        # mask = (mask>0.5).int()[0].unsqueeze(0)
+        return self.tensor(image), self.tensor(mask)[0].unsqueeze(0), index + 1
 
     def __len__(self):
         return self.len
@@ -277,15 +268,13 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
 
 
 
-def build_polyp_dataset(root, fold="Etis", seed=0):
-    trans = transforms.Compose([transforms.Resize((512,512)),
-                                              transforms.ToTensor()])
+def build_polyp_dataset(root, trans, fold="Etis", seed=0):
     if fold=="Etis":
         train_set = EtisDataset(root, trans, split="train")
         val_set = EtisDataset(root, trans, split="val")
     elif fold=="Kvasir":
-        train_set = KvasirSegmentationDataset(root)
-        val_set = KvasirSegmentationDataset(root, "val")
+        train_set = KvasirSegmentationDataset(root, train_alb=trans, val_alb=trans)
+        val_set = KvasirSegmentationDataset(root, train_alb=trans,  val_alb=trans, split= "val")
     else:
         train_set = CVC_ClinicDB(root,trans, split="train")
         val_set = CVC_ClinicDB(root,trans, split="val")
@@ -302,10 +291,7 @@ def build_njord_dataset():
     ood_set =  create_dataset(ood["val"], 512, 16, 32)
     return train_set, val_set, ood_set
 
-def build_njord_loaders():
-    ind = check_dataset("njord/folds/ind_fold.yaml")
-    ood = check_dataset("njord/folds/ood_fold.yaml")
-    train = c
+
 
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):

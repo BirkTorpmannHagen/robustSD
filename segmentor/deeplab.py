@@ -54,6 +54,7 @@ class SegmentationModel(pl.LightningModule):
 
     def compute_loss(self, x, y):
         out = self.segmentor(x)
+
         return self.criterion(out, y)
 
     def configure_optimizers(self):

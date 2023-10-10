@@ -45,7 +45,7 @@ class ResNetClassifier(pl.LightningModule):
         self.resnet_model.fc = nn.Linear(linear_size, num_classes)
 
         self.latent_dim = self.get_encoding_size(-2)
-        self.acc = Accuracy(top_k=5)
+        self.acc = Accuracy(top_k=5, task="multiclass", num_classes=num_classes)
 
 
 
