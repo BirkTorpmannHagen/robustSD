@@ -56,7 +56,7 @@ class VAEDataset(LightningDataModule):
         train_batch_size: int = 8,
         val_batch_size: int = 8,
         patch_size: Union[int, Sequence[int]] = (512, 512),
-        num_workers: int = 0,
+        num_workers: int = 10,
         pin_memory: bool = False,
         **kwargs,
     ):

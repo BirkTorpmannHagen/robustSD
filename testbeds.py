@@ -286,7 +286,9 @@ class PolypTestBed(BaseTestBed):
         # self.rep_model.load_state_dict(dict)
         self.trans = [alb.Compose([
             i,
-            alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True), alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True)]]
+            alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True),
+                                             alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True),
+                                             ]]
 
 
         inds = []
@@ -309,16 +311,25 @@ class PolypTestBed(BaseTestBed):
         self.ind_val = ConcatDataset(vals)
         self.ood = ConcatDataset(oods)
 
-        # config = yaml.safe_load(open("vae/configs/vae.yaml"))
-        # model = ResNetVAE().to("cuda").eval()
-        # vae_exp = VAEXperiment(model, config)
-        # vae_exp.load_state_dict(
-        #     torch.load("vae_logs/nico_dim/version_41/checkpoints/last.ckpt")[
-        #         "state_dict"])
-        classifier = SegmentationModel.load_from_checkpoint(
+        params = {
+            "LR": 0.00005,
+            "weight_decay": 0.0,
+            "scheduler_gamma": 0.95,
+            "kld_weight": 0.00025,
+            "manual_seed": 1265
+
+        }
+        self.vae = ResNetVAE().to("cuda").eval()
+        vae_exp = VAEXperiment(self.vae, params)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/KvasirSegmentationDataset/version_0/checkpoints/epoch=339-step=34000.ckpt")[
+                "state_dict"])
+
+
+        self.classifier = SegmentationModel.load_from_checkpoint(
             "segmentation_logs/lightning_logs/version_11/checkpoints/epoch=142-step=23023.ckpt").to("cuda")
-        classifier.eval()
-        self.rep_model = classifier
+        self.classifier.eval()
+        self.rep_model = self.vae
 
     def ind_loader(self):
         return DataLoader(self.ind)
@@ -345,5 +356,5 @@ class PolypTestBed(BaseTestBed):
         for i, data in tqdm(enumerate(loader), total=len(loader)):
             x = data[0].to("cuda")
             y = data[1].to("cuda")
-            losses[i]=self.rep_model.compute_loss(x,y).item()
+            losses[i]=self.classifier.compute_loss(x,y).item()
         return losses
