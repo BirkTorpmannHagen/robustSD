@@ -7,6 +7,7 @@ from vae_experiment import VAEXperiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 from domain_datasets import *
+from torch.utils.data import DataLoader
 # from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning_dataset import VAEDataset
@@ -36,44 +37,28 @@ def wrap_dataset(dataset):
     return NewDataset(dataset)
 
 
-parser = argparse.ArgumentParser(description='Generic runner for VAE models')
-parser.add_argument('--config',  '-c',
-                    dest="filename",
-                    metavar='FILE',
-                    help =  'path to the config file',
-                    default='vae/configs/vae.yaml')
-
-args = parser.parse_args()
-with open(args.filename, 'r') as file:
-    try:
-        config = yaml.safe_load(file)
-    except yaml.YAMLError as exc:
-        print(exc)
-
-
-
-model = ResNetVAE()
+patch_size = 512
+model = ResNetVAE(patch_size=patch_size)
 # model = CIFARVAE()
-experiment = VAEXperiment(model,
-                          config['exp_params'])
+params = {
+  "LR": 0.00005,
+  "weight_decay": 0.0,
+  "scheduler_gamma": 0.95,
+  "kld_weight": 0.00025,
+  "manual_seed": 1265
 
-# train, val, test = get_njordvid_datasets()
-# from torch.utils.data import DataLoader
+}
+experiment = VAEXperiment(model, params)
 
+# train_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+# val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+# train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
 
-# train = CIFAR10("../../Datasets/CIFAR10", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-# val = CIFAR10("../../Datasets/CIFAR10", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-
-
-# train = CIFAR100("../../Datasets/CIFAR100", train=True, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-# val = CIFAR100("../../Datasets/CIFAR100", train=False, transform=transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((32,32))]), download=True)
-train_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
-val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
-train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
+train, val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", trans=alb.Compose([alb.RandomRotate90(), alb.Flip(), alb.Resize(patch_size, patch_size)]), fold="Kvasir")
 
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
                                name=train.__class__.__name__)
-data = VAEDataset(**config["data_params"], train_set=train, val_set=val)
+data = VAEDataset(train_set=train, val_set=val)
 
 data.setup()
 runner = Trainer(logger=tb_logger,
@@ -91,5 +76,5 @@ Path(f"{tb_logger.log_dir}/Samples").mkdir(exist_ok=True, parents=True)
 Path(f"{tb_logger.log_dir}/Reconstructions").mkdir(exist_ok=True, parents=True)
 
 
-print(f"======= Training {config['model_params']['name']} =======")
+print(f"======= Training =======")
 runner.fit(experiment, datamodule=data)

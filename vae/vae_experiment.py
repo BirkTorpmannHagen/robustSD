@@ -1,6 +1,7 @@
 import os
 import math
 
+import matplotlib.pyplot as plt
 import torch
 from torch import optim
 from vae.models.base import BaseVAE
@@ -53,7 +54,7 @@ class VAEXperiment(pl.LightningModule):
         self.curr_device = real_img.device
         results = self.forward(real_img)
         val_loss = self.model.loss_function(*results,
-                                            M_N = 0.001, #real_img.shape[0]/ self.num_val_imgs,
+                                            M_N = 0.0005, #real_img.shape[0]/ self.num_val_imgs,
                                             optimizer_idx = optimizer_idx,
                                             batch_idx = batch_idx)
 
@@ -61,7 +62,7 @@ class VAEXperiment(pl.LightningModule):
 
     def on_validation_end(self) -> None:
         self.sample_images()
-        
+
     def sample_images(self):
         # Get sample reconstruction image
         batch = next(iter(self.trainer.datamodule.test_dataloader()))
@@ -72,8 +73,8 @@ class VAEXperiment(pl.LightningModule):
 #         test_input, test_label, _ = batch
         recons = self.model.generate(test_input)
         vutils.save_image(recons.data,
-                          os.path.join(self.logger.log_dir , 
-                                       "Reconstructions", 
+                          os.path.join(self.logger.log_dir ,
+                                       "Reconstructions",
                                        f"recons_{self.logger.name}_Epoch_{self.current_epoch}.png"),
                           normalize=True,
                           nrow=12)
@@ -83,8 +84,8 @@ class VAEXperiment(pl.LightningModule):
                                         self.curr_device,
                                         labels = test_label)
             vutils.save_image(samples.cpu().data,
-                              os.path.join(self.logger.log_dir , 
-                                           "Samples",      
+                              os.path.join(self.logger.log_dir ,
+                                           "Samples",
                                            f"{self.logger.name}_Epoch_{self.current_epoch}.png"),
                               normalize=True,
                               nrow=12)
@@ -111,8 +112,9 @@ class VAEXperiment(pl.LightningModule):
 
         try:
             if self.params['scheduler_gamma'] is not None:
-                scheduler = optim.lr_scheduler.ExponentialLR(optims[0],
-                                                             gamma = self.params['scheduler_gamma'])
+                # scheduler = optim.lr_scheduler.ExponentialLR(optims[0],
+                #                                              gamma = self.params['scheduler_gamma'])
+                scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optims[0], 50, 2)
                 scheds.append(scheduler)
 
                 # Check if another scheduler is required for the second optimizer
