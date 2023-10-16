@@ -138,7 +138,7 @@ class NjordTestBed(BaseTestBed):
 
 class NicoTestBed(BaseTestBed):
 
-    def __init__(self, sample_size, rep_model="vae"):
+    def __init__(self, sample_size, rep_model="vae", ood_noise=0):
         super().__init__(sample_size)
         self.trans = transforms.Compose([
                                                  transforms.Resize((512, 512)),
@@ -181,8 +181,8 @@ class NicoTestBed(BaseTestBed):
 
 
     def ood_loaders(self):
-        test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
 
+        test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
         oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=20),
                      DataLoader(test_dataset,
                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=20),
@@ -349,3 +349,4 @@ class PolypTestBed(BaseTestBed):
             y = data[1].to("cuda")
             losses[i]=self.classifier.compute_loss(x,y).item()
         return losses
+

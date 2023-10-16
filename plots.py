@@ -21,12 +21,11 @@ import seaborn as sns
 import math
 
 
-def get_threshold(data, fpr=0):
-    ood = data[data["oodness"]>=1]
-    ind = data[data["oodness"]<1]
+def get_threshold(data):
+    ood = data[data["oodness"]>1]
+    ind = data[data["oodness"]<=1]
     random_sampler_ind_data = ind[(ind["sampler"] == "RandomSampler")]
-    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
-    threshold = sorted_ind_ps[0]
+    threshold = random_sampler_ind_data["pvalue"].min()
     return threshold
 
 
@@ -38,28 +37,31 @@ def fpr(data, threshold=0):
     If threshold is given, use that instead.
     :return:
     """
-    ood_ps = data[data["oodness"]>=1]["pvalue"]
-    ind_ps = data[data["oodness"]<1]["pvalue"]
+    ood_ps = data[data["oodness"]>1]["pvalue"]
+
+    ind_ps = data[data["oodness"]<=1]["pvalue"]
     thresholded = ind_ps<threshold
     return thresholded.mean()
 
 def calibrated_detection_rate(data, threshold):
-    ood_ps = data[data["oodness"]>=1]["pvalue"]
-    ind_ps = data[data["oodness"]<1]["pvalue"]
+    ood_ps = data[data["oodness"]>1]["pvalue"]
+    ind_ps = data[data["oodness"]<=1]["pvalue"]
     sorted_ps = sorted(ind_ps)
     return ((ind_ps>=threshold).mean()+(ood_ps<threshold).mean()) /2
 
 def auroc(data):
-    ood_ps = data[data["oodness"]>=1]["pvalue"]
-    ind_ps = data[data["oodness"]<1]["pvalue"]
+    ood_ps = data[data["oodness"]>1]["pvalue"]
+
+    ind_ps = data[data["oodness"]<=1]["pvalue"]
     true = [0]*len(ood_ps)+[1]*len(ind_ps)
     probs = list(ood_ps)+list(ind_ps)
     auc = roc_auc_score(true, probs)
     return auc
 
 def aupr(data):
-    ood_ps = data[data["oodness"]>=1]["pvalue"]
-    ind_ps = data[data["oodness"]<1]["pvalue"]
+    ood_ps = data[data["oodness"]>1]["pvalue"]
+
+    ind_ps = data[data["oodness"]<=1]["pvalue"]
     true = [0] * len(ood_ps) + [1] * len(ind_ps)
     probs = list(ood_ps) + list(ind_ps)
     auc = average_precision_score(true, probs)
@@ -129,8 +131,8 @@ def get_loss_pdf_from_ps(ps, loss, test_ps, test_losses, bins=15):
 
 def risk(data, threshold):
 
-    ood = data[data["oodness"]>=1]
-    ind = data[data["oodness"]<1]
+    ood = data[data["oodness"]>1]
+    ind = data[data["oodness"]<=1]
     # fp = len(ind[ind["pvalue"]<threshold])
     # tp = len(ood[ood["pvalue"]<threshold])
     # fn = len(ind[ind["pvalue"]>=threshold])
@@ -176,16 +178,14 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
     if ood_fold_name!="ood":
         data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
     data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
-    ood = data[data["oodness"]>=1]
-    ind = data[data["oodness"]<1]
+    ood = data[data["oodness"]>1]
+    ind = data[data["oodness"]<=1]
 
     # ood = data[(data["fold"]!="ind")]
     # ind = data[data["fold"]=="ind"]
 
     #find threshold for ind/ood; simulate "naive" approach of not accounting for sample bias
-    random_sampler_ind_data = ind[(ind["sampler"]=="RandomSampler")]
-    sorted_ind_ps = sorted(random_sampler_ind_data["pvalue"])
-    threshold = sorted_ind_ps[int(np.ceil(fnr*len(sorted_ind_ps)))] # min p_value for a sample to be considered ind
+    threshold = get_threshold(data)
     corr = correlation(data, plot=True)
 
     if plots:
@@ -667,6 +667,12 @@ def breakdown_by_sampler(placeholder=False, metric="DR"):
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
 
+def summarize_results(placeholder=False):
+    df = get_metrics_for_all_experiments(placeholder=placeholder)
+    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "DR", "Risk"]].mean()
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(df)
+
 def get_metrics_for_all_experiments(placeholder=False):
     #summarize overall results;
     table_data = []
@@ -674,6 +680,10 @@ def get_metrics_for_all_experiments(placeholder=False):
         for dsd in ["ks", "ks_5NN", "typicality"]:
             for sample_size in [10, 20, 50, 100, 200, 500]:
                 fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
+                if dataset=="Polyp":
+                    fname=f"data/{dataset}_{dsd}_{sample_size}_fullloss_ex.csv"
+                    if dsd=="ks_5NN":
+                        fname = f"data/{dataset}_ks_1NN_{sample_size}_fullloss_ex.csv"
                 data = open_and_process(fname)
                 if data is None:
                     if placeholder:
@@ -757,10 +767,13 @@ def experiment_prediction(fname):
 
 
 if __name__ == '__main__':
-    # print("vanilla")
-    # collect_losswise_metrics("data/Polyp_ks_100_fullloss.csv")
-    # print("knndsd")
-    # collect_losswise_metrics("data/Polyp_ks_1NN_100_fullloss.csv")
+    # for sample_size in [20, 50, 100]:
+    #     print(sample_size)
+    #     print("vanilla")
+    #     collect_losswise_metrics(f"data/Polyp_ks_{sample_size}_fullloss_ex.csv")
+    #     print("knndsd")
+    #     collect_losswise_metrics(f"data/Polyp_ks_1NN_{sample_size}_fullloss_ex.csv")
+    #     input()
     # experiment_prediction("data/imagenette_ks_5NN_500_fullloss.csv")
     # experiment_prediction("data/CIFAR10_ks_5NN_100_fullloss.csv")
 
@@ -768,8 +781,6 @@ if __name__ == '__main__':
     # experiment_prediction("data/CIFAR100_ks_5NN_100_fullloss.csv")
     # summarize_results()
     breakdown_by_sampler()
-    # collect_losswise_metrics("Polyp_ks_10.csv")
-    # collect_losswise_metrics("Polyp_ks_5NN_10.csv")
     # print("typicality")
     # risk("CIFAR_classifier_typicality_200_fullloss.csv")
     # print("vanilla")

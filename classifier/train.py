@@ -1,6 +1,6 @@
 from pytorch_lightning import Trainer
 from torchvision.models import resnet34
-from domain_datasets import build_nico_dataset, build_imagenette_dataset
+from domain_datasets import *
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -33,9 +33,9 @@ from torchvision.datasets import MNIST, CIFAR10,CIFAR100
 # into a pytorch-lightning module so that we can take advantage of lightning's Trainer object.
 # We aim to make it a little more general by allowing users to define the number of prediction classes.
 
-def train_classifier(train_set, val_set):
+def train_classifier(train_set, val_set, ood_set=None):
     num_classes =  train_set.num_classes
-    model =  ResNetClassifier(num_classes, 101, transfer=False, batch_size=32, lr=1e-3).to("cuda")
+    # model =  ResNetClassifier(num_classes, 101, transfer=False, batch_size=32, lr=1e-3).to("cuda")
     tb_logger = TensorBoardLogger(save_dir=f"{type(train_set).__name__}_logs")
     checkpoint_callback = ModelCheckpoint(
         dirpath=f"{type(train_set).__name__}_logs/checkpoints",
@@ -47,12 +47,16 @@ def train_classifier(train_set, val_set):
 
     # ResNetClassifier.load_from_checkpoint("Imagenette_logs/checkpoints/epoch=82-step=24568.ckpt", resnet_version=101, nj
     trainer = Trainer(max_epochs=1000, logger=tb_logger, accelerator="gpu",callbacks=checkpoint_callback)
-    trainer.fit(model, train_dataloaders=DataLoader(train_set, shuffle=True, batch_size=16, num_workers=24),
-                val_dataloaders=DataLoader(val_set, batch_size=16, shuffle=True, num_workers=24))
+    # trainer.fit(model, train_dataloaders=DataLoader(train_set, shuffle=True, batch_size=16, num_workers=24),
+    #             val_dataloaders=DataLoader(val_set, batch_size=16, shuffle=True, num_workers=24))
+
+    model = ResNetClassifier.load_from_checkpoint("Pneumonia_logs/checkpoints/epoch=11-step=3924.ckpt", resnet_version=101, num_classes=2)
+    trainer.test(model, DataLoader(val_set, batch_size=16, shuffle=True, num_workers=24))
+    trainer.test(model, DataLoader(ood_set, batch_size=16, shuffle=True, num_workers=24))
 
 if __name__ == '__main__':
     #NICO
-    size = 256
+    size = 512
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                         transforms.Resize((size,size)),
                         transforms.ToTensor(), ])
@@ -61,7 +65,8 @@ if __name__ == '__main__':
                         transforms.ToTensor(), ])
 
     # train_set, val_set = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, val_trans, context="dim", seed=0)
-    train_set, val_set = build_imagenette_dataset("../../Datasets/imagenette2", train_trans=trans, val_trans=val_trans)
-    train_classifier(train_set, val_set)
+    # train_set, val_set = build_imagenette_dataset("../../Datasets/imagenette2", train_trans=trans, val_trans=val_trans)
+    train_set, test_set,val_set, ood_set = get_pneumonia_dataset("../../Datasets/Pneumonia", trans, val_trans)
+    train_classifier(train_set, val_set, ood_set)
     # CIAR10 and MNIST are already trained :D
 

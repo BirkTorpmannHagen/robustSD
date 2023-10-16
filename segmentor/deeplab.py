@@ -61,7 +61,7 @@ class SegmentationModel(pl.LightningModule):
         return self.optimizer(self.parameters(), lr=self.lr)
 
     def training_step(self, batch, batch_idx):
-        x, y, context = batch
+        x, y, = batch[0], batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
         acc = torch.mean(iou_score(*get_stats(preds,y, mode="binary", threshold=0.5)))
@@ -72,7 +72,7 @@ class SegmentationModel(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        x, y, context = batch
+        x, y, = batch[0], batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
         acc = torch.mean(iou_score(*get_stats(preds,y, mode="binary", threshold=0.5)))
@@ -81,7 +81,7 @@ class SegmentationModel(pl.LightningModule):
         self.log("val_iou", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
     def test_step(self, batch, batch_idx):
-        x, y, context = batch
+        x, y, = batch[0], batch[1]
         preds = self(x)
         loss = self.criterion(preds, y)
         acc = torch.mean(iou_score(*get_stats(preds,y, mode="binary", threshold=0.5)))

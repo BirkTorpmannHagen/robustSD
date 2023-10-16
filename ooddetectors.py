@@ -317,6 +317,8 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, filter_by_s
             else:
                 data=data.explode("loss")
         data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+        # data["oodness"] = 1 if data["fold"]=="ood" else 0
+
         return data
     except FileNotFoundError:
         print(f"File {fname} not found")

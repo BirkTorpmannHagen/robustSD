@@ -85,15 +85,3 @@ if __name__ == '__main__':
     train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
     train_vae_large(train, val, patch_size=patch_size)
 
-    #NjordVid
-    # train, val, _ = build_njord_datasets()
-    # train_vae_large(train, val, patch_size=patch_size)
-
-    #imagenette
-    # train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans=default_train_trans,
-    #                                       val_trans=default_val_trans)
-    # train_vae_large(train, val, patch_size=patch_size)
-    #
-    # #NICO
-    # train, val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, default_train_trans, default_val_trans, context="dim", seed=0)
-    # train_vae_large(train, val, patch_size=patch_size)

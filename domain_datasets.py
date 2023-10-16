@@ -14,10 +14,39 @@ from os import listdir
 import torchvision
 from os.path import join
 from torchvision.datasets import CIFAR10, CIFAR100
+from torchvision.datasets import ImageFolder
 from njord.utils.general import check_dataset
 from njord.utils.dataloaders import create_dataset, create_dataloader
 from random import shuffle
 
+class Pneumonia(data.Dataset):
+    def __init__(self, root, train_trans, val_trans, fold):
+
+        if fold=="ood":
+            self.dataset = data.ConcatDataset([ImageFolder(join(root, "PneumoniaWomen", "train"), val_trans),
+                                               ImageFolder(join(root, "PneumoniaWomen", "test"), val_trans),
+                                               ImageFolder(join(root, "PneumoniaWomen", "val"), val_trans)])
+        else:
+            if fold=="train":
+                self.dataset = ImageFolder(join(root, "PediatricPneumonia", fold), train_trans)
+            else:
+                self.dataset = ImageFolder(join(root, "PneumoniaWomen", "test"), val_trans)
+        self.num_classes = 2
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item):
+        y = torch.zeros(2)
+        y[self.dataset[item][1]] = 1
+        return self.dataset[item][0], y
+
+def get_pneumonia_dataset(root, train_trans, val_trans):
+    train = Pneumonia(root, train_trans, val_trans, "train")
+    val = Pneumonia(root, train_trans, val_trans, "val")
+    test = Pneumonia(root, train_trans, val_trans, "test")
+    ood = Pneumonia(root, train_trans, val_trans, "ood")
+    return train, val, test, ood
 
 class KvasirSegmentationDataset(data.Dataset):
     """
