@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import torchvision.models as models
 import classifier.cifarresnet as cifarresnet
 from torch.autograd import Variable
-from segmentation_models_pytorch.decoders.deeplabv3.decoder import DeepLabV3PlusDecoder
 
 from torch.distributions import Normal
 

@@ -767,19 +767,20 @@ def experiment_prediction(fname):
 
 
 if __name__ == '__main__':
-    print("vanilla")
-    collect_losswise_metrics("data/Polyp_ks_100_fullloss_ex.csv")
-    print("knndsd")
-    collect_losswise_metrics("data/Polyp_ks_1NN_100_fullloss_ex.csv")
+    # for sample_size in [20, 50, 100]:
+    #     print(sample_size)
+    #     print("vanilla")
+    #     collect_losswise_metrics(f"data/Polyp_ks_{sample_size}_fullloss_ex.csv")
+    #     print("knndsd")
+    #     collect_losswise_metrics(f"data/Polyp_ks_1NN_{sample_size}_fullloss_ex.csv")
+    #     input()
     # experiment_prediction("data/imagenette_ks_5NN_500_fullloss.csv")
     # experiment_prediction("data/CIFAR10_ks_5NN_100_fullloss.csv")
 
     # experiment_prediction("data/NICO_ks_100_fullloss.csv")
     # experiment_prediction("data/CIFAR100_ks_5NN_100_fullloss.csv")
     # summarize_results()
-    # breakdown_by_sampler()
-    # collect_losswise_metrics("Polyp_ks_10.csv")
-    # collect_losswise_metrics("Polyp_ks_5NN_10.csv")
+    breakdown_by_sampler()
     # print("typicality")
     # risk("CIFAR_classifier_typicality_200_fullloss.csv")
     # print("vanilla")

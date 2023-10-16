@@ -54,8 +54,8 @@ experiment = VAEXperiment(model, params)
 # val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
 # train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
 
-train, val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", trans=alb.Compose([alb.RandomRotate90(), alb.Flip(), alb.Resize(patch_size, patch_size)]), fold="Kvasir")
-
+# train, val = build_polyp_dataset("../../Datasets/Polyps/HyperKvasir", trans=alb.Compose([alb.RandomRotate90(), alb.Flip(), alb.Resize(patch_size, patch_size)]), fold="Kvasir")
+train, val, ood = get_njordvid_datasets()
 tb_logger =  TensorBoardLogger(save_dir="vae_logs",
                                name=train.__class__.__name__)
 data = VAEDataset(train_set=train, val_set=val)
