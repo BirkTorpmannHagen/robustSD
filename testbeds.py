@@ -47,7 +47,7 @@ class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=20, mode="normal"):
         super().__init__(sample_size, num_workers)
         self.num_workers=num_workers
-        self.noise_range = np.arange(0.05, 0.3, 0.05)
+        self.noise_range = np.arange(0.01, 0.3, 0.01)
         self.mode=mode
 
 
@@ -75,8 +75,15 @@ class NoiseTestBed(BaseTestBed):
 
     def ood_loaders(self):
         if self.mode=="severity":
-            samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size, bias_severity=i) for i in np.linspace(0,1,10)]
-            oods = [[DataLoader(test_dataset, sampler=sampler, num_workers=self.num_workers)] for test_dataset, sampler in itertools.product(self.ood_sets, samplers)]
+            #a sampler for each ood_set and severity
+
+
+            samplers = [ClusterSamplerWithSeverity(ood_set, self.rep_model, sample_size=self.sample_size, bias_severity=i) for ood_set, i in itertools.product(self.ood_sets, np.linspace(0,1,10))]
+
+            oods = [[DataLoader(test_dataset,
+                                sampler=ClusterSamplerWithSeverity(test_dataset, self.rep_model,
+                                    sample_size=self.sample_size, bias_severity=severity),
+                                num_workers=self.num_workers)] for test_dataset, severity in itertools.product(self.ood_sets, np.linspace(0,1,10))]
             dicted = [dict([(sampler, loader) for sampler, loader in
                             zip([str(i) for i in samplers], ood)]) for ood in oods]
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in     self.noise_range], dicted))

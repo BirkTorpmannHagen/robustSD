@@ -133,34 +133,14 @@ def risk(data, threshold):
 
     ood = data[data["oodness"]>1]
     ind = data[data["oodness"]<=1]
-    # fp = len(ind[ind["pvalue"]<threshold])
-    # tp = len(ood[ood["pvalue"]<threshold])
-    # fn = len(ind[ind["pvalue"]>=threshold])
-    # tn = len(ood[ood["pvalue"]>=threshold])
-    #
-    # assert fp+tp+fn+tn == len(data)
-    # # tncosts = ind["loss"].median() #cost of predictive model not predicting
-    # tncosts = 0
-    # fpcost = ood["loss"].median() # cost of predictive model not predicting when it should have, as bad as predicting wrong
-    # fncost = ood["loss"].median() # cost of predictive model predicting when it shouldn't have; ie predicting incorrectly
-    # tpcost = 0
-    # # tpcost = ind["loss"].median() # cost of predictive model predicting correctly
-    # risk = (fp*fpcost+tp*tpcost+fn*fncost+tn*tncosts)/len(data)
-
 
     nopredcost = ind["loss"].median()
     data["risk"]=-1
     data.loc[((data["pvalue"] < threshold) & (data["oodness"] >= 1)), "risk"] = nopredcost #true positive
     data.loc[((data["pvalue"] < threshold) & (data["oodness"] < 1)), "risk"] = data[data["oodness"]>=1]["loss"].mean() #false positive
-    data.loc[((data["pvalue"] >= threshold) & (data["oodness"] >= 1))] = data[data["oodness"]>=1]["loss"].mean() #false negative, cost is the average loss of the ood samples
-    data.loc[((data["pvalue"] >= threshold) & (data["oodness"] < 1))] = nopredcost #true negative, cost is the average loss of the ind samples
-    print(data["risk"])
+    data.loc[((data["pvalue"] >= threshold) & (data["oodness"] >= 1)), "risk"] = data[data["oodness"]>=1]["loss"].mean() #false negative, cost is the average loss of the ood samples
+    data.loc[((data["pvalue"] >= threshold) & (data["oodness"] < 1)), "risk"] = nopredcost #true negative, cost is the average loss of the ind samples
     assert -1 not in pd.unique(data["risk"]) #sanity check
-    data.loc[data["pvalue"] >= threshold, "risk"] = data.loc[data["pvalue"] >= threshold, "loss"] #true negative, cost
-
-    # for sampler in pd.unique(data["sampler"]):
-    #     bysampler = data[data["sampler"]==sampler]
-    #     print(f"{sampler}: {bysampler['risk'].mean()}")
 
     return data["risk"].mean()
 
@@ -287,7 +267,7 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     g.add_legend()
     plt.show()
 
-def breakdown_by_sampler(placeholder=False, metric="DR"):
+def breakdown_by_sampler(placeholder=False, metric="Risk"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     df = df.groupby(["Dataset", "Sampler", "OOD Detector"])[metric].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
@@ -357,13 +337,13 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
     table_data = []
     for dataset in ["CIFAR10", "CIFAR100", "NICO", "Njord", "Polyp", "imagenette"]:
         for dsd in ["ks", "ks_5NN", "typicality"]:
-            for sample_size in [10, 20, 50, 100, 200, 500]:
+            for sample_size in [50, 100, 200, 500]:
                 fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
                 if dataset=="Polyp":
                     fname=f"data/{dataset}_{dsd}_{sample_size}_fullloss_ex.csv"
                     if dsd=="ks_5NN":
                         fname = f"data/{dataset}_ks_5NN_{sample_size}_fullloss_ex.csv"
-                data = open_and_process(fname)
+                data = open_and_process(fname, filter_noise=True)
                 if data is None:
                     if placeholder:
                         table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
@@ -372,7 +352,6 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
                                            "Risk": -1})
                     continue
                 threshold = get_threshold(data)
-                print(sample_size)
                 for sampler in pd.unique(data["sampler"]):
                     subset = data[data["sampler"] == sampler]
                     table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
@@ -452,7 +431,7 @@ if __name__ == '__main__':
     Classification
     """
     #summary
-    # summarize_results()
+    summarize_results()
     # input()
     #
     # #sampler_breakdown
@@ -468,7 +447,7 @@ if __name__ == '__main__':
     """
     Correlation plots
     """
-    correlation_summary()
+    # correlation_summary()
 
 
 
