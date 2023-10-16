@@ -3,6 +3,7 @@ import json
 import albumentations as alb
 import matplotlib.pyplot as plt
 import torch
+from torch.utils.data import ConcatDataset
 import numpy as np
 from PIL import Image
 from glob import glob
@@ -65,7 +66,7 @@ class KvasirSegmentationDataset(data.Dataset):
             image, mask = self.val_transforms(image=image, mask=mask).values()
         image, mask = transforms.ToTensor()(Image.fromarray(image)), transforms.ToTensor()(Image.fromarray(mask))
         mask = torch.mean(mask,dim=0,keepdim=True).int()
-        return image,mask, "Kvasir"
+        return image,mask
 
 class Imagenette(torchvision.datasets.ImageFolder):
     def __init__(self, root, transform=None, split="train"):
@@ -159,7 +160,7 @@ class EtisDataset(data.Dataset):
         mask = np.asarray(Image.open(mask_path))
         image, mask = self.transforms(image=image, mask=mask).values()
 
-        return self.tensor(image), self.tensor(mask)[0].unsqueeze(0), index + 1
+        return self.tensor(image), self.tensor(mask)[0].unsqueeze(0).int()
 
 class CVC_ClinicDB(data.Dataset):
     def __init__(self, path, transforms, split="train"):
@@ -191,7 +192,7 @@ class CVC_ClinicDB(data.Dataset):
         mask = np.asarray(Image.open(mask_path))
         image, mask = self.transforms(image=image, mask=mask).values()
         # mask = (mask>0.5).int()[0].unsqueeze(0)
-        return self.tensor(image), self.tensor(mask)[0].unsqueeze(0), index + 1
+        return self.tensor(image), self.tensor(mask)[0].unsqueeze(0).int()
 
     def __len__(self):
         return self.len
@@ -268,19 +269,39 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
 
 
 
-def build_polyp_dataset(root, trans, fold="Etis", seed=0):
-    if fold=="Etis":
-        train_set = EtisDataset(root, trans, split="train")
-        val_set = EtisDataset(root, trans, split="val")
-    elif fold=="Kvasir":
-        train_set = KvasirSegmentationDataset(root, train_alb=trans, val_alb=trans)
-        val_set = KvasirSegmentationDataset(root, train_alb=trans,  val_alb=trans, split= "val")
-    else:
-        train_set = CVC_ClinicDB(root,trans, split="train")
-        val_set = CVC_ClinicDB(root,trans, split="val")
-    return train_set, val_set
 
-def build_njord_dataset():
+def build_polyp_dataset(root):
+    translist = [alb.Compose([
+        i,
+        alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True),
+                                         alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True),
+                                         ]]
+    inds = []
+    vals = []
+    oods = []
+    for trans in translist:
+        cvc_train_set = CVC_ClinicDB(join(root, "CVC-ClinicDB"),trans, split="train")
+        cvc_val_set = CVC_ClinicDB(join(root, "CVC-ClinicDB"),trans, split="val")
+        kvasir_train_set = KvasirSegmentationDataset(join(root, "HyperKvasir"), train_alb=trans, val_alb=trans)
+        kvasir_val_set = KvasirSegmentationDataset(join(root, "HyperKvasir"), train_alb=trans, val_alb=trans, split="val")
+        etis_train_set = EtisDataset(join(root, "ETIS-LaribPolypDB"), trans, split="train")
+        etis_val_set = EtisDataset(join(root, "ETIS-LaribPolypDB"), trans, split="val")
+
+        inds.append(kvasir_train_set)
+        inds.append(cvc_train_set)
+
+        vals.append(kvasir_val_set)
+        vals.append(cvc_val_set)
+
+        oods.append(etis_train_set)
+        oods.append(etis_val_set)
+
+    ind = ConcatDataset(inds)
+    ind_val = ConcatDataset(vals)
+    ood = ConcatDataset(oods)
+    return ind, ind_val, ood
+
+def build_njord_datasets():
 
 
     ind = check_dataset("njord/folds/ind_fold.yaml")
