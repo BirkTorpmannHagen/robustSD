@@ -311,7 +311,7 @@ class PolypTestBed(BaseTestBed):
         self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()
         vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
         vae_exp.load_state_dict(
-            torch.load("vae_logs/KvasirSegmentationDataset/version_0/checkpoints/epoch=112-step=11300.ckpt")[
+            torch.load("vae_logs/Polyp/version_0/checkpoints/epoch=116-step=75348.ckpt")[
                 "state_dict"])
 
         self.classifier = SegmentationModel.load_from_checkpoint(

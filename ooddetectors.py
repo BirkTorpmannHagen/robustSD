@@ -215,8 +215,6 @@ class TypicalitySD(BaseSD):
         super().__init__(rep_model)
 
     def compute_entropy(self, data_loader):
-        print(data_loader.sampler)
-        print(data_loader)
         log_likelihoods = []
         for i, (x, y) in enumerate(data_loader):
             x = x.to("cuda")
