@@ -299,13 +299,13 @@ class TypicalitySD(BaseSD):
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 
-def open_and_process(fname, filter_noise=False, combine_losses=True, filter_by_sampler=""):
+def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sampler=""):
     try:
         data = pd.read_csv(fname)
         # data = data[data["sampler"] != "ClassOrderSampler"]
         # print(pd.unique(data["sampler"]))
-        if filter_by_sampler!="":
-            data = data[data["sampler"]==filter_by_sampler]
+        if exclude_sampler!="":
+            data = data[data["sampler"]!=exclude_sampler]
         if "noise" in str(pd.unique(data["fold"])) and filter_noise:
             data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
         if "fullloss" in fname:

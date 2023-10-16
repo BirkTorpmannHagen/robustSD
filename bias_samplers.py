@@ -93,13 +93,14 @@ class ClusterSamplerWithSeverity(Sampler):
         with torch.no_grad():
             for i, data in tqdm(enumerate(DataLoader(self.data_source))):
                 x=data[0].to("cuda")
-                self.reps[i] = rep_model.encode(x)[0].cpu().numpy()
+                self.reps[i] = rep_model.get_encoding(x)    .cpu().numpy()
         self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         self.sample_size = sample_size
         self.bias_severity = bias_severity
 
-
+    def __str__(self):
+        return f"ClusterSamplerWithSeverity_{self.bias_severity}"
     def __iter__(self):
         full_bias = np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(self.num_clusters)], axis=0)
         shuffle_indeces = np.random.choice(np.arange(len(full_bias)), size=int(len(full_bias)*self.bias_severity), replace=False)

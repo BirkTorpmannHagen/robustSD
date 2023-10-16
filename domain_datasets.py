@@ -19,34 +19,21 @@ from njord.utils.general import check_dataset
 from njord.utils.dataloaders import create_dataset, create_dataloader
 from random import shuffle
 
-class Pneumonia(data.Dataset):
-    def __init__(self, root, train_trans, val_trans, fold):
+class NoisyDataset(data.Dataset):
+    #generic wrapper for adding noise to datasets
+    def __init__(self, dataset, noise_level):
+        super().__init__()
+        self.dataset = dataset
+        self.noise_level = noise_level
+    def __getitem__(self, index):
 
-        if fold=="ood":
-            self.dataset = data.ConcatDataset([ImageFolder(join(root, "PneumoniaWomen", "train"), val_trans),
-                                               ImageFolder(join(root, "PneumoniaWomen", "test"), val_trans),
-                                               ImageFolder(join(root, "PneumoniaWomen", "val"), val_trans)])
-        else:
-            if fold=="train":
-                self.dataset = ImageFolder(join(root, "PediatricPneumonia", fold), train_trans)
-            else:
-                self.dataset = ImageFolder(join(root, "PneumoniaWomen", "test"), val_trans)
-        self.num_classes = 2
-
+        batch = self.dataset.__getitem__(index)
+        x, y = batch[0], batch[1]
+        if self.noise_level!=0:
+            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
+        return x,y
     def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, item):
-        y = torch.zeros(2)
-        y[self.dataset[item][1]] = 1
-        return self.dataset[item][0], y
-
-def get_pneumonia_dataset(root, train_trans, val_trans):
-    train = Pneumonia(root, train_trans, val_trans, "train")
-    val = Pneumonia(root, train_trans, val_trans, "val")
-    test = Pneumonia(root, train_trans, val_trans, "test")
-    ood = Pneumonia(root, train_trans, val_trans, "ood")
-    return train, val, test, ood
+        return self.dataset.__len__()
 
 class KvasirSegmentationDataset(data.Dataset):
     """
@@ -97,61 +84,6 @@ class KvasirSegmentationDataset(data.Dataset):
         mask = torch.mean(mask,dim=0,keepdim=True).int()
         return image,mask
 
-class Imagenette(torchvision.datasets.ImageFolder):
-    def __init__(self, root, transform=None, split="train"):
-        super().__init__(os.path.join(root, split), transform=transform)
-        self.num_classes = 10
-
-
-class NICODataset(data.Dataset):
-    def __init__(self, image_path_list, label_map_json, transform):
-        super().__init__()
-        self.image_path_list = image_path_list
-        self.transform = transform
-        self.num_classes = len(os.listdir(os.path.join(*image_path_list[0].split("/")[:-2])))
-        self.classes = os.listdir(os.path.join(*image_path_list[0].split("/")[:-2]))
-        with open(label_map_json, "r") as f:
-            self.label_map = json.load(f)
-        context_path = os.path.join(*image_path_list[0].split("/")[:-3])
-        self.context = image_path_list[0].split("/")[-3]
-        contexts = os.listdir(context_path)
-        self.context_map = dict(zip(contexts, range(len(contexts))))
-    def __len__(self):
-        return len(self.image_path_list)
-
-    def __getitem__(self, index):
-        image_path = self.image_path_list[index]
-        image = Image.open(image_path)
-        image = self.transform(image)
-        label = self._get_label_index(image_path)
-        return image, label, self.context_map[image_path.split("/")[-3]]
-
-    def _get_label_index(self, image_path):
-        class_name = image_path.split("/")[-2]
-        label_index = self.label_map[class_name]
-        return label_index
-
-
-    def fetch_model(self):
-        """
-        :return: trained classifier, pytorch lightning
-        """
-        pass
-
-
-def get_njordvid_datasets():
-    ind_data_dict = check_dataset("njord/folds/ind_fold.yaml")
-    ind_train_path, ind_val_path = ind_data_dict['train'], ind_data_dict['val']
-    ind_dataloader, _ = create_dataloader(ind_train_path, 512,1,32, image_weights=True)
-    ind_val_dataloader = create_dataloader(ind_val_path, 512,1,32, image_weights=True)
-
-    ood_data_dict = check_dataset("njord/folds/ood_fold.yaml")
-    _, ood_val_path = ood_data_dict['train'], ood_data_dict['val']
-    ood_dataloader, _= create_dataloader(ood_val_path, 512, 1, 32, image_weights=True)
-
-    return ind_dataloader, ind_val_dataloader, ood_dataloader
-
-# def get_cifar10_datase
 class EtisDataset(data.Dataset):
     """
         Dataset class that fetches Etis-LaribPolypDB images with the associated segmentation mask.
@@ -226,6 +158,11 @@ class CVC_ClinicDB(data.Dataset):
     def __len__(self):
         return self.len
 
+class Imagenette(torchvision.datasets.ImageFolder):
+    def __init__(self, root, transform=None, split="train"):
+        super().__init__(os.path.join(root, split), transform=transform)
+        self.num_classes = 10
+
 class ImagenettewNoise(Imagenette):
     def __init__(self, root,transform,train, noise_level=0):
         super().__init__(root, transform, train)
@@ -269,7 +206,53 @@ class CIFAR100wNoise(CIFAR100):
 
     def __len__(self):
         return super().__len__()
+class NICODataset(data.Dataset):
+    def __init__(self, image_path_list, label_map_json, transform):
+        super().__init__()
+        self.image_path_list = image_path_list
+        self.transform = transform
+        self.num_classes = len(os.listdir(os.path.join(*image_path_list[0].split("/")[:-2])))
+        self.classes = os.listdir(os.path.join(*image_path_list[0].split("/")[:-2]))
+        with open(label_map_json, "r") as f:
+            self.label_map = json.load(f)
+        context_path = os.path.join(*image_path_list[0].split("/")[:-3])
+        self.context = image_path_list[0].split("/")[-3]
+        contexts = os.listdir(context_path)
+        self.context_map = dict(zip(contexts, range(len(contexts))))
+    def __len__(self):
+        return len(self.image_path_list)
 
+    def __getitem__(self, index):
+        image_path = self.image_path_list[index]
+        image = Image.open(image_path)
+        image = self.transform(image)
+        label = self._get_label_index(image_path)
+        return image, label, self.context_map[image_path.split("/")[-3]]
+
+    def _get_label_index(self, image_path):
+        class_name = image_path.split("/")[-2]
+        label_index = self.label_map[class_name]
+        return label_index
+
+
+    def fetch_model(self):
+        """
+        :return: trained classifier, pytorch lightning
+        """
+        pass
+
+
+def get_njordvid_datasets():
+    ind_data_dict = check_dataset("njord/folds/ind_fold.yaml")
+    ind_train_path, ind_val_path = ind_data_dict['train'], ind_data_dict['val']
+    ind_dataloader, _ = create_dataloader(ind_train_path, 512,1,32, image_weights=True)
+    ind_val_dataloader = create_dataloader(ind_val_path, 512,1,32, image_weights=True)
+
+    ood_data_dict = check_dataset("njord/folds/ood_fold.yaml")
+    _, ood_val_path = ood_data_dict['train'], ood_data_dict['val']
+    ood_dataloader, _= create_dataloader(ood_val_path, 512, 1, 32, image_weights=True)
+
+    return ind_dataloader, ind_val_dataloader, ood_dataloader
 
 def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
     if use_track == 1:
@@ -295,9 +278,6 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     train_dataset = NICODataset(image_path_list[n:], label_map_json, train_transform)
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
-
-
-
 
 def build_polyp_dataset(root):
     translist = [alb.Compose([

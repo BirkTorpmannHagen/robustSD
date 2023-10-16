@@ -30,7 +30,6 @@ if __name__ == '__main__':
 
     torch.multiprocessing.set_start_method('spawn')
 
-    # for sample_size in [10, 20, 50, 100, 200, 500]:
     #     # bench = NicoTestBed(sample_size)
     #     bench = PolypTestBed(sample_size, "classifier")
     #     tsd = RabanserSD(bench.vae, select_samples=True,k=5, processes=2)
