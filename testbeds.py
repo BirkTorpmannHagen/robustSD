@@ -77,17 +77,17 @@ class NoiseTestBed(BaseTestBed):
         if self.mode=="severity":
             #a sampler for each ood_set and severity
 
-
-            samplers = [ClusterSamplerWithSeverity(ood_set, self.rep_model, sample_size=self.sample_size, bias_severity=i) for ood_set, i in itertools.product(self.ood_sets, np.linspace(0,1,10))]
-
-            oods = [[DataLoader(test_dataset,
-                                sampler=ClusterSamplerWithSeverity(test_dataset, self.rep_model,
+            combinations =  itertools.product(self.ood_sets, np.linspace(0,1,11))
+            oods = {}
+            for i, ood_set in enumerate(self.ood_sets):
+                oods_by_bias = {}
+                for severity in np.linspace(0,1,10):
+                    oods_by_bias[f"ClusterBias:{severity}"] = DataLoader(ood_set,
+                                sampler=ClusterSamplerWithSeverity(ood_set, self.rep_model,
                                     sample_size=self.sample_size, bias_severity=severity),
-                                num_workers=self.num_workers)] for test_dataset, severity in itertools.product(self.ood_sets, np.linspace(0,1,10))]
-            dicted = [dict([(sampler, loader) for sampler, loader in
-                            zip([str(i) for i in samplers], ood)]) for ood in oods]
-            double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in     self.noise_range], dicted))
-            return double_dicted
+                                num_workers=self.num_workers)
+                oods[f"noise_{self.noise_range[i]}"] = oods_by_bias
+            return oods
         else:
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10), num_workers=self.num_workers),
                      DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
