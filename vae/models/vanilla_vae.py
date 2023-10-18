@@ -374,6 +374,57 @@ class VanillaVAE(BaseVAE):
                                       kernel_size= 3, padding= 1),
                             nn.Tanh())
 
+    def estimate_log_likelihood(self, sample, num_samples=100, prior_mean=0, prior_std=1):
+        """
+        Estimate the log likelihood for a given sample using a trained VAE and importance sampling.
+
+        Args:
+            vae: The trained VAE model.
+            sample: A single CIFAR10 image (shape: [3, 32, 32]).
+            num_samples: Number of samples to use for the Monte Carlo estimate (default: 100).
+            prior_mean: Mean of the prior distribution (default: 0).
+            prior_std: Standard deviation of the prior distribution (default: 1).
+
+        Returns:
+            log_likelihood: The estimated log likelihood for the given sample.
+        """
+
+
+
+        # Encode the sample to obtain the (mu, sigma) encoding
+        mu, log_sigma = self.encode(sample)
+        sigma = torch.exp(log_sigma)
+        sigma = sigma + 1e-5
+        # Compute the prior and learned distributions
+        prior_dist = Normal(prior_mean, prior_std)
+        learned_dist = Normal(mu, sigma)
+
+        # Sample multiple times from the learned latent distribution using the reparameterization trick
+        epsilon = torch.randn(num_samples, sigma.shape[-1]).to("cuda")
+        z = mu + epsilon * sigma
+
+        # Decode the latent variables to reconstruct the samples
+        reconstructions = self.decode(z)
+
+        # Compute the log probabilities of the reconstructions under the learned and prior distributions
+        log_probs_prior = prior_dist.log_prob(z).sum(dim=1)
+        log_probs_learned = learned_dist.log_prob(z).sum(dim=1)
+
+        reconstructions = torch.clip(reconstructions, 0,1) #debug
+        sample = torch.clip(sample, 0, 1)
+
+
+        log_probs_recon = -F.binary_cross_entropy(reconstructions, sample.repeat(num_samples, 1, 1, 1),
+                                                  reduction='none').view(num_samples, -1).sum(dim=1)
+
+        # Compute the importance weights for each sample
+        importance_weights = log_probs_recon + log_probs_prior - log_probs_learned
+
+        # Compute the log likelihood using the importance weightss<
+        log_likelihood = torch.logsumexp(importance_weights, dim=0) - torch.log(torch.tensor(float(num_samples)))
+        return log_likelihood.item()
+
+
     def encode(self, input: Tensor) -> List[Tensor]:
         """
         Encodes the input by passing through the encoder network

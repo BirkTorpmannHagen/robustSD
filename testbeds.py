@@ -47,14 +47,13 @@ class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=20, mode="normal"):
         super().__init__(sample_size, num_workers)
         self.num_workers=num_workers
-        self.noise_range = np.arange(0.01, 0.3, 0.01)
+        self.noise_range = np.linspace(0.01, 0.3, 5)
         self.mode=mode
 
 
     def ind_loader(self):
         # return DataLoader(
         #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=20)
-        print(self.num_workers)
         return DataLoader(
             self.ind, shuffle=True, num_workers=self.num_workers)
 
@@ -307,7 +306,7 @@ class ImagenetteTestBed(NoiseTestBed):
         super().__init__(sample_size, num_workers=20, mode=mode)
 
         self.trans = transforms.Compose([
-            transforms.Resize((256, 256)),
+            transforms.Resize((512, 512)),
             transforms.ToTensor(), ])
 
         # classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to(
@@ -319,12 +318,12 @@ class ImagenetteTestBed(NoiseTestBed):
         self.classifier = ResNetClassifier.load_from_checkpoint("Imagenette_logs/checkpoints/epoch=82-step=24568.ckpt", resnet_version=101,num_classes=10)
         self.classifier.eval().to("cuda")
 
-        # config = yaml.safe_load(open("vae/configs/vae.yaml"))
-        # self.vae = ResNetVAE().cuda().eval()
-        # vae_exp = VAEXperiment(self.vae, config)
-        # vae_exp.load_state_dict(
-        #     torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
-        #         "state_dict"])
+        config = yaml.safe_load(open("vae/configs/vae.yaml"))
+        self.vae = VanillaVAE(3, 512).cuda().eval()
+        vae_exp = VAEXperiment(self.vae, config)
+        vae_exp.load_state_dict(
+            torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
+                "state_dict"])
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
