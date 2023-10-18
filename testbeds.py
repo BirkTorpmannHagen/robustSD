@@ -47,7 +47,7 @@ class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=20, mode="normal"):
         super().__init__(sample_size, num_workers)
         self.num_workers=num_workers
-        self.noise_range = np.linspace(0.01, 0.3, 5)
+        self.noise_range = np.linspace(0.05, 0.3, 6)
         self.mode=mode
 
 
@@ -180,7 +180,7 @@ class NicoTestBed(BaseTestBed):
         self.classifier = ResNetClassifier.load_from_checkpoint(
            "NICODataset_logs/checkpoints/epoch=279-step=175000.ckpt", num_classes=num_classes,
             resnet_version=101).to("cuda").eval()
-        self.vae = ResNetVAE().to("cuda").eval()
+        self.vae = VanillaVAE(3, 512).to("cuda").eval()
 
         if rep_model=="vae":
             self.rep_model = self.vae
