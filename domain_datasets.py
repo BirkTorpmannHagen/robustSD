@@ -163,6 +163,7 @@ class Imagenette(torchvision.datasets.ImageFolder):
         super().__init__(os.path.join(root, split), transform=transform)
         self.num_classes = 10
 
+
 class ImagenettewNoise(Imagenette):
     def __init__(self, root,transform,train, noise_level=0):
         super().__init__(root, transform, train)
@@ -175,6 +176,7 @@ class ImagenettewNoise(Imagenette):
         return x,y
 
     def __len__(self):
+        # return 10 #debug
         return super().__len__()
 
 class CIFAR10wNoise(CIFAR10):

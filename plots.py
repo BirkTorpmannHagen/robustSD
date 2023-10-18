@@ -267,12 +267,24 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     g.add_legend()
     plt.show()
 
-def breakdown_by_sampler(placeholder=False, metric="Risk"):
+def breakdown_by_sampler(placeholder=False, metric="DR"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     df = df.groupby(["Dataset", "Sampler", "OOD Detector"])[metric].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
+def plot_severity(fname):
+    data = open_and_process(fname)
+    threshold = get_threshold(data)
+    print(data.groupby(["sampler", "fold"]).apply(lambda x: calibrated_detection_rate(x, threshold)))
 
+    main_correlation = correlation(data)
+
+    by_sampler = [data[data["sampler"]==sampler] for sampler in pd.unique(data["sampler"])]
+    correlations = [correlation(df) for df in by_sampler]
+    sns.FacetGrid(data=data, col="sampler", col_wrap=3, sharey=False, sharex=False).map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="fold")
+    plt.show()
+    print(main_correlation)
+    print(correlations)
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "DR", "Risk"]].mean()
@@ -342,7 +354,7 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
                 if dataset=="Polyp":
                     fname=f"data/{dataset}_{dsd}_{sample_size}_fullloss_ex.csv"
                     if dsd=="ks_5NN":
-                        fname = f"data/{dataset}_ks_5NN_{sample_size}_fullloss_ex.csv"
+                        fname = f"data/{dataset}_ks_5NN_{sample_size}_fullloss_ex_vae.csv"
                 data = open_and_process(fname, filter_noise=True)
                 if data is None:
                     if placeholder:
@@ -431,11 +443,11 @@ if __name__ == '__main__':
     Classification
     """
     #summary
-    summarize_results()
+    # summarize_results()
     # input()
     #
     # #sampler_breakdown
-    # breakdown_by_sampler()
+    breakdown_by_sampler()
     # input()
     #
     # #sample_size_breakdown
@@ -448,6 +460,6 @@ if __name__ == '__main__':
     Correlation plots
     """
     # correlation_summary()
-
+    plot_severity("data/Imagenette_ks_5NN_100_fullloss_severity.csv")
 
 
