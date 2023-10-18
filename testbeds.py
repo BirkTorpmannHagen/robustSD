@@ -47,7 +47,7 @@ class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=20, mode="normal"):
         super().__init__(sample_size, num_workers)
         self.num_workers=num_workers
-        self.noise_range = np.arange(0.01, 0.3, 0.01)
+        self.noise_range = np.linspace(0.01, 0.3, 5)
         self.mode=mode
 
 

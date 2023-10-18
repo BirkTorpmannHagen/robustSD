@@ -46,13 +46,13 @@ if __name__ == '__main__':
     for sample_size in [100]:
         # bench = NicoTestBed(sample_size)
         bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
-        tsd = RabanserSD(bench.classifier, select_samples=True, k=5, processes=2)
+        tsd = RabanserSD(bench.classifier, select_samples=True, k=5, processes=1)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/Polyp_ks_5NN_{sample_size}_fullloss.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_severity.csv")
 
     for sample_size in [100]:
         # bench = NicoTestBed(sample_size)
         bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
-        tsd = RabanserSD(bench.classifier, processes=2)
+        tsd = RabanserSD(bench.classifier, processes=1)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/Polyp_ks_{sample_size}_fullloss.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_{sample_size}_severity.csv")
