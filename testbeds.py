@@ -321,9 +321,9 @@ class ImagenetteTestBed(NoiseTestBed):
         config = yaml.safe_load(open("vae/configs/vae.yaml"))
         self.vae = VanillaVAE(3, 512).cuda().eval()
         vae_exp = VAEXperiment(self.vae, config)
-        vae_exp.load_state_dict(
-            torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
-                "state_dict"])
+        # vae_exp.load_state_dict(
+        #     torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
+        #         "state_dict"])
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
