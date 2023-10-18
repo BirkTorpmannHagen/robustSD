@@ -29,23 +29,22 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
 if __name__ == '__main__':
 
     torch.multiprocessing.set_start_method('spawn')
-
-    #     # bench = NicoTestBed(sample_size)
-    #     bench = PolypTestBed(sample_size, "classifier")
-    #     tsd = RabanserSD(bench.vae, select_samples=True,k=5, processes=2)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/Polyp_ks_5NN_{sample_size}_fullloss_ex_vae.csv")
-    #
     # for sample_size in [10, 20, 50, 100, 200, 500]:
     #     # bench = NicoTestBed(sample_size)
-    #     bench = PolypTestBed(sample_size, "classifier")
-    #     tsd = RabanserSD(bench.vae, select_samples=False,processes=2)
+    #     bench = ImagenetteTestBed(sample_size, "vae")
+    #     tsd = RabanserSD(bench.vae, select_samples=True,k=5, processes=2)
     #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/Polyp_ks_{sample_size}_fullloss_ex_vae.csv")
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_fullloss_ex_vae.csv")
 
     for sample_size in [10, 20, 50, 100, 200, 500]:
-        # bench = NicoTestBed(sample_size)
-        bench = PolypTestBed(sample_size, rep_model="vae")
+        bench = ImagenetteTestBed(sample_size, "vae")
         tsd = TypicalitySD(bench.vae)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/Polyp_Typicality_{sample_size}_fullloss_ex_vae.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/imagenette_Typicality_{sample_size}_fullloss.csv")
+
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     # bench = NicoTestBed(sample_size)
+    #     bench = PolypTestBed(sample_size, rep_model="vae")
+    #     tsd = TypicalitySD(bench.vae)
+    #     tsd.register_testbed(bench)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/Polyp_Typicality_{sample_size}_fullloss_ex_vae.csv")
