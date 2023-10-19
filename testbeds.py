@@ -113,7 +113,7 @@ class NjordTestBed(BaseTestBed):
     def __init__(self, sample_size):
         super().__init__(sample_size)
         ind, ind_val, ood = build_njord_datasets()
-        self.rep_model = ResNetVAE().to("cuda").eval()
+        self.rep_model = VanillaVAE().to("cuda").eval()
         self.classifier = fetch_model("njord/runs/train/exp4/weights/best.pt")
 
         self.classifier.hyp = yaml.safe_load(open("/home/birk/Projects/robustSD/njord/data/hyps/hyp.scratch-low.yaml", "r"))
@@ -131,7 +131,7 @@ class NjordTestBed(BaseTestBed):
     def compute_losses(self, loader):
         losses = torch.zeros(len(loader))
         for i, (x, targets, paths, shapes) in enumerate(loader):
-
+            print(paths)
             x = x.half()/255
             x = x.cuda()
             targets = targets.cuda()

@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 # from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning_dataset import VAEDataset
+from njord.utils.dataloaders import LoadImagesAndLabels
 from torchvision.datasets import CIFAR10, CIFAR100
 # from pytorch_lightning.plugins import DDPPlugin
 
@@ -35,7 +36,9 @@ def wrap_dataset(dataset):
             return len(self.dataset)
 
     return NewDataset(dataset)
-def train_vae_large(train, val, patch_size=512):
+def train_vae_large(train, val, patch_size=512, collate_fn=None, name=None):
+    if name is None:
+        name=train.__class__.__name__
     model = VanillaVAE(3, 512, patch_size=patch_size)
     # model = CIFARVAE()
     params = {
@@ -51,10 +54,10 @@ def train_vae_large(train, val, patch_size=512):
     # train_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
     # val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
     # train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
-
+    print(train.__class__.__name__)
     tb_logger =  TensorBoardLogger(save_dir="vae_logs",
-                                   name=train.__class__.__name__)
-    data = VAEDataset(train_set=train, val_set=val)
+                                   name=name)
+    data = VAEDataset(train_set=train, val_set=val, collate_fn=collate_fn)
 
     data.setup()
     runner = Trainer(logger=tb_logger,
@@ -82,6 +85,8 @@ if __name__ == '__main__':
     default_val_trans = transforms.Compose([transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     #Polyps
     #
-    train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
-    train_vae_large(train, val, patch_size=patch_size)
+    train, val, test = build_njord_datasets()
+    collate_fn = LoadImagesAndLabels.collate_fn
+
+    train_vae_large(train, val, patch_size=patch_size, collate_fn=collate_fn, name="Njord")
 

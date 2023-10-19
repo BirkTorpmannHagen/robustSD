@@ -318,9 +318,9 @@ def build_njord_datasets():
     ind = check_dataset("njord/folds/ind_fold.yaml")
     ood = check_dataset("njord/folds/ood_fold.yaml")
 
-    train_set = create_dataset(ind["train"], 512, 16, 32)
-    val_set =  create_dataset(ind["val"], 512, 16, 32)
-    ood_set =  create_dataset(ood["val"], 512, 16, 32)
+    train_set = create_dataset(ind["train"], 512, 16, 32,natively_trainable=True)
+    val_set =  create_dataset(ind["val"], 512, 16, 32, natively_trainable=True)
+    ood_set =  create_dataset(ood["val"], 512, 16, 32, natively_trainable=True)
     return train_set, val_set, ood_set
 
 
