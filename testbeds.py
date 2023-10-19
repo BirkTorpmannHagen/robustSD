@@ -59,7 +59,7 @@ class NoiseTestBed(BaseTestBed):
 
     def ind_val_loaders(self):
         if self.mode=="severity":
-            samplers = [ClusterSamplerWithSeverity(self.ind_val, self.rep_model, sample_size=self.sample_size, bias_severity=i) for i in np.linspace(0,1,10)]
+            samplers = [ClusterSamplerWithSeverity(self.ind_val, self.rep_model, sample_size=self.sample_size, bias_severity=i) for i in np.linspace(0,1,11)]
             loaders = {"ind": dict(
                 [(str(sampler), DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers))
                  for sampler in
@@ -80,7 +80,7 @@ class NoiseTestBed(BaseTestBed):
             oods = {}
             for i, ood_set in enumerate(self.ood_sets):
                 oods_by_bias = {}
-                for severity in np.linspace(0,1,10):
+                for severity in np.linspace(0,1,11):
                     oods_by_bias[f"ClusterBias:{severity}"] = DataLoader(ood_set,
                                 sampler=ClusterSamplerWithSeverity(ood_set, self.rep_model,
                                     sample_size=self.sample_size, bias_severity=severity),
@@ -321,9 +321,9 @@ class ImagenetteTestBed(NoiseTestBed):
         config = yaml.safe_load(open("vae/configs/vae.yaml"))
         self.vae = VanillaVAE(3, 512).cuda().eval()
         vae_exp = VAEXperiment(self.vae, config)
-        vae_exp.load_state_dict(
-            torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
-                "state_dict"])
+        # vae_exp.load_state_dict(
+        #     torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
+        #         "state_dict"])
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
@@ -379,7 +379,7 @@ class PolypTestBed(BaseTestBed):
             return double_dicted
         elif self.mode=="severity":
             samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size,
-                                                   bias_severity=severity) for severity in np.linspace(0,1,10)]
+                                                   bias_severity=severity) for severity in np.linspace(0,1,11)]
             loaders =  {"ood": dict([[sampler.__class__.__name__,  DataLoader(self.ood, sampler=sampler)] for sampler in
                                      samplers])}
             return loaders
@@ -394,7 +394,7 @@ class PolypTestBed(BaseTestBed):
     def ind_val_loaders(self):
         if self.mode=="severity":
             samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size,
-                                                   bias_severity=severity) for severity in np.linspace(0,1,10)]
+                                                   bias_severity=severity) for severity in np.linspace(0,1,11)]
             loaders =  {"ood": dict([[sampler.__class__.__name__,  DataLoader(self.ood, sampler=sampler)] for sampler in
                                      samplers])}
             return loaders

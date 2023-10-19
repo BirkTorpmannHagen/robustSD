@@ -48,10 +48,10 @@ def collect_data(sample_range, testbed_constructor, dataset_name):
 
 if __name__ == '__main__':
 
-    for sample_size in [10, 20, 50, 100, 200, 500]:
-        bench = NjordTestBed(sample_size)
-        testbed = NjordTestBed(sample_size)
-        testbed.compute_losses(testbed.ind_val_loaders())
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     bench = NjordTestBed(sample_size)
+    #     testbed = NjordTestBed(sample_size)
+    #     testbed.compute_losses(testbed.ind_val_loaders())
 
 
         # tsd = RabanserSD(testbed.vae, processes=1)
@@ -59,10 +59,33 @@ if __name__ == '__main__':
         # compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
         #               fname=f"data/Njord_ks_{sample_size}_fullloss.csv")
 
-
+    torch.multiprocessing.set_start_method('spawn')
     # for sample_size in [10, 20, 50, 100, 200, 500]:
     #     # bench = NicoTestBed(sample_size)
-    #     bench = PolypTestBed(sample_size, rep_model="vae")
-    #     tsd = TypicalitySD(bench.vae)
+    #     bench = ImagenetteTestBed(sample_size, "vae")
+    #     tsd = RabanserSD(bench.vae, select_samples=True,k=5, processes=2)
     #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/Polyp_Typicality_{sample_size}_fullloss_ex_vae.csv")
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_fullloss_ex_vae.csv")
+
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench = ImagenetteTestBed(sample_size, rep_model="vae", mode="severity")
+        tsd = TypicalitySD(bench.vae)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/imagenette_typicality_{sample_size}_severity.csv")
+
+    #
+    # for sample_size in [100]:
+    #     # bench = NicoTestBed(sample_size)
+    #     bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
+    #     tsd = RabanserSD(bench.classifier, select_samples=True, k=5, processes=1)
+    #     tsd.register_testbed(bench)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_severity.csv")
+    #
+    # for sample_size in [100]:
+    #     # bench = NicoTestBed(sample_size)
+    #     bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
+    #     tsd = RabanserSD(bench.classifier, processes=1)
+    #     tsd.register_testbed(bench)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_{sample_size}_severity.csv")
+    #

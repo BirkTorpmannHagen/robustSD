@@ -97,7 +97,7 @@ class ClusterSamplerWithSeverity(Sampler):
         self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         self.sample_size = sample_size
-        self.bias_severity = bias_severity
+        self.bias_severity = 1-bias_severity # 1-bias severity since we are selecting self.bias severity * len samples to randomize
 
     def __str__(self):
         return f"ClusterSamplerWithSeverity_{self.bias_severity}"
