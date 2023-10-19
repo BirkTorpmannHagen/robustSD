@@ -308,14 +308,16 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
             data = data[data["sampler"]!=exclude_sampler]
         if "noise" in str(pd.unique(data["fold"])) and filter_noise:
             data = data[(data["fold"] == "noise_0.2") | (data["fold"] == "ind")]
-        if "fullloss" in fname:
+        try:
+            data["loss"] = data["loss"].map(lambda x: float(x))
+        except:
             data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
             if combine_losses:
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))
             else:
                 data=data.explode("loss")
         data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
-        # data["oodness"] = 1 if data["fold"]=="ood" else 0
+
 
         return data
     except FileNotFoundError:

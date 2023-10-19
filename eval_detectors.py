@@ -36,18 +36,25 @@ if __name__ == '__main__':
     #     tsd.register_testbed(bench)
     #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_fullloss_ex_vae.csv")
 
-<<<<<<< HEAD
     for sample_size in [100]:
         # bench = NicoTestBed(sample_size)
-        bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
-        tsd = RabanserSD(bench.classifier, select_samples=True, k=5, processes=1)
+        bench = ImagenetteTestBed(sample_size, rep_model="vae", mode="severity")
+        tsd = TypicalitySD(bench.vae)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_severity.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/imagenette_typicality_{sample_size}_severity.csv")
 
-    for sample_size in [100]:
-        # bench = NicoTestBed(sample_size)
-        bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
-        tsd = RabanserSD(bench.classifier, processes=1)
-        tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_{sample_size}_severity.csv")
-
+    #
+    # for sample_size in [100]:
+    #     # bench = NicoTestBed(sample_size)
+    #     bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
+    #     tsd = RabanserSD(bench.classifier, select_samples=True, k=5, processes=1)
+    #     tsd.register_testbed(bench)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_severity.csv")
+    #
+    # for sample_size in [100]:
+    #     # bench = NicoTestBed(sample_size)
+    #     bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
+    #     tsd = RabanserSD(bench.classifier, processes=1)
+    #     tsd.register_testbed(bench)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_{sample_size}_severity.csv")
+    #
