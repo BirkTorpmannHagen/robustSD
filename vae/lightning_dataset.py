@@ -57,6 +57,7 @@ class VAEDataset(LightningDataModule):
         val_batch_size: int = 8,
         num_workers: int = 10,
         pin_memory: bool = False,
+        collate_fn = None,
         **kwargs,
     ):
         super().__init__()
@@ -64,43 +65,73 @@ class VAEDataset(LightningDataModule):
         self.val_batch_size = val_batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+
+        self.collate_fn = collate_fn #njord
+
         self.train_dataset = train_set
 
         self.val_dataset = val_set
 
     def train_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.train_batch_size,
-            num_workers=self.num_workers,
-            shuffle=True,
-            pin_memory=self.pin_memory,
-            drop_last=True
-        )
+        if self.collate_fn is None:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self.pin_memory,
+                drop_last=True
+            )
+        else:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self.pin_memory,
+                drop_last=True,
+                collate_fn=self.collate_fn
+            )
 
     def val_dataloader(self) -> Union[DataLoader, List[DataLoader]]:
-        if isinstance(self.val_dataset, DataLoader):
-            return self.val_dataset  # njord dataset bodge
-
-        return DataLoader(
-            self.val_dataset,
-            batch_size=self.val_batch_size,
-            num_workers=self.num_workers,
-            shuffle=True,
-            pin_memory=self.pin_memory,
-            drop_last=True
-
-        )
+        if self.collate_fn is None:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self.pin_memory,
+                drop_last=True
+            )
+        else:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self.pin_memory,
+                drop_last=True,
+                collate_fn=self.collate_fn
+            )
 
     def test_dataloader(self) -> Union[DataLoader, List[DataLoader]]:
-
-        return DataLoader(
-            self.val_dataset,
-            batch_size=8,
-            num_workers=self.num_workers,
-            shuffle=True,
-            pin_memory=self.pin_memory,
-            drop_last=True
-        )
-
+        if self.collate_fn is None:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self.pin_memory,
+                drop_last=True
+            )
+        else:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.train_batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self.pin_memory,
+                drop_last=True,
+                collate_fn=self.collate_fn
+            )
 

@@ -216,8 +216,8 @@ class TypicalitySD(BaseSD):
 
     def compute_entropy(self, data_loader):
         log_likelihoods = []
-        for i, (x, y) in enumerate(data_loader):
-            x = x.to("cuda")
+        for i, batch in enumerate(data_loader):
+            x = batch[0].to("cuda")
             log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
         entropies = -(torch.tensor(log_likelihoods))
         return entropies
@@ -311,6 +311,7 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
         try:
             data["loss"] = data["loss"].map(lambda x: float(x))
         except:
+
             data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
             if combine_losses:
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))

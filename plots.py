@@ -56,13 +56,15 @@ def fnr(data, threshold):
     ood_ps = data[data["oodness"]>1]["pvalue"]
 
     ind_ps = data[data["oodness"]<=1]["pvalue"]
-    thresholded = ood_ps>threshold
+    thresholded = ood_ps>=threshold
     return thresholded.mean()
-def calibrated_detection_rate(data, threshold):
+def balanced_accuracy(data, threshold):
     ood_ps = data[data["oodness"]>1]["pvalue"]
     ind_ps = data[data["oodness"]<=1]["pvalue"]
     sorted_ps = sorted(ind_ps)
-    ba = ((ind_ps>=threshold).mean()+(ood_ps<threshold).mean()) /2
+    # ba = ((ind_ps>=threshold).mean()+(ood_ps<threshold).mean()) /2
+    ba = 1-fpr(data, threshold) + 1-fnr(data, threshold)
+    ba = ba/2
         # print(f"{(ind_ps >= threshold).mean()}+ {(ood_ps < threshold).mean()} / 2")
     return ba
 
@@ -164,13 +166,13 @@ def risk(data, threshold):
 
 def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
     data = open_and_process(fname, filter_noise=False, combine_losses=True)
+
     sns.scatterplot(data=data, x="pvalue", y="loss", hue="fold")
     plt.xscale("log")
     plt.show()
 
     #determine sample oodness according to loss
-    if ood_fold_name!="ood":
-        data = data[(data["fold"]=="ind")|(data["fold"]==ood_fold_name)]
+
     data["oodness"]=data["loss"]/data[data["fold"]=="ind"]["loss"].quantile(0.95)
     ood = data[data["oodness"]>1]
     ind = data[data["oodness"]<=1]
@@ -188,7 +190,7 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
         subset = data[data["sampler"]==sampler]
         subset_ood = subset[subset["oodness"]>=1]
         subset_ind = subset[subset["oodness"]<1]
-        acc =calibrated_detection_rate(subset, threshold)
+        acc =balanced_accuracy(subset, threshold)
         print(f"acc for {sampler}: {acc}")
         # print(f"fpr for {sampler}: {fpr}")
         if plots:
@@ -245,6 +247,7 @@ def plot_regplots():
     plt.show()
     correlations = merged.groupby(["OOD Detector", "Dataset"]).apply(lambda x: correlation(x))
     g = sns.FacetGrid(data=merged, col="OOD Detector", row="Dataset", sharey=False, sharex=False, margin_titles=True)
+    g.legend()
     g.map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="fold",  palette="mako")
     g.set(xscale="log").set(ylim=0)
 
@@ -321,11 +324,13 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     # print(df.groupby(["Dataset", "Sample Size"])["DR"].mean())
     # input()
-    df = df.groupby(["Dataset", "OOD Detector", "Sample Size"])[metric].mean()
+    df = df.groupby(["Dataset", "OOD Detector", "Sampler", "Sample Size"])[metric].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
     df = df.reset_index()
-    sns.lineplot(data=df, x="Sample Size", y="DR", hue="OOD Detector")
+    g = sns.FacetGrid(data=df, col="Sampler", margin_titles=True)
+    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="OOD Detector")
+    # sns.lineplot(data=df, x="Sample Size", y="DR", hue="OOD Detector")
     plt.show()
 
     g = sns.FacetGrid(data=df, col="Dataset", col_wrap=3, sharey=False, sharex=False)
@@ -348,7 +353,7 @@ def plot_severity(dataset,sample_size):
     df_knn["OOD Detector"] = "KNNDSD"
     df_typ["OOD Detector"] = "Typicality"
     threshold_rab = get_threshold(df_rab)
-    print(calibrated_detection_rate(df_rab, threshold=threshold_rab))
+    print(balanced_accuracy(df_rab, threshold=threshold_rab))
     threshold_knn = get_threshold(df_knn)
     threshold_typ = get_threshold(df_typ)
     thres_dict = dict(zip(["Rabanser et Al.", "KNNDSD","Typicality"], [threshold_rab, threshold_knn, threshold_typ]))
@@ -368,7 +373,7 @@ def plot_severity(dataset,sample_size):
         for ood_detector in by_sampler["OOD Detector"].unique():
             by_dsd = by_sampler[by_sampler["OOD Detector"]==ood_detector]
             corr = correlation(by_dsd)
-            risk_val = calibrated_detection_rate(by_dsd, threshold=thres_dict[ood_detector])
+            risk_val = balanced_accuracy(by_dsd, threshold=thres_dict[ood_detector])
             data.append({"Severity":sampler_val, "OOD Detector":ood_detector, "Correlation":corr, "Risk": risk_val})
             # print(f"\t& {corr:.4}", end=", ")
             # print(f"\t& {risk_val:.4}", end=", ")
@@ -443,13 +448,6 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
         for dsd in ["ks", "ks_5NN", "typicality"]:
             for sample_size in [50, 100, 200, 500]:
                 fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
-                if dataset=="Polyp":
-                    fname=f"data/{dataset}_{dsd}_{sample_size}_fullloss_ex.csv"
-                    if dsd=="ks_5NN":
-                        fname = f"data/{dataset}_ks_5NN_{sample_size}_fullloss_ex.csv"
-                if dataset=="Njord":
-                    fname = f"data/{dataset}_{dsd}_{sample_size}.csv"
-
                 data = open_and_process(fname, filter_noise=True)
                 if data is None:
                     if placeholder:
@@ -466,7 +464,7 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
                                        "Sampler": sampler,
                                        "FPR": fpr(subset, threshold=threshold),
                                        "FNR": fnr(subset, threshold=threshold),
-                                       "DR": calibrated_detection_rate(subset, threshold=threshold),
+                                       "DR": balanced_accuracy(subset, threshold=threshold),
                                        "Risk": risk(subset, threshold=threshold),
                                        "Correlation": correlation(subset)})
     df = pd.DataFrame(data=table_data).replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace(
@@ -537,22 +535,21 @@ def experiment_prediction(fname):
 
 if __name__ == '__main__':
     """
-    Classification
+    # Classification
     """
 
 
     summarize_results()
     input()
-    #
     #sampler_breakdown
-    # breakdown_by_sampler()
+    breakdown_by_sampler()
     # input()
     #
     #sample_size_breakdown
-    # breakdown_by_sample_size()
+    breakdown_by_sample_size()
 
-    #thresholding_plots
-    # threshold_plots("CIFAR10", 100)
+    # thresholding_plots
+    # threshold_plots("Njord", 100)
 
     #severity
     # plot_severity("data/imagenette_ks_5NN_100_severity.csv")

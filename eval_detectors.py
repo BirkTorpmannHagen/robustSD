@@ -24,9 +24,40 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
     df = convert_to_pandas_df(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_losses_fold)
     df.to_csv(fname)
 
+def collect_data(sample_range, testbed_constructor, dataset_name):
 
+    for sample_size in sample_range:
+        testbed = testbed_constructor(sample_size, "classifier")
+        tsd = RabanserSD(bench.classifier, select_samples=True,k=5, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/{dataset_name}_ks_5NN_{sample_size}_fullloss.csv")
+
+    for sample_size in sample_range:
+        testbed = testbed_constructor(sample_size, "classifier")
+        tsd = RabanserSD(bench.classifier, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                      fname=f"data/{dataset_name}_ks_{sample_size}_fullloss.csv")
+
+    for sample_size in sample_range:
+        testbed = testbed_constructor(sample_size, "classifier")
+        tsd = TypicalitySD(bench.vae)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+                      fname=f"data/{dataset_name}_ks_{sample_size}_fullloss.csv")
 
 if __name__ == '__main__':
+
+    # for sample_size in [10, 20, 50, 100, 200, 500]:
+    #     bench = NjordTestBed(sample_size)
+    #     testbed = NjordTestBed(sample_size)
+    #     testbed.compute_losses(testbed.ind_val_loaders())
+
+
+        # tsd = RabanserSD(testbed.vae, processes=1)
+        # tsd.register_testbed(bench)
+        # compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+        #               fname=f"data/Njord_ks_{sample_size}_fullloss.csv")
 
     torch.multiprocessing.set_start_method('spawn')
     sample_range = [50, 100, 200, 500]

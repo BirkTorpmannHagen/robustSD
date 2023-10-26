@@ -176,7 +176,8 @@ def create_dataset(path,
                       image_weights=False,
                       quad=False,
                       prefix='',
-                      shuffle=False):
+                      shuffle=False,
+                      natively_trainable=False):
     dataset = LoadImagesAndLabels(
         path,
         imgsz,
@@ -189,7 +190,8 @@ def create_dataset(path,
         stride=int(stride),
         pad=pad,
         image_weights=image_weights,
-        prefix=prefix)
+        prefix=prefix,
+        natively_trainable=natively_trainable)
     return dataset
 
 
@@ -579,7 +581,9 @@ class LoadImagesAndLabels(Dataset):
                  single_cls=False,
                  stride=32,
                  pad=0.0,
-                 prefix=''):
+                 prefix='',
+                 natively_trainable=False):
+        self.natively_trainable=natively_trainable
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -804,11 +808,6 @@ class LoadImagesAndLabels(Dataset):
             labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img.shape[1], h=img.shape[0], clip=True, eps=1E-3)
 
         if self.augment:
-            # Albumentations
-            # TODO transform to night
-            # print(type(img))
-            # test = self.p2pmodel(img.cuda()).cpu()
-
             img, labels = self.albumentations(img, labels)
             nl = len(labels)  # update after albumentations
 
@@ -838,6 +837,8 @@ class LoadImagesAndLabels(Dataset):
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
+        if self.natively_trainable:
+            return torch.from_numpy(img).float() / 255, labels_out, self.im_files[index], shapes
         return torch.from_numpy(img), labels_out, self.im_files[index], shapes
 
     def load_image(self, i):

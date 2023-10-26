@@ -281,12 +281,16 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
-def build_polyp_dataset(root):
-    translist = [alb.Compose([
-        i,
-        alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True),
-                                         alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True),
-                                         ]]
+def build_polyp_dataset(root, ex=False):
+    if ex:
+        translist = [alb.Compose([
+            i,
+            alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True),
+                                             alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True),
+                                             ]]
+    else:
+        translist = [alb.Compose([
+            alb.Resize(512, 512)])]
     inds = []
     vals = []
     oods = []
@@ -318,9 +322,9 @@ def build_njord_datasets():
     ind = check_dataset("njord/folds/ind_fold.yaml")
     ood = check_dataset("njord/folds/ood_fold.yaml")
 
-    train_set = create_dataset(ind["train"], 512, 16, 32)
-    val_set =  create_dataset(ind["val"], 512, 16, 32)
-    ood_set =  create_dataset(ood["val"], 512, 16, 32)
+    train_set = create_dataset(ind["train"], 512, 16, 32,natively_trainable=True)
+    val_set =  create_dataset(ind["val"], 512, 16, 32, natively_trainable=True)
+    ood_set =  create_dataset(ood["val"], 512, 16, 32, natively_trainable=True)
     return train_set, val_set, ood_set
 
 
