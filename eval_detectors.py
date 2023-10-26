@@ -29,32 +29,63 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
 if __name__ == '__main__':
 
     torch.multiprocessing.set_start_method('spawn')
-    # for sample_size in [10, 20, 50, 100, 200, 500]:
-    #     # bench = NicoTestBed(sample_size)
-    #     bench = ImagenetteTestBed(sample_size, "vae")
-    #     tsd = RabanserSD(bench.vae, select_samples=True,k=5, processes=2)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_fullloss_ex_vae.csv")
+    sample_range = [50, 100, 200, 500]
+
 
     for sample_size in [100]:
         # bench = NicoTestBed(sample_size)
-        bench = ImagenetteTestBed(sample_size, rep_model="vae", mode="severity")
+        bench =CIFAR100TestBed(sample_size, rep_model="classifier", mode="severity")
+        tsd = RabanserSD(bench.classifier, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIAR100_ks_{sample_size}_severity.csv")
+
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench =CIFAR100TestBed(sample_size, rep_model="classifier", mode="severity")
+        tsd = RabanserSD(bench.classifier, select_samples=True, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIFAR100_ks_5NN_{sample_size}_severity.csv")
+
+
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench =CIFAR100TestBed(sample_size, rep_model="classifier", mode="severity")
+        tsd = RabanserSD(bench.classifier, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIAR100_ks_{sample_size}_severity.csv")
+
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench =CIFAR100TestBed(sample_size, rep_model="classifier", mode="severity")
+        tsd = RabanserSD(bench.classifier, select_samples=True, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIFAR100_ks_5NN_{sample_size}_severity.csv")
+
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench = CIFAR100TestBed(sample_size, rep_model="vae", mode="severity")
         tsd = TypicalitySD(bench.vae)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/imagenette_typicality_{sample_size}_severity.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/CIFAR100_typicality_{sample_size}_severity.csv")
 
-    #
+
+
+
+
+    for sample_size in sample_range:
+        # bench = NicoTestBed(sample_size)
+        bench = CIFAR10TestBed(sample_size, rep_model="classifier", mode="normal")
+        tsd = RabanserSD(bench.classifier)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/CIFAR100_ks_{sample_size}.csv")
+
+
+
+
     # for sample_size in [100]:
     #     # bench = NicoTestBed(sample_size)
-    #     bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
-    #     tsd = RabanserSD(bench.classifier, select_samples=True, k=5, processes=1)
+    #     bench = ImagenetteTestBed(sample_size, rep_model="vae", mode="severity")
+    #     tsd = TypicalitySD(bench.vae)
     #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_5NN_{sample_size}_severity.csv")
-    #
-    # for sample_size in [100]:
-    #     # bench = NicoTestBed(sample_size)
-    #     bench = ImagenetteTestBed(sample_size, rep_model="classifier", mode="severity")
-    #     tsd = RabanserSD(bench.classifier, processes=1)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/imagenette_ks_{sample_size}_severity.csv")
-    #
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/imagenette_typicality_{sample_size}_severity.csv")
+
