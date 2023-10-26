@@ -162,7 +162,7 @@ class NjordTestBed(BaseTestBed):
 
 class NicoTestBed(BaseTestBed):
 
-    def __init__(self, sample_size, rep_model="vae", ood_noise=False):
+    def __init__(self, sample_size, rep_model="vae", ood_noise=False, mode="severity"):
         super().__init__(sample_size)
         self.trans = transforms.Compose([
                                                  transforms.Resize((512, 512)),
@@ -238,8 +238,8 @@ class NicoTestBed(BaseTestBed):
 
 
 class CIFAR10TestBed(NoiseTestBed):
-    def __init__(self, sample_size, rep_model):
-        super().__init__(sample_size)
+    def __init__(self, sample_size, rep_model,mode):
+        super().__init__(sample_size, mode=mode)
         self.trans = transforms.Compose([
                                     transforms.Resize((32, 32)),
                                     transforms.ToTensor(), ])
@@ -271,8 +271,8 @@ class CIFAR10TestBed(NoiseTestBed):
         # return 0 #DEBUG
 
 class CIFAR100TestBed(NoiseTestBed):
-    def __init__(self, sample_size, rep_model):
-        super().__init__(sample_size)
+    def __init__(self, sample_size, rep_model, mode="normal"):
+        super().__init__(sample_size, mode=mode)
         self.trans = transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor(), ])

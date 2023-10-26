@@ -141,7 +141,9 @@ def risk(data, threshold):
 
     ood = data[data["oodness"]>1]
     ind = data[data["oodness"]<=1]
-
+    fprate =fpr(data, threshold)
+    fnrate = fnr(data, threshold)
+    return (fprate + fnrate)/2 * ood["loss"].mean()
     nopredcost = 0
     # data["risk"] = data["loss"]
     # data.loc[((data["pvalue"] < threshold) & (data["oodness"] >= 1)), "risk"] = nopredcost
@@ -539,8 +541,8 @@ if __name__ == '__main__':
     """
 
 
-    # summarize_results()
-    # input()
+    summarize_results()
+    input()
     #
     #sampler_breakdown
     # breakdown_by_sampler()
@@ -559,6 +561,6 @@ if __name__ == '__main__':
     """
     # correlation_summary()
     # plot_regplots()
-    plot_severity("imagenette", 100)
+    # plot_severity("imagenette", 100)
 
 

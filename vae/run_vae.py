@@ -56,9 +56,48 @@ def train_vae_large(train, val, patch_size=512):
                                    name=train.__class__.__name__)
     data = VAEDataset(train_set=train, val_set=val)
 
-    data.setup()
     runner = Trainer(logger=tb_logger,
                      accelerator="gpu",
+                     max_epochs=200,
+                     callbacks=[
+                         LearningRateMonitor(),
+                         ModelCheckpoint(save_top_k=3,
+                                         dirpath =os.path.join(tb_logger.log_dir , "checkpoints"),
+                                         monitor= "val_loss",
+                                         save_last= True),
+                     ])
+
+    Path(f"{tb_logger.log_dir}/Samples").mkdir(exist_ok=True, parents=True)
+    Path(f"{tb_logger.log_dir}/Reconstructions").mkdir(exist_ok=True, parents=True)
+
+
+    print(f"======= Training =======")
+    runner.fit(experiment, datamodule=data)
+
+def train_cifar_model(train, val, patch_size):
+    # model = VanillaVAE(3, 512, patch_size=patch_size)
+    model = CIFARVAE(image_size=32,channel_num=3, kernel_num=16, z_size=512)
+    params = {
+      "LR": 0.00005,
+      "weight_decay": 0.0,
+      "scheduler_gamma": 0.95,
+      "kld_weight": 0.00025,
+      "manual_seed": 1265
+
+    }
+    experiment = VAEXperiment(model, params)
+
+    # train_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+    # val_trans= transforms.Compose([transforms.RandomHorizontalFlip(), transforms.Resize((256,256)), transforms.ToTensor()])
+    # train, val = build_imagenette_dataset("../../Datasets/imagenette2", train_trans, val_trans)
+
+    tb_logger =  TensorBoardLogger(save_dir="vae_logs",
+                                   name=train.__class__.__name__)
+    data = VAEDataset(train_set=train, val_set=val)
+
+    runner = Trainer(logger=tb_logger,
+                     accelerator="gpu",
+                     max_epochs=200,
                      callbacks=[
                          LearningRateMonitor(),
                          ModelCheckpoint(save_top_k=3,
@@ -76,12 +115,17 @@ def train_vae_large(train, val, patch_size=512):
 
 if __name__ == '__main__':
 
-    patch_size=512
+    patch_size=32
     default_train_trans = transforms.Compose([transforms.RandomHorizontalFlip(), transforms.RandomRotation(30),
                                               transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     default_val_trans = transforms.Compose([transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     #Polyps
     #
-    train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
-    train_vae_large(train, val, patch_size=patch_size)
-
+    # train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
+    # train_vae_large(train, val, patch_size=patch_size)
+    train_set= CIFAR10("../../Datasets/CIFAR10", train=True, transform=default_train_trans, download=True)
+    val_set = CIFAR10("../../Datasets/CIFAR10", train=False, transform=default_val_trans, download=True)
+    train_cifar_model(train_set, val_set, patch_size=32)
+    train_set =  CIFAR100("../../Datasets/CIFAR100", train=True, transform=default_train_trans, download=True)
+    val_set = CIFAR100("../../Datasets/CIFAR100", train=False, transform=default_val_trans, download=True)
+    train_cifar_model(train_set, val_set, patch_size=32)

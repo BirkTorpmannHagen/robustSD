@@ -55,7 +55,6 @@ class VAEDataset(LightningDataModule):
         val_set,
         train_batch_size: int = 8,
         val_batch_size: int = 8,
-        patch_size: Union[int, Sequence[int]] = (512, 512),
         num_workers: int = 10,
         pin_memory: bool = False,
         **kwargs,
@@ -63,33 +62,13 @@ class VAEDataset(LightningDataModule):
         super().__init__()
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
-        if isinstance(patch_size, int):
-            self.patch_size = (patch_size, patch_size)
-        else:
-            self.patch_size = patch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-
-        # train_transforms = transforms.Compose([
-        #     transforms.Resize((512, 512)),
-        #     transforms.ToTensor(), ])
-        #
-        # val_transforms = transforms.Compose([
-        #     transforms.Resize((512, 512)),
-        #     transforms.ToTensor(), ])
-        # train_set = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=True, download=False, transform=train_transforms))
-        # val_set = wrap_dataset(CIFAR10(root='../../Datasets/cifar10', train=False, download=False, transform=train_transforms))
         self.train_dataset = train_set
+
         self.val_dataset = val_set
 
-
-    def setup(self,  stage: Optional[str] = None) -> None:
-        pass
-
     def train_dataloader(self) -> DataLoader:
-        if isinstance(self.train_dataset, DataLoader):
-            return self.train_dataset #njord dataset bodge
-
         return DataLoader(
             self.train_dataset,
             batch_size=self.train_batch_size,
@@ -114,8 +93,6 @@ class VAEDataset(LightningDataModule):
         )
 
     def test_dataloader(self) -> Union[DataLoader, List[DataLoader]]:
-        if isinstance(self.val_dataset, DataLoader):
-            return self.val_dataset  # njord dataset bodge
 
         return DataLoader(
             self.val_dataset,
