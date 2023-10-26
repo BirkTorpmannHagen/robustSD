@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from torch.utils.data import ConcatDataset
 
 from vae.vae_experiment import VAEXperiment
@@ -112,15 +113,14 @@ class NoiseTestBed(BaseTestBed):
 class NjordTestBed(BaseTestBed):
     def __init__(self, sample_size):
         super().__init__(sample_size)
-        ind, ind_val, ood = build_njord_datasets()
-        self.rep_model = VanillaVAE().to("cuda").eval()
+        self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
         self.classifier = fetch_model("njord/runs/train/exp4/weights/best.pt")
 
         self.classifier.hyp = yaml.safe_load(open("/home/birk/Projects/robustSD/njord/data/hyps/hyp.scratch-low.yaml", "r"))
         self.loss = ComputeLoss(self.classifier)
         self.vae_exp = VAEXperiment(self.rep_model, yaml.safe_load(open("vae/configs/vae.yaml")))
         self.vae_exp.load_state_dict(
-            torch.load("vae_logs/Njord/version_3/checkpoints/last.ckpt")[
+            torch.load("vae_logs/Njord/version_1/checkpoints/last.ckpt")[
                 "state_dict"])
         self.ind, self.ind_val, self.ood = build_njord_datasets()
         self.collate_fn = LoadImagesAndLabels.collate_fn
@@ -128,16 +128,57 @@ class NjordTestBed(BaseTestBed):
     def loader(self, dataset, sampler):
         return DataLoader(dataset, sampler=sampler, collate_fn=self.collate_fn, num_workers=self.num_workers)
 
-    def compute_losses(self, loader):
-        losses = torch.zeros(len(loader))
-        for i, (x, targets, paths, shapes) in enumerate(loader):
-            print(paths)
+    def split_datasets(self):
+        val = DataLoader(self.ind_val, collate_fn = self.collate_fn)
+        ood = DataLoader(self.ood, collate_fn = self.collate_fn)
+
+        val_losses = torch.zeros(len(val))
+        val_data = []
+        print("getting val losses")
+
+        for i, (x, targets, paths, shapes) in tqdm(enumerate(val), total=len(val)):
             x = x.half()/255
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
-            _, loss = self.loss(train_out, targets)
-            losses[i]=loss.mean().item()
+            loss, _ = self.loss(train_out, targets)
+            val_losses[i]=loss.item()
+            val_data.append({"fold": "val", "path": paths, "loss":loss.item()})
+        df_val = pd.DataFrame(val_data)
+        df_val.to_csv("njord_losses_val.csv")
+
+        ood_losses = torch.zeros(len(ood))
+        ood_data = []
+        print("getting ood losses")
+        for i, (x, targets, paths, shapes) in tqdm(enumerate(ood), total=len(ood)):
+            x = x.half() / 255
+            x = x.cuda()
+            targets = targets.cuda()
+            preds, train_out = self.classifier(x)
+            loss, _ = self.loss(train_out, targets)
+            ood_losses[i] = loss.item()
+            ood_data.append({"fold": "ood", "path": paths, "loss": loss.item()})
+        df_ood = pd.DataFrame(ood_data)
+        df_ood.to_csv("njord_losses_ood.csv")
+
+        merged = pd.concat((df_val, df_ood))
+        merged.to_csv("merged_njord_loses.csv")
+        import seaborn as sns
+        sns.kdeplot(data=merged, x="loss", hue="fold")
+        plt.savefig("figures/njord_losskde.png")
+        plt.show()
+
+        input()
+
+    def compute_losses(self, loader):
+        losses = np.zeros(len(loader))
+        for i, (x, targets, paths, shapes) in enumerate(loader):
+            x = x.half()/255
+            x = x.cuda()
+            targets = targets.cuda()
+            preds, train_out = self.classifier(x)
+            loss, _ = self.loss(train_out, targets)
+            losses[i]=loss.item()
         return losses
 
     def ind_loader(self):
@@ -184,6 +225,7 @@ class NicoTestBed(BaseTestBed):
 
         if rep_model=="vae":
             self.rep_model = self.vae
+            print("USING VAE!!")
         else:
             self.rep_model=self.classifier
         self.vae_experiment = VAEXperiment(self.rep_model, DEFAULT_PARAMS)

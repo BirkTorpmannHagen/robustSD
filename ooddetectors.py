@@ -311,6 +311,7 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
         try:
             data["loss"] = data["loss"].map(lambda x: float(x))
         except:
+
             data["loss"] = data["loss"].str.strip('[]').str.split().apply(lambda x: [float(i) for i in x])
             if combine_losses:
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))
