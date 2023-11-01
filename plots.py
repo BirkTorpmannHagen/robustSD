@@ -207,7 +207,7 @@ def collect_losswise_metrics(fname, fnr=0.05, ood_fold_name="ood", plots=True):
 
 def correlation_summary():
     df = get_correlation_metrics_for_all_experiments()
-    print(df.groupby(["Dataset", "OOD Detector", "Sampler"])["Correlation"].mean())
+    print(df.groupby(["Dataset", "Sampler",  "OOD Detector"])["Correlation"].mean())
 
 def plot_regplots():
     # summarize overall results;
@@ -345,15 +345,15 @@ def breakdown_by_sampler(placeholder=False, metric="DR"):
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
 def plot_severity(dataset,sample_size):
-    df_knn = open_and_process(f"data/{dataset}_ks_5NN_{sample_size}_severity.csv")
-    df_rab = open_and_process(f"data/{dataset}_ks_{sample_size}_severity.csv")
-    df_typ = open_and_process(f"data/{dataset}_ks_{sample_size}_severity.csv")
+    df_knn = open_and_process(f"data/{dataset}_ks_5NN_{sample_size}_severity.csv", filter_noise=True)
+    df_rab = open_and_process(f"data/{dataset}_ks_{sample_size}_severity.csv", filter_noise=True)
+    df_typ = open_and_process(f"data/{dataset}_ks_{sample_size}_severity.csv", filter_noise=True)
 
     df_rab["OOD Detector"] = "Rabanser et Al."
     df_knn["OOD Detector"] = "KNNDSD"
     df_typ["OOD Detector"] = "Typicality"
+
     threshold_rab = get_threshold(df_rab)
-    print(balanced_accuracy(df_rab, threshold=threshold_rab))
     threshold_knn = get_threshold(df_knn)
     threshold_typ = get_threshold(df_typ)
     thres_dict = dict(zip(["Rabanser et Al.", "KNNDSD","Typicality"], [threshold_rab, threshold_knn, threshold_typ]))
@@ -374,14 +374,16 @@ def plot_severity(dataset,sample_size):
             by_dsd = by_sampler[by_sampler["OOD Detector"]==ood_detector]
             corr = correlation(by_dsd)
             risk_val = balanced_accuracy(by_dsd, threshold=thres_dict[ood_detector])
-            data.append({"Severity":sampler_val, "OOD Detector":ood_detector, "Correlation":corr, "Risk": risk_val})
+            data.append({"Severity":sampler_val, "OOD Detector":ood_detector, "Correlation":corr, "BA": risk_val})
             # print(f"\t& {corr:.4}", end=", ")
             # print(f"\t& {risk_val:.4}", end=", ")
 
         # print()
     data = pd.DataFrame(data)
     # plt.ylim(0,1)
-    sns.lineplot(data=data, x="Severity", y="Risk", hue="OOD Detector")
+    sns.lineplot(data=data[data["OOD Detector"]=="Rabanser et Al."], x="Severity", y="BA", hue="OOD Detector")
+    plt.show()
+    sns.lineplot(data=data, x="Severity", y="BA", hue="OOD Detector")
     plt.show()
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
@@ -537,8 +539,6 @@ if __name__ == '__main__':
     """
     # Classification
     """
-
-
     # summarize_results()
     # input()
     #sampler_breakdown
@@ -552,7 +552,7 @@ if __name__ == '__main__':
     # threshold_plots("Njord", 100)
 
     #severity
-    # plot_severity("data/imagenette_ks_5NN_100_severity.csv")
+    # plot_severity("imagenette", 100)
     """
     Correlation plots
     """

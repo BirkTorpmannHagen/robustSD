@@ -49,7 +49,7 @@ class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=5, mode="normal"):
         super().__init__(sample_size, num_workers)
         self.num_workers=num_workers
-        self.noise_range = np.linspace(0.05, 0.3, 6)
+        self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
         self.mode=mode
 
 
@@ -90,9 +90,9 @@ class NoiseTestBed(BaseTestBed):
                 oods[f"noise_{self.noise_range[i]}"] = oods_by_bias
             return oods
         else:
-            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10), num_workers=self.num_workers),
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=self.num_workers),
                      DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for test_dataset in self.ood_sets]
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for test_dataset in self.oods]
             dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
@@ -251,7 +251,7 @@ class NicoTestBed(BaseTestBed):
     def ood_loaders(self):
         if self.ood_noise:
             ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
-            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=10),
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes),
                                 num_workers=self.num_workers),
                      DataLoader(test_dataset,
                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
@@ -322,12 +322,7 @@ class CIFAR100TestBed(NoiseTestBed):
                                     progress=True, pretrained=True, num_classes=100).cuda().eval()
 
         self.classifier= WrappedResnet(self.classifier)
-        config = yaml.safe_load(open("vae/configs/vae.yaml"))
-        self.vae = CIFARVAE().cuda().eval()
-        vae_exp = VAEXperiment(self.vae, config)
-        vae_exp.load_state_dict(
-            torch.load("vae_logs/CIFAR100/version_10/checkpoints/epoch=83-step=525000.ckpt")[
-                "state_dict"])
+
         self.num_classes = 100
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(
@@ -335,6 +330,12 @@ class CIFAR100TestBed(NoiseTestBed):
         self.oods = [CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, noise_level=noise_val)
                                        for noise_val in self.noise_range]
         if rep_model=="vae":
+            config = yaml.safe_load(open("vae/configs/vae.yaml"))
+            self.vae = CIFARVAE().cuda().eval()
+            vae_exp = VAEXperiment(self.vae, config)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/CIFAR100/version_0/checkpoints/epoch=89-step=281250.ckpt")[
+                    "state_dict"])
             self.rep_model = self.vae
         else:
             self.rep_model=self.classifier
