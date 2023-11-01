@@ -539,7 +539,8 @@ if __name__ == '__main__':
     """
     # Classification
     """
-    # summarize_results()
+    # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
+    summarize_results()
     # input()
     #sampler_breakdown
     # breakdown_by_sampler()
@@ -556,8 +557,8 @@ if __name__ == '__main__':
     """
     Correlation plots
     """
-    correlation_summary()
-    plot_regplots()
+    # correlation_summary()
+    # plot_regplots()
     # plot_severity("imagenette", 100)
 
 
