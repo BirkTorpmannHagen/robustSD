@@ -228,7 +228,7 @@ def plot_regplots():
                 table_data.append(data)
     merged = pd.concat(table_data)
 
-    test = merged[merged["Dataset"]=="imagenette"]
+    test = merged[merged["Dataset"]=="CIFAR100"]
     # print(test.columns)
     correlations = test.groupby(["OOD Detector", "sampler"]).apply(lambda x: correlation(x))
     g = sns.FacetGrid(data=test, col="OOD Detector", row="sampler", sharey=False, sharex=False, margin_titles=True)
@@ -539,14 +539,14 @@ if __name__ == '__main__':
     """
 
 
-    summarize_results()
-    input()
+    # summarize_results()
+    # input()
     #sampler_breakdown
-    breakdown_by_sampler()
+    # breakdown_by_sampler()
     # input()
     #
     #sample_size_breakdown
-    breakdown_by_sample_size()
+    # breakdown_by_sample_size()
 
     # thresholding_plots
     # threshold_plots("Njord", 100)
@@ -556,8 +556,8 @@ if __name__ == '__main__':
     """
     Correlation plots
     """
-    # correlation_summary()
-    # plot_regplots()
+    correlation_summary()
+    plot_regplots()
     # plot_severity("imagenette", 100)
 
 

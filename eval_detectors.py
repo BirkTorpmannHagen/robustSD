@@ -62,20 +62,12 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     sample_range = [50, 100, 200, 500]
 
-
-    for sample_size in [100]:
-        # bench = NicoTestBed(sample_size)
-        bench =CIFAR100TestBed(sample_size, rep_model="classifier", mode="severity")
-        tsd = RabanserSD(bench.classifier, processes=1)
-        tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIAR100_ks_{sample_size}_severity.csv")
-
-    for sample_size in [100]:
-        # bench = NicoTestBed(sample_size)
-        bench =CIFAR100TestBed(sample_size, rep_model="classifier", mode="severity")
-        tsd = RabanserSD(bench.classifier, select_samples=True, processes=1)
-        tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIFAR100_ks_5NN_{sample_size}_severity.csv")
+    # for sample_size in sample_range:
+    #     # bench = NicoTestBed(sample_size)
+    #     bench = NicoTestBed(sample_size, rep_model="vae")
+    #     tsd = TypicalitySD(bench.vae)
+    #     tsd.register_testbed(bench)
+    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/NICO_typicality_{sample_size}.csv")
 
 
     for sample_size in [100]:
@@ -101,22 +93,24 @@ if __name__ == '__main__':
 
 
 
-
-
-    for sample_size in sample_range:
+    for sample_size in [100]:
         # bench = NicoTestBed(sample_size)
-        bench = CIFAR10TestBed(sample_size, rep_model="classifier", mode="normal")
-        tsd = RabanserSD(bench.classifier)
+        bench =CIFAR10TestBed(sample_size, rep_model="classifier", mode="severity")
+        tsd = RabanserSD(bench.classifier, processes=1)
         tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/CIFAR100_ks_{sample_size}.csv")
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIAR10_ks_{sample_size}_severity.csv")
 
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench =CIFAR10TestBed(sample_size, rep_model="classifier", mode="severity")
+        tsd = RabanserSD(bench.classifier, select_samples=True, processes=1)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIFAR10_ks_5NN_{sample_size}_severity.csv")
 
-
-
-    # for sample_size in [100]:
-    #     # bench = NicoTestBed(sample_size)
-    #     bench = ImagenetteTestBed(sample_size, rep_model="vae", mode="severity")
-    #     tsd = TypicalitySD(bench.vae)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/imagenette_typicality_{sample_size}_severity.csv")
+    for sample_size in [100]:
+        # bench = NicoTestBed(sample_size)
+        bench = CIFAR10TestBed(sample_size, rep_model="vae", mode="severity")
+        tsd = TypicalitySD(bench.vae)
+        tsd.register_testbed(bench)
+        compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/CIFAR10_typicality_{sample_size}_severity.csv")
 

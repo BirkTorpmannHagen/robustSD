@@ -79,7 +79,7 @@ def train_vae_large(train, val, patch_size=512, collate_fn=None, name=None):
 
 def train_cifar_model(train, val, patch_size):
     # model = VanillaVAE(3, 512, patch_size=patch_size)
-    model = CIFARVAE(image_size=32,channel_num=3, kernel_num=16, z_size=512)
+    model = CIFARVAE()
     params = {
       "LR": 0.00005,
       "weight_decay": 0.0,
