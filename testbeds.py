@@ -28,9 +28,12 @@ DEFAULT_PARAMS = {
 
 }
 class BaseTestBed:
-    def __init__(self, sample_size, num_workers=5):
+    def __init__(self, sample_size, num_workers=5, mode="normal"):
+        self.mode=mode
         self.sample_size = sample_size
         self.num_workers=num_workers
+        self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
+
 
 
     def compute_losses(self, loaders):
@@ -49,7 +52,6 @@ class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=5, mode="normal"):
         super().__init__(sample_size, num_workers)
         self.num_workers=num_workers
-        self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
         self.mode=mode
 
 
@@ -112,8 +114,8 @@ class NoiseTestBed(BaseTestBed):
         return losses.cpu().numpy()
 
 class NjordTestBed(BaseTestBed):
-    def __init__(self, sample_size):
-        super().__init__(sample_size)
+    def __init__(self, sample_size, mode="normal"):
+        super().__init__(sample_size, mode=mode)
         self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
         self.classifier = fetch_model("njord/runs/train/exp4/weights/best.pt")
 
@@ -125,6 +127,7 @@ class NjordTestBed(BaseTestBed):
                 "state_dict"])
         self.ind, self.ind_val, self.ood = build_njord_datasets()
         self.collate_fn = LoadImagesAndLabels.collate_fn
+        self.mode=mode
 
     def loader(self, dataset, sampler):
         return DataLoader(dataset, sampler=sampler, collate_fn=self.collate_fn, num_workers=self.num_workers)
@@ -169,7 +172,7 @@ class NjordTestBed(BaseTestBed):
         plt.savefig("figures/njord_losskde.png")
         plt.show()
 
-        input()
+
 
     def compute_losses(self, loader):
         losses = np.zeros(len(loader))
@@ -186,25 +189,44 @@ class NjordTestBed(BaseTestBed):
         return self.loader(self.ind, sampler=RandomSampler(self.ind))
 
     def ood_loaders(self):
-        samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
-                                  SequentialSampler(self.ood), RandomSampler(self.ood)]
-        loaders =  {"ood": dict([[sampler.__class__.__name__,  self.loader(self.ood, sampler=sampler)] for sampler in
-                                 samplers])}
-        return loaders
+        if self.mode=="noise":
+            ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
+            oods = [[DataLoader(test_dataset, sampler=SequentialSampler(test_dataset),
+                                num_workers=self.num_workers),
+                     DataLoader(test_dataset,
+                                sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
+                                num_workers=self.num_workers),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
+                    test_dataset in ood_sets]
+            dicted = [dict([(sampler, loader) for sampler, loader in
+                            zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+            double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
+            return double_dicted
+        elif self.mode=="severity":
+            pass
+        else:
+            samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
+                                      SequentialSampler(self.ood), RandomSampler(self.ood)]
+            loaders =  {"ood": dict([[sampler.__class__.__name__,  self.loader(self.ood, sampler=sampler)] for sampler in
+                                     samplers])}
+            return loaders
 
 
     def ind_val_loaders(self):
-        samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
-                                  SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
+        if self.mode=="severity":
+            pass
+        else:
+            samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                                      SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
 
-        loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
-                                 samplers])}
-        return  loaders
+            loaders =  {"ind": dict([ [sampler.__class__.__name__,  self.loader(self.ind_val, sampler=sampler)] for sampler in
+                                     samplers])}
+            return  loaders
 
 
 class NicoTestBed(BaseTestBed):
 
-    def __init__(self, sample_size, rep_model="vae", ood_noise=False, mode="severity"):
+    def __init__(self, sample_size, rep_model="vae", mode="severity"):
         super().__init__(sample_size)
         self.trans = transforms.Compose([
                                                  transforms.Resize((512, 512)),
@@ -232,7 +254,7 @@ class NicoTestBed(BaseTestBed):
         self.vae_experiment = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
         self.vae_experiment.load_state_dict(torch.load("vae_logs/NICODataset/version_0/checkpoints/epoch=104-step=131040.ckpt")["state_dict"])
         self.noise_range = np.arange(0.05, 0.3, 0.05)
-        self.ood_noise = ood_noise
+        self.mode=mode
 
     def compute_losses(self, loader):
         losses = torch.zeros(len(loader)).to("cuda")
@@ -249,7 +271,7 @@ class NicoTestBed(BaseTestBed):
 
 
     def ood_loaders(self):
-        if self.ood_noise:
+        if self.mode=="noise":
             ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes),
                                 num_workers=self.num_workers),
@@ -262,6 +284,8 @@ class NicoTestBed(BaseTestBed):
                             zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
+        elif self.mode=="severity":
+            pass
         else:
             test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5),

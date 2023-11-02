@@ -61,12 +61,12 @@ def collect_all_data():
     collect_data(sample_range, NicoTestBed, "NICO")
     collect_data(sample_range, NjordTestBed, "Njord")
 
-    collect_data(sample_range, CIFAR10TestBed, "CIFAR10", mode="severity")
-    collect_data(sample_range, CIFAR100TestBed, "CIFAR100", mode="severity")
-    collect_data(sample_range, ImagenetteTestBed, "imagenette", mode="severity")
-    collect_data(sample_range, PolypTestBed, "Polyp", mode="severity")
-    collect_data(sample_range, NicoTestBed, "NICO", mode="severity")
-    collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
+    # collect_data(sample_range, CIFAR10TestBed, "CIFAR10", mode="severity")
+    # collect_data(sample_range, CIFAR100TestBed, "CIFAR100", mode="severity")
+    # collect_data(sample_range, ImagenetteTestBed, "imagenette", mode="severity")
+    # collect_data(sample_range, PolypTestBed, "Polyp", mode="severity")
+    # collect_data(sample_range, NicoTestBed, "NICO", mode="severity")
+    # collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
 
 
 if __name__ == '__main__':
