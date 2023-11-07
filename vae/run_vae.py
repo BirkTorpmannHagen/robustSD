@@ -118,17 +118,24 @@ def train_cifar_model(train, val, patch_size):
 
 if __name__ == '__main__':
 
-    patch_size=32
+    patch_size=512
     default_train_trans = transforms.Compose([transforms.RandomHorizontalFlip(), transforms.RandomRotation(30),
                                               transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     default_val_trans = transforms.Compose([transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     #Polyps
     #
     # train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
-    # train_vae_large(train, val, patch_size=patch_size)
-    train_set= CIFAR10("../../Datasets/CIFAR10", train=True, transform=default_train_trans, download=True)
-    val_set = CIFAR10("../../Datasets/CIFAR10", train=False, transform=default_val_trans, download=True)
-    train_cifar_model(train_set, val_set, patch_size=32)
-    train_set =  CIFAR100("../../Datasets/CIFAR100", train=True, transform=default_train_trans, download=True)
-    val_set = CIFAR100("../../Datasets/CIFAR100", train=False, transform=default_val_trans, download=True)
-    train_cifar_model(train_set, val_set, patch_size=32)
+    # self.num_classes = num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
+
+    train, val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, default_train_trans, default_val_trans, context="dim",
+                                                seed=0)
+    train_vae_large(train, val, patch_size=patch_size)
+
+
+    #
+    # train_set= CIFAR10("../../Datasets/CIFAR10", train=True, transform=default_train_trans, download=True)
+    # val_set = CIFAR10("../../Datasets/CIFAR10", train=False, transform=default_val_trans, download=True)
+    # train_cifar_model(train_set, val_set, patch_size=32)
+    # train_set =  CIFAR100("../../Datasets/CIFAR100", train=True, transform=default_train_trans, download=True)
+    # val_set = CIFAR100("../../Datasets/CIFAR100", train=False, transform=default_val_trans, download=True)
+    # train_cifar_model(train_set, val_set, patch_size=32)

@@ -28,10 +28,11 @@ class NoisyDataset(data.Dataset):
     def __getitem__(self, index):
 
         batch = self.dataset.__getitem__(index)
-        x, y = batch[0], batch[1]
+        x = batch[0]
+        rest = batch[1:]
         if self.noise_level!=0:
             x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
-        return x,y
+        return (x, *rest)
     def __len__(self):
         return self.dataset.__len__()
 

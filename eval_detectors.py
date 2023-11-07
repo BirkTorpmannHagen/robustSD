@@ -25,33 +25,54 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
     df.to_csv(fname)
 
 def collect_data(sample_range, testbed_constructor, dataset_name, mode="normal"):
+    if testbed_constructor==NjordTestBed:
+        print("Njord")
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, mode=mode)
+            tsd = RabanserSD(bench.vae, select_samples=True, k=5, processes=1)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                          fname=f"new_data/{dataset_name}_{mode}_ks_5NN_{sample_size}.csv")
 
-    for sample_size in sample_range:
-        bench = testbed_constructor(sample_size, "classifier", mode=mode)
-        tsd = RabanserSD(bench.classifier, select_samples=True,k=5, processes=1)
-        tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-                      fname=f"new_data/{dataset_name}_ks_5NN_{sample_size}.csv")
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, mode=mode)
+            tsd = RabanserSD(bench.vae, processes=1)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                          fname=f"new_data/{dataset_name}_{mode}_ks_{sample_size}.csv")
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, mode=mode)
+            tsd = TypicalitySD(bench.vae)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+                          fname=f"new_data/{dataset_name}_{mode}_typicality_{sample_size}.csv")
+    else:
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, "classifier", mode=mode)
+            tsd = RabanserSD(bench.classifier, select_samples=True,k=5, processes=1)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                          fname=f"new_data/{dataset_name}_{mode}_ks_5NN_{sample_size}.csv")
 
-    for sample_size in sample_range:
-        bench = testbed_constructor(sample_size, "classifier", mode=mode)
-        tsd = RabanserSD(bench.classifier, processes=1)
-        tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-                      fname=f"new_data/{dataset_name}_ks_{sample_size}.csv")
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, "classifier", mode=mode)
+            tsd = RabanserSD(bench.classifier, processes=1)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                          fname=f"new_data/{dataset_name}_{mode}_ks_{sample_size}.csv")
 
-    for sample_size in sample_range:
-        bench = testbed_constructor(sample_size, "vae", mode=mode)
-        tsd = TypicalitySD(bench.vae)
-        tsd.register_testbed(bench)
-        compute_stats(*tsd.compute_pvals_and_loss(sample_size),
-                      fname=f"new_data/{dataset_name}_typicality_{sample_size}.csv")
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, "vae", mode=mode)
+            tsd = TypicalitySD(bench.vae)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+                          fname=f"new_data/{dataset_name}_{mode}_typicality_{sample_size}.csv")
 
 
 def collect_all_data():
 
-    collect_data(sample_range, PolypTestBed, "Polyp", mode="noise")
-    collect_data(sample_range, NicoTestBed, "NICO", mode="noise")
+    # collect_data(sample_range, PolypTestBed, "Polyp", mode="noise")
+    # collect_data(sample_range, NicoTestBed, "NICO", mode="noise")
     collect_data(sample_range, NjordTestBed, "Njord", mode="noise")
 
     collect_data(sample_range, CIFAR10TestBed, "CIFAR10")
@@ -73,99 +94,4 @@ if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
     sample_range = [50, 100, 200, 500]
     collect_all_data()
-
-
-
-    # for sample_size in [100]:
-    #     # bench = NicoTestBed(sample_size)
-    #     bench =CIFAR10TestBed(sample_size, rep_model="classifier", mode="severity")
-    #     tsd = RabanserSD(bench.classifier, processes=1)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIAR10_ks_{sample_size}_severity.csv")
-    #
-    # for sample_size in [100]:
-    #     # bench = NicoTestBed(sample_size)
-    #     bench =CIFAR10TestBed(sample_size, rep_model="classifier", mode="severity")
-    #     tsd = RabanserSD(bench.classifier, select_samples=True, processes=1)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, "ks"), fname=f"data/CIFAR10_ks_5NN_{sample_size}_severity.csv")
-    #
-    # for sample_size in [100]:
-    #     # bench = NicoTestBed(sample_size)
-    #     bench = CIFAR10TestBed(sample_size, rep_model="vae", mode="severity")
-    #     tsd = TypicalitySD(bench.vae)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/CIFAR10_typicality_{sample_size}_severity.csv")
-    #
-    # # for sample_size in sample_range:
-    # #     # bench = NjordTestBed(sample_size)
-    # #     bench = NicoTestBed(sample_size, rep_model="vae")
-    # #     tsd = TypicalitySD(bench.vae)
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size),
-    # #                   fname=f"data/Nico_Typicality_{sample_size}_fullloss.csv")
-    #
-    # for sample_size in sample_range:
-    #     # bench = NjordTestBed(sample_size)
-    #     bench = CIFAR100TestBed(sample_size, rep_model="classifier")
-    #     tsd = RabanserSD(bench.classifier, processes=2)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-    #                   fname=f"data/CIFAR100_ks_{sample_size}_fullloss.csv")
-    #
-    # for sample_size in sample_range:
-    #     # bench = NjordTestBed(sample_size)
-    #     bench = CIFAR100TestBed(sample_size, rep_model="classifier")
-    #     tsd = RabanserSD(bench.classifier, select_samples=True, processes=2)
-    #     tsd.register_testbed(bench)
-    #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-    #                   fname=f"data/CIFAR100_ks_5NN_{sample_size}_fullloss.csv")
-    #
-    # # for sample_size in sample_range:
-    # #     # bench = NicoTestBed(sample_size)
-    # #     bench = NicoTestBed(sample_size, rep_model="vae")
-    # #     tsd = TypicalitySD(bench.vae)
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/NICO_typicality_{sample_size}_fullloss.csv")
-    #
-    #
-    # # for sample_size in sample_range:
-    # #     # bench = NicoTestBed(sample_size)
-    # #     bench = PolypTestBed(sample_size, rep_model="vae")
-    # #     tsd = TypicalitySD(bench.vae)
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/Polyp_typicality_{sample_size}_fullloss.csv")
-    #
-    # # for sample_size in sample_range:
-    # #     # bench = NicoTestBed(sample_size)
-    # #     # bench = PolypTestBed(sample_size, rep_model="classifier")
-    # #     bench = NjordTestBed(sample_size)
-    # #     tsd = RabanserSD(bench.vae)
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/Njord_ks_{sample_size}_fullloss.csv")
-    # #
-    # # for sample_size in sample_range:
-    # #     # bench = NicoTestBed(sample_size)
-    # #     # bench = PolypTestBed(sample_size, rep_model="classifier")
-    # #     bench = NjordTestBed(sample_size)
-    # #     # tsd = RabanserSD(bench.classifier, select_samples=True, k=5)
-    # #     tsd = RabanserSD(bench.vae, select_samples=True, k=5)
-    # #
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"), fname=f"data/Njord_ks_5NN_{sample_size}_fullloss.csv")
-    # #
-    # #
-    # # for sample_size in sample_range:
-    # #     # bench = NicoTestBed(sample_size)
-    # #     bench = NjordTestBed(sample_size)
-    # #     # bench = PolypTestBed(sample_size, rep_model="classifier")
-    # #     # tsd = RabanserSD(bench.classifier, select_samples=True, k=1)
-    # #     tsd = RabanserSD(bench.vae, select_samples=True, k=1)
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/Njord_ks_1NN_{sample_size}_fullloss.csv")
-    # #
-    # # # for sample_size in sample_range:
-    # # #     bench = CIFAR100TestBed(sample_size, rep_model="vae")
-    # #     tsd = TypicalitySD(bench.vae)
-    # #     tsd.register_testbed(bench)
-    # #     compute_stats(*tsd.compute_pvals_and_loss(sample_size), fname=f"data/NICO_typicality_{sample_size}_fullloss.csv")
+    # bench = NjordTestBed(10)

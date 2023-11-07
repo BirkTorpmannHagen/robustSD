@@ -127,9 +127,8 @@ class NjordTestBed(BaseTestBed):
                 "state_dict"])
         self.ind, self.ind_val, self.ood = build_njord_datasets()
         self.collate_fn = LoadImagesAndLabels.collate_fn
-        self.mode=mode
 
-    def loader(self, dataset, sampler):
+    def loader(self, dataset, sampler, num_workers=1):
         return DataLoader(dataset, sampler=sampler, collate_fn=self.collate_fn, num_workers=self.num_workers)
 
     def split_datasets(self):
@@ -176,7 +175,8 @@ class NjordTestBed(BaseTestBed):
 
     def compute_losses(self, loader):
         losses = np.zeros(len(loader))
-        for i, (x, targets, paths, shapes) in enumerate(loader):
+        for i, data in enumerate(loader):
+            (x, targets, paths, shapes) = data
             x = x.half()/255
             x = x.cuda()
             targets = targets.cuda()
@@ -191,12 +191,12 @@ class NjordTestBed(BaseTestBed):
     def ood_loaders(self):
         if self.mode=="noise":
             ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
-            oods = [[DataLoader(test_dataset, sampler=SequentialSampler(test_dataset),
+            oods = [[self.loader(test_dataset, sampler=SequentialSampler(test_dataset),
                                 num_workers=self.num_workers),
-                     DataLoader(test_dataset,
+                     self.loader(test_dataset,
                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
                                 num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
+                     self.loader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
                     test_dataset in ood_sets]
             dicted = [dict([(sampler, loader) for sampler, loader in
                             zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
@@ -244,24 +244,25 @@ class NicoTestBed(BaseTestBed):
         self.classifier = ResNetClassifier.load_from_checkpoint(
            "NICODataset_logs/checkpoints/epoch=279-step=175000.ckpt", num_classes=num_classes,
             resnet_version=101).to("cuda").eval()
-        self.vae = VanillaVAE(3, 512).to("cuda").eval()
 
         if rep_model=="vae":
+            self.vae = VanillaVAE(3, 512).to("cuda").eval()
             self.rep_model = self.vae
+            self.vae_experiment = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
+            self.vae_experiment.load_state_dict(
+                torch.load("vae_logs/NICODataset/version_4/checkpoints/epoch=134-step=168480.ckpt")["state_dict"])
             print("USING VAE!!")
         else:
             self.rep_model=self.classifier
-        self.vae_experiment = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
-        self.vae_experiment.load_state_dict(torch.load("vae_logs/NICODataset/version_0/checkpoints/epoch=104-step=131040.ckpt")["state_dict"])
-        self.noise_range = np.arange(0.05, 0.3, 0.05)
+
         self.mode=mode
 
     def compute_losses(self, loader):
         losses = torch.zeros(len(loader)).to("cuda")
         print("computing losses")
-        for i, (x, y, _) in tqdm(enumerate(loader), total=len(loader)):
-            x = x.to("cuda")
-            y = y.to("cuda")
+        for i, data in tqdm(enumerate(loader), total=len(loader)):
+            x = data[0]  .to("cuda")
+            y = data[1].to("cuda")
             yhat = self.classifier(x)
             losses[i]=F.cross_entropy(yhat, y).item()
         return losses.cpu().numpy()

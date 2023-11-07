@@ -321,7 +321,7 @@ class VanillaVAE(BaseVAE):
                  in_channels: int,
                  latent_dim: int,
                  hidden_dims: List = None,
-                 patch_size=32,
+                 patch_size=512,
                  **kwargs) -> None:
         super(VanillaVAE, self).__init__()
 
@@ -453,7 +453,7 @@ class VanillaVAE(BaseVAE):
 
         # Split the result into mu and var components
         # of the latent Gaussian distribution
-        mu = self._mu(result)
+        mu = self.fc_mu(result)
         log_var = self.fc_var(result)
 
         return [mu, log_var]
