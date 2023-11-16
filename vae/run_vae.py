@@ -7,6 +7,7 @@ from vae_experiment import VAEXperiment
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 from domain_datasets import *
+from njord.utils.dataloaders import LoadImagesAndLabels
 from torch.utils.data import DataLoader
 # from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
@@ -119,17 +120,19 @@ def train_cifar_model(train, val, patch_size):
 if __name__ == '__main__':
 
     patch_size=512
-    default_train_trans = transforms.Compose([transforms.RandomHorizontalFlip(), transforms.RandomRotation(30),
+    default_train_trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     default_val_trans = transforms.Compose([transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
+    train, val, test = build_njord_datasets()
+
     #Polyps
     #
     # train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
     # self.num_classes = num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
 
-    train, val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, default_train_trans, default_val_trans, context="dim",
-                                                seed=0)
-    train_vae_large(train, val, patch_size=patch_size)
+    # train, val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, default_train_trans, default_val_trans, context="dim",
+    #                                             seed=0)
+    train_vae_large(train, val, patch_size=patch_size, collate_fn=LoadImagesAndLabels.collate_fn)
 
 
     #

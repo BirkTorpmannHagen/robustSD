@@ -16,7 +16,7 @@ from os.path import join
 from torchvision.datasets import CIFAR10, CIFAR100
 from torchvision.datasets import ImageFolder
 from njord.utils.general import check_dataset
-from njord.utils.dataloaders import create_dataset, create_dataloader
+from njord.utils.dataloaders import LoadImagesAndLabels
 from random import shuffle
 
 class NoisyDataset(data.Dataset):
@@ -245,18 +245,6 @@ class NICODataset(data.Dataset):
         pass
 
 
-def get_njordvid_datasets():
-    ind_data_dict = check_dataset("njord/folds/ind_fold.yaml")
-    ind_train_path, ind_val_path = ind_data_dict['train'], ind_data_dict['val']
-    ind_dataloader, _ = create_dataloader(ind_train_path, 512,1,32, image_weights=True)
-    ind_val_dataloader = create_dataloader(ind_val_path, 512,1,32, image_weights=True)
-
-    ood_data_dict = check_dataset("njord/folds/ood_fold.yaml")
-    _, ood_val_path = ood_data_dict['train'], ood_data_dict['val']
-    ood_dataloader, _= create_dataloader(ood_val_path, 512, 1, 32, image_weights=True)
-
-    return ind_dataloader, ind_val_dataloader, ood_dataloader
-
 def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transform, context, seed=0):
     if use_track == 1:
         track_data_dir = os.path.join(root, "track_1")
@@ -317,6 +305,38 @@ def build_polyp_dataset(root, ex=False):
     ood = ConcatDataset(oods)
     return ind, ind_val, ood
 
+def create_dataset(path,
+                      imgsz,
+                      batch_size,
+                      stride,
+                      single_cls=False,
+                      hyp=None,
+                      augment=False,
+                      cache=False,
+                      pad=0.0,
+                      rect=False,
+                      rank=-1,
+                      workers=8,
+                      image_weights=False,
+                      quad=False,
+                      prefix='',
+                      shuffle=False,
+                      natively_trainable=False):
+    dataset = NjordDataset(
+        path,
+        imgsz,
+        batch_size,
+        augment=augment,  # augmentation
+        hyp=hyp,  # hyperparameters
+        rect=rect,  # rectangular batches
+        cache_images=cache,
+        single_cls=single_cls,
+        stride=int(stride),
+        pad=pad,
+        image_weights=image_weights,
+        prefix=prefix,
+        natively_trainable=natively_trainable)
+    return dataset
 def build_njord_datasets():
 
 
@@ -329,7 +349,35 @@ def build_njord_datasets():
     return train_set, val_set, ood_set
 
 
+class NjordDataset(LoadImagesAndLabels):
+    def __init__(self,
+                 path,
+                 img_size=640,
+                 batch_size=16,
+                 augment=False,
+                 hyp=None,
+                 rect=False,
+                 image_weights=False,
+                 cache_images=False,
+                 single_cls=False,
+                 stride=32,
+                 pad=0.0,
+                 prefix='',
+                 natively_trainable=False):
+        super().__init__(
+                 path,
+                 img_size,
+                 batch_size,
+                 augment,
+                 hyp,
+                 rect,
+                 image_weights,
+                 cache_images,
+                 single_cls,stride,pad,prefix, natively_trainable)
 
+    def __getitem__(self, item):
+        x, targets, paths, shapes = super().__getitem__(item)
+        return x, targets, paths, shapes
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):
         super().__init__()

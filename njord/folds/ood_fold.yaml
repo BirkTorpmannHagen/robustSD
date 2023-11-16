@@ -1,9 +1,71 @@
+#train: [
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag1,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag2,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag3,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag6,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag7,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag9,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag12,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag16,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag17,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag18,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag19,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag20,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag22,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag23,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag24,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag25,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag26,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag27,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag28,
+#  /home/birk/Datasets/NjordYolo/00_hermes_dag34,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag1,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag2,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag3,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag6,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag7,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag8,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag9,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag12,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag14,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag16,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag17,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag18,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag19,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag20,
+#  /home/birk/Datasets/NjordYolo/01_hermes_dag23,
+#  /home/birk/Datasets/NjordYolo/02_hermes_dag1,
+#  /home/birk/Datasets/NjordYolo/02_hermes_dag2,
+#  /home/birk/Datasets/NjordYolo/02_hermes_dag31,
+#  /home/birk/Datasets/NjordYolo/02_hermes_dag32,
+#  /home/birk/Datasets/NjordYolo/02_hermes_dag33,
+#  /home/birk/Datasets/NjordYolo/04_hermes_dag1,
+#  /home/birk/Datasets/NjordYolo/04_hermes_dag7,
+#]
+#
+#val: [
+#    /home/birk/Datasets/NjordYolo/00_hermes_dag14,
+#    /home/birk/Datasets/NjordYolo/04_hermes_dag3,
+#    /home/birk/Datasets/NjordYolo/05_hermes_dag26,
+#    /home/birk/Datasets/NjordYolo/06_hermes_dag29,
+#    /home/birk/Datasets/NjordYolo/06_hermes_dag33,
+#    /home/birk/Datasets/NjordYolo/06_hermes_dag34
+#]
+#
+#nc: 4
+#
+#names: [ "Boat", "Person", "Net", "Fish"]
+#
+#
+#
+
+
 train: [
 
 ]
 
 val: [
-    ../../../Datasets/NjordYolo/ood,
+    /home/birk/Datasets/NjordYolo/ood,
 ]
 
 nc: 4

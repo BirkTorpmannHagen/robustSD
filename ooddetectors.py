@@ -307,7 +307,7 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
         if exclude_sampler!="":
             data = data[data["sampler"]!=exclude_sampler]
         if "noise" in str(pd.unique(data["fold"])) and filter_noise:
-            max_noise = max([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "noise" in i])
+            max_noise = sorted([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "noise" in i])[-3]
             print(max_noise)
             data = data[(data["fold"] == f"noise_{max_noise}") | (data["fold"] == "ind")]
         try:

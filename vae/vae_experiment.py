@@ -32,7 +32,7 @@ class VAEXperiment(pl.LightningModule):
     def forward(self, input: Tensor, **kwargs) -> Tensor:
         return self.model(input, **kwargs)
 
-    def training_step(self, batch, batch_idx, optimizer_idx = 0):
+    def training_step(self, batch, batch_idx):
         real_img, labels = batch[0].to(self.curr_device), batch[1].to(self.curr_device)
         self.curr_device = real_img.device
 
@@ -42,7 +42,6 @@ class VAEXperiment(pl.LightningModule):
         M_N = min(0.0005 + 0.00001 * self.current_epoch, 0.010)
         train_loss = self.model.loss_function(*results,
                                               M_N = M_N, #al_img.shape[0]/ self.num_train_imgs,
-                                              optimizer_idx=optimizer_idx,
                                               batch_idx = batch_idx)
 
         self.log_dict({key: val.item() for key, val in train_loss.items()}, sync_dist=True)
@@ -72,6 +71,8 @@ class VAEXperiment(pl.LightningModule):
 
 #         test_input, test_label, _ = batch
         recons = self.model.generate(test_input)
+        plt.imshow(recons[0].cpu().T)
+        plt.show()
         vutils.save_image(recons.data,
                           os.path.join(self.logger.log_dir ,
                                        "Reconstructions",
@@ -94,37 +95,10 @@ class VAEXperiment(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        optims = []
-        scheds = []
 
         optimizer = optim.Adam(self.model.parameters(),
                                lr=self.params['LR'],
                                weight_decay=self.params['weight_decay'])
-        optims.append(optimizer)
-        # Check if more than 1 optimizer is required (Used for adversarial training)
-        try:
-            if self.params['LR_2'] is not None:
-                optimizer2 = optim.Adam(getattr(self.model,self.params['submodel']).parameters(),
-                                        lr=self.params['LR_2'])
-                optims.append(optimizer2)
-        except:
-            pass
 
-        try:
-            if self.params['scheduler_gamma'] is not None:
-                # scheduler = optim.lr_scheduler.ExponentialLR(optims[0],
-                #                                              gamma = self.params['scheduler_gamma'])
-                scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optims[0], 50, 2)
-                scheds.append(scheduler)
-
-                # Check if another scheduler is required for the second optimizer
-                try:
-                    if self.params['scheduler_gamma_2'] is not None:
-                        scheduler2 = optim.lr_scheduler.ExponentialLR(optims[1],
-                                                                      gamma = self.params['scheduler_gamma_2'])
-                        scheds.append(scheduler2)
-                except:
-                    pass
-                return optims, scheds
-        except:
-            return optims
+        scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 50, 2)
+        return {"optimizer": optimizer, "scheduler":scheduler}

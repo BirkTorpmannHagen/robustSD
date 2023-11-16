@@ -117,13 +117,12 @@ class NjordTestBed(BaseTestBed):
     def __init__(self, sample_size, mode="normal"):
         super().__init__(sample_size, mode=mode)
         self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
-        self.classifier = fetch_model("njord/runs/train/exp4/weights/best.pt")
-
+        self.classifier = fetch_model("njord/runs/train/exp8/weights/best.pt").float().cuda()
         self.classifier.hyp = yaml.safe_load(open("/home/birk/Projects/robustSD/njord/data/hyps/hyp.scratch-low.yaml", "r"))
         self.loss = ComputeLoss(self.classifier)
         self.vae_exp = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
         self.vae_exp.load_state_dict(
-            torch.load("vae_logs/Njord/version_1/checkpoints/last.ckpt")[
+            torch.load("vae_logs/NjordDataset/version_13/checkpoints/epoch=37-step=119814.ckpt")[
                 "state_dict"])
         self.ind, self.ind_val, self.ood = build_njord_datasets()
         self.collate_fn = LoadImagesAndLabels.collate_fn
@@ -140,7 +139,6 @@ class NjordTestBed(BaseTestBed):
         print("getting val losses")
 
         for i, (x, targets, paths, shapes) in tqdm(enumerate(val), total=len(val)):
-            x = x.half()/255
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
@@ -154,7 +152,6 @@ class NjordTestBed(BaseTestBed):
         ood_data = []
         print("getting ood losses")
         for i, (x, targets, paths, shapes) in tqdm(enumerate(ood), total=len(ood)):
-            x = x.half() / 255
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
@@ -177,7 +174,6 @@ class NjordTestBed(BaseTestBed):
         losses = np.zeros(len(loader))
         for i, data in enumerate(loader):
             (x, targets, paths, shapes) = data
-            x = x.half()/255
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
@@ -199,7 +195,7 @@ class NjordTestBed(BaseTestBed):
                      self.loader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
                     test_dataset in ood_sets]
             dicted = [dict([(sampler, loader) for sampler, loader in
-                            zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+                            zip(["SequentialSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
         elif self.mode=="severity":
@@ -359,7 +355,7 @@ class CIFAR100TestBed(NoiseTestBed):
             self.vae = CIFARVAE().cuda().eval()
             vae_exp = VAEXperiment(self.vae, config)
             vae_exp.load_state_dict(
-                torch.load("vae_logs/CIFAR100/version_0/checkpoints/epoch=89-step=281250.ckpt")[
+                torch.load("vae_logs/CIFAR100/version_15/checkpoints/epoch=148-step=931250.ckpt")[
                     "state_dict"])
             self.rep_model = self.vae
         else:
@@ -395,7 +391,7 @@ class ImagenetteTestBed(NoiseTestBed):
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
-        self.ood_sets =  [ImagenettewNoise("../../Datasets/imagenette2", train="val", transform=self.trans, noise_level=noise_val)
+        self.oods =  [ImagenettewNoise("../../Datasets/imagenette2", train="val", transform=self.trans, noise_level=noise_val)
                                        for noise_val in self.noise_range]
         if rep_model=="vae":
             self.rep_model = self.vae
@@ -441,7 +437,7 @@ class PolypTestBed(BaseTestBed):
                      DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
                     test_dataset in ood_sets]
             dicted = [dict([(sampler, loader) for sampler, loader in
-                            zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+                            zip(["SequentialSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
         elif self.mode=="severity":

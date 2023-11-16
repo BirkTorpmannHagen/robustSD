@@ -7,9 +7,11 @@ from domain_datasets import build_nico_dataset
 import torchvision.transforms as transforms
 from sklearn.decomposition import PCA
 from scipy.stats import ks_2samp
+from scipy.special import kl_div
 import os
 from bias_samplers import *
-
+from scipy.stats import wasserstein_distance
+from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
@@ -19,7 +21,7 @@ from sklearn.metrics import mean_absolute_percentage_error as mape
 import numpy as np
 import seaborn as sns
 import math
-
+pd.set_option('display.precision', 3)
 
 def get_threshold(data):
     ood = data[data["oodness"]>1]
@@ -93,6 +95,53 @@ def correlation(pandas_df, plot=False, split_by_sampler=False):
     merged_loss = pandas_df["loss"]
 
     return spearmanr(merged_p, merged_loss)[0]
+
+
+def scatterplot_wasserstein_normalized(pandas_df):
+
+    # Normalize the data for pvalue and loss
+    full_data = {}
+    random_sampler_p = pandas_df[pandas_df["sampler"] == "RandomSampler"]["pvalue"]
+    for fold in pandas_df["fold"].unique():
+        data = {}
+        for sampler in pandas_df["sampler"].unique():
+            if sampler == "RandomSampler":
+                continue
+            subdata_p = pandas_df[pandas_df["sampler"] == sampler]["pvalue"]
+            # Compute Wasserstein distance for each normalized variable
+            wasserstein_p = ks_2samp(random_sampler_p, subdata_p)[1]
+
+            data[sampler] = wasserstein_p
+        full_data[fold] = data
+    return full_data
+
+def get_kl():
+    merged = []
+    for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_noise", "Njord_noise", "Polyp_noise", "imagenette_normal"]:
+        for dsd in ["ks", "ks_5NN", "typicality"]:
+            for sample_size in [200]:
+                fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
+                if dataset == "Polyp_noise":
+                    fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
+                data = open_and_process(fname)
+                if data is None:
+                    continue
+                KL = scatterplot_wasserstein_normalized(data)
+
+                for sampler in data["sampler"].unique():
+                    if sampler=="RandomSampler":
+                        continue
+                    table_data = {}
+                    table_data["Dataset"]=dataset
+                    table_data["OOD Detector"]=dsd
+                    table_data["Sampler"]=sampler
+                    table_data["KL"]=KL[sampler]
+                    merged.append(table_data)
+    df = pd.DataFrame(merged)
+    g = sns.FacetGrid(data=df, col="OOD Detector", margin_titles=True)
+    print(df.groupby(["Dataset","Sampler",  "OOD Detector"])["KL"].mean())
+
+
 
 def linreg_smape(pandas_df):
     pandas_df = pandas_df[pandas_df["sampler"]!="ClassOrderSampler"]
@@ -212,14 +261,12 @@ def correlation_summary():
 def plot_regplots():
     # summarize overall results;
     table_data = []
-    for dataset in ["CIFAR10", "CIFAR100", "NICONoise", "NjordNoise", "PolypNoise", "imagenette"]:
+    for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_noise", "Njord_noise", "Polyp_noise", "imagenette_normal"]:
         for dsd in ["ks", "ks_5NN", "typicality"]:
-            for sample_size in [100]:
-                fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
-                if dataset == "Polyp":
-                    fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss_ex.csv"
-                    if dsd == "ks_5NN":
-                        fname = f"data/{dataset}_ks_5NN_{sample_size}_fullloss_ex.csv"
+            for sample_size in [200]:
+                fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
+                if dataset == "Polyp_noise":
+                    fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
                 data = open_and_process(fname)
                 if data is None:
                     continue
@@ -228,35 +275,42 @@ def plot_regplots():
                 table_data.append(data)
     merged = pd.concat(table_data)
 
-    test = merged[merged["Dataset"]=="CIFAR100"]
+    cifar10 = merged[merged["Dataset"]=="CIFAR10_normal"]
+    # cifar10 = merged[merged["Dataset"]=="Njord_noise"]
+    # g = sns.FacetGrid(data=cifar10, col="OOD Detector", sharey=False, sharex=False, margin_titles=True)
+    # g.map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="sampler",  palette="mako")
+    # g.set(xscale="log").set(ylim=0)
+    # plt.show()
+    # correlations_summary = merged.groupby(["Dataset", "OOD Detector"]).apply(lambda x: correlation(x))
+    # merged =merged[merged["sampler"]!="ClassOrderSampler"]
+    correlations = merged.groupby(["Dataset", "sampler", "OOD Detector"]).apply(lambda x: correlation(x))
+    print(correlations)
+
+
+
+    # print(test.groupby(["OOD Detector"])["Correlation"].mean())
     # print(test.columns)
-    correlations = test.groupby(["OOD Detector", "sampler"]).apply(lambda x: correlation(x))
-    g = sns.FacetGrid(data=test, col="OOD Detector", row="sampler", sharey=False, sharex=False, margin_titles=True)
-    g.map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="fold",  palette="mako")
-    g.set(xscale="log").set(ylim=0)
-    def annotate(data, **kws):
-        r = correlation(data)
-        ax = plt.gca()
-        ax.text(0.05, 0.8, 'r={:.2f}'.format(r), fontsize=10, fontweight="bold",
-                     transform=ax.transAxes)
-
-    g.map_dataframe(annotate)
-    plt.suptitle("Imagenette", fontsize=20, y=0.97)
-    plt.subplots_adjust(top=0.90)
-    plt.savefig("figures/regplots_samplers.eps")
-    plt.show()
-    correlations = merged.groupby(["OOD Detector", "Dataset"]).apply(lambda x: correlation(x))
     g = sns.FacetGrid(data=merged, col="OOD Detector", row="Dataset", sharey=False, sharex=False, margin_titles=True)
-    g.legend()
-    g.map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="fold",  palette="mako")
+    g.map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="sampler",  palette="mako")
     g.set(xscale="log").set(ylim=0)
+    # def annotate(data, **kws):
+    #     r = correlation(data)
+    #     ax = plt.gca()
+    #     ax.text(0.05, 0.8, 'r={:.2f}'.format(r), fontsize=10, fontweight="bold",
+    #                  transform=ax.transAxes)
+    #
+    # g.map_dataframe(annotate)
+    # plt.suptitle("Imagenette", fontsize=20, y=0.97)
+    # plt.subplots_adjust(top=0.90)
+    # plt.savefig("figures/regplots_samplers.eps")
+    plt.show()
 
-    def annotate(data, **kws):
-        r = correlation(data)
-        ax = plt.gca()
-        ax.set_title('r={:.2f}'.format(r), fontsize=10, fontweight="bold",
-                transform=ax.transAxes)
-    g.map_dataframe(annotate)
+    # def annotate(data, **kws):
+    #     r = correlation(data)
+    #     ax = plt.gca()
+    #     ax.set_title('r={:.2f}'.format(r), fontsize=10, fontweight="bold",
+    #             transform=ax.transAxes)
+    # g.map_dataframe(annotate)
     plt.savefig("figures/regplots.eps")
     plt.show()
 
@@ -418,14 +472,11 @@ def threshold_plots(dataset_name, sample_size, filter_noise=False):
 def get_correlation_metrics_for_all_experiments(placeholder=False):
     #summarize overall results;
     table_data = []
-    for dataset in ["CIFAR10", "CIFAR100", "NICONoise", "NjordNoise", "PolypNoise", "imagenette"]:
+    for dataset in ["CIFAR100_normal", "CIFAR100_normal", "NICO_noise", "Njord_noise", "Polyp_noise", "imagenette_noise"]:
         for dsd in ["ks", "ks_5NN", "typicality"]:
             for sample_size in [10, 20, 50, 100, 200, 500]:
-                fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
-                if dataset=="Polyp":
-                    fname=f"data/{dataset}_{dsd}_{sample_size}_fullloss_ex.csv"
-                    if dsd=="ks_5NN":
-                        fname = f"data/{dataset}_ks_5NN_{sample_size}_fullloss_ex.csv"
+                fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
+
                 data = open_and_process(fname)
                 if data is None:
                     if placeholder:
@@ -446,10 +497,10 @@ def get_correlation_metrics_for_all_experiments(placeholder=False):
 def get_classification_metrics_for_all_experiments(placeholder=False):
     #summarize overall results;
     table_data = []
-    for dataset in ["CIFAR10", "CIFAR100", "NICO", "Njord", "Polyp", "imagenette"]:
+    for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_normal", "Njord_normal", "Polyp_normal", "imagenette_normal"]:
         for dsd in ["ks", "ks_5NN", "typicality"]:
             for sample_size in [50, 100, 200, 500]:
-                fname = f"data/{dataset}_{dsd}_{sample_size}_fullloss.csv"
+                fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
                 data = open_and_process(fname, filter_noise=True)
                 if data is None:
                     if placeholder:
@@ -540,7 +591,7 @@ if __name__ == '__main__':
     # Classification
     """
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
-    summarize_results()
+    # summarize_results()
     # input()
     #sampler_breakdown
     # breakdown_by_sampler()
@@ -550,7 +601,7 @@ if __name__ == '__main__':
     # breakdown_by_sample_size()
 
     # thresholding_plots
-    # threshold_plots("Njord", 100)
+    # threshold_plots("CIFAR10", 100)
 
     #severity
     # plot_severity("imagenette", 100)
@@ -558,7 +609,15 @@ if __name__ == '__main__':
     Correlation plots
     """
     # correlation_summary()
-    # plot_regplots()
+    plot_regplots()
+    get_kl()
+    # df1 = pd.read_csv("new_ind_njord.csv")
+    # df1["fold"]="ind"
+    # df2 = pd.read_csv("new_ood_njord.csv")
+    # df2["fold"]="ood"
+    # df = pd.concat([df1, df2])
+    # sns.kdeplot(df, x="loss", hue="fold")
+    # plt.show()
     # plot_severity("imagenette", 100)
 
 
