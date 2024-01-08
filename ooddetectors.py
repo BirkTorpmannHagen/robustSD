@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA as sklearnPCA
 import metrics
 from bias_samplers import *
 from utils import *
+from gradientfeatures import grad_magnitude
 from tqdm import tqdm
 import pickle as pkl
 from domain_datasets import *
@@ -297,6 +298,95 @@ class TypicalitySD(BaseSD):
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
                                                                          self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
+
+class GradientSD(BaseSD):
+    """
+    General class for gradient-based detectors, including jacobian.
+    Computes a gradient norm/jacobian norm/hessian norm/etc
+    """
+    def __init__(self, rep_model, norm_fn=grad_magnitude):
+        super().__init__(rep_model)
+        self.norm_fn = norm_fn
+    def get_norms(self, dataloader):
+        encodings = np.zeros((len(dataloader)))
+        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+            x = data[0].cuda()
+            encodings[i] = self.norm_fn(self.rep_model, x)
+        return encodings
+
+    def compute_pvals_and_loss_for_loader(self, ind_norms, dataloaders, sample_size):
+        norms = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                          [self.get_norms(loader)
+                           for sampler_name, loader in loader_w_sampler.items()]
+                          )) for
+                 loader_w_sampler in
+                 dataloaders.values()]))  # dict of dicts of tensors; sidenote initializing nested dicts sucks
+
+        losses = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                          [self.testbed.compute_losses(loader)
+                           for sampler_name, loader in loader_w_sampler.items()]
+                          )) for
+                 loader_w_sampler in dataloaders.values()]))
+
+        p_values = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                          [[]
+                           for _ in range(len(loader_w_sampler))]
+                          )) for
+                 loader_w_sampler in dataloaders.values()]))
+
+        sample_losses = dict(
+            zip(dataloaders.keys(),
+                [dict(zip(loader_w_sampler.keys(),
+                          [[]
+                           for _ in range(len(loader_w_sampler))]
+                          )) for
+                 loader_w_sampler in dataloaders.values()]))
+
+        for fold_name, fold_entropies in norms.items():
+            print(fold_name)
+            for biased_sampler_name, biased_sampler_norms in fold_entropies.items():
+                print("\t", biased_sampler_name)
+                for start, stop in list(zip(range(0, len(biased_sampler_norms), sample_size),
+                                            range(sample_size, len(biased_sampler_norms) + sample_size,
+                                                  sample_size)))[
+                                   :-1]:
+                    sample_norms = biased_sampler_norms[start:stop]
+                    p_value = ks_2samp(sample_norms, ind_norms)[1]
+                    print(f"\t\t{p_value}")
+                    p_values[fold_name][biased_sampler_name].append(p_value)
+                    sample_losses[fold_name][biased_sampler_name].append(
+                        losses[fold_name][biased_sampler_name][start:stop])
+
+        return p_values, sample_losses
+
+    def compute_pvals_and_loss(self, sample_size):
+        """
+
+        :param sample_size: sample size for the tests
+        :return: ind_p_values: p-values for ind fold for each sampler
+        :return ood_p_values: p-values for ood fold for each sampler
+        :return ind_sample_losses: losses for each sampler on ind fold, in correct order
+        :return ood_sample_losses: losses for each sampler on ood fold, in correct order
+        """
+        # sample_size=min(sample_size, len(self.testbed.ind_val_loaders()[0]))
+
+        # resubstitution estimation of entropy
+
+        ind_norms = self.get_norms(self.testbed.ind_loader())
+
+        # compute ind_val pvalues for each sampler
+        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_norms, self.testbed.ind_val_loaders(), sample_size)
+
+        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_norms, self.testbed.ood_loaders(), sample_size)
+        return ind_pvalues, ood_pvalues, ind_losses, ood_losses
+
+
 
 
 def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sampler=""):

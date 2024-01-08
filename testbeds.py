@@ -33,6 +33,9 @@ class BaseTestBed:
         self.sample_size = sample_size
         self.num_workers=num_workers
         self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
+        if self.mode=="severity":
+            self.noise_range = [0.2]
+            print(self.noise_range)
 
 
 
@@ -50,7 +53,7 @@ class BaseTestBed:
 
 class NoiseTestBed(BaseTestBed):
     def __init__(self, sample_size, num_workers=5, mode="normal"):
-        super().__init__(sample_size, num_workers)
+        super().__init__(sample_size, num_workers, mode=mode)
         self.num_workers=num_workers
         self.mode=mode
 
@@ -68,6 +71,11 @@ class NoiseTestBed(BaseTestBed):
                 [(str(sampler), DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers))
                  for sampler in
                  samplers])}
+        elif self.mode=="random":
+            loaders = {"ind": dict(
+                [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers))
+                 for sampler in
+                 [RandomSampler(self.ind_val)]])}
         else:
             loaders = {"ind": dict(
                 [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers)) for sampler in
@@ -91,6 +99,13 @@ class NoiseTestBed(BaseTestBed):
                                 num_workers=self.num_workers)
                 oods[f"noise_{self.noise_range[i]}"] = oods_by_bias
             return oods
+        elif self.mode=="random":
+            oods = [[DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
+                    test_dataset in self.oods]
+            dicted = [dict([(sampler, loader) for sampler, loader in
+                            zip(["RandomSampler"], ood)]) for ood in oods]
+            double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
+            return double_dicted
         else:
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=self.num_workers),
                      DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
@@ -229,10 +244,10 @@ class NicoTestBed(BaseTestBed):
                                                  transforms.ToTensor(), ])
         self.num_classes = num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
 
-        self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="dim", seed=0)
         self.num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
         self.contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
-        print(self.contexts)
+        self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="dim", seed=0)
+        self.oods = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
         self.contexts.remove("dim")
             # self.classifier = ResNetClassifier.load_from_checkpoint(
             #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
@@ -246,7 +261,7 @@ class NicoTestBed(BaseTestBed):
             self.rep_model = self.vae
             self.vae_experiment = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
             self.vae_experiment.load_state_dict(
-                torch.load("vae_logs/NICODataset/version_4/checkpoints/epoch=134-step=168480.ckpt")["state_dict"])
+                torch.load("/home/birk/Projects/robustSD/vae_logs/NICODataset/version_1/checkpoints/epoch=68-step=86112.ckpt")["state_dict"])
             print("USING VAE!!")
         else:
             self.rep_model=self.classifier
@@ -284,7 +299,7 @@ class NicoTestBed(BaseTestBed):
         elif self.mode=="severity":
             pass
         else:
-            test_datasets = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
+            test_datasets = self.oods
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5),
                          DataLoader(test_dataset,
                                     sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=5),
@@ -302,7 +317,7 @@ class NicoTestBed(BaseTestBed):
 
 
 class CIFAR10TestBed(NoiseTestBed):
-    def __init__(self, sample_size, rep_model,mode):
+    def __init__(self, sample_size, rep_model,mode="normal"):
         super().__init__(sample_size, mode=mode)
         self.trans = transforms.Compose([
                                     transforms.Resize((32, 32)),
@@ -401,7 +416,7 @@ class ImagenetteTestBed(NoiseTestBed):
 class PolypTestBed(BaseTestBed):
     def __init__(self, sample_size, rep_model, mode="normal"):
         super().__init__(sample_size)
-        self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps")
+        self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps", ex=True)
         self.noise_range = np.arange(0.05, 0.3, 0.05)
         #vae
         self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()

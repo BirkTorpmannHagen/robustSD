@@ -4,7 +4,7 @@ from torch.utils.data import Sampler, DataLoader
 from sklearn.cluster import KMeans
 import numpy as np
 from tqdm import tqdm
-
+from yellowbrick.features import PCA
 
 class ClassOrderSampler(Sampler):
     """
@@ -78,7 +78,7 @@ class ClusterSamplerWithSeverity(Sampler):
     Returns indices corresponding to a KMeans-clustering of the latent representations.
     (Artificial) selection bias
     """
-    def __init__(self, data_source, rep_model, sample_size=10, bias_severity=0.5):
+    def __init__(self, data_source, encoding_fn, rep_model, sample_size=10, bias_severity=0.5):
         """
 
         :param data_source:
@@ -93,7 +93,7 @@ class ClusterSamplerWithSeverity(Sampler):
         with torch.no_grad():
             for i, data in tqdm(enumerate(DataLoader(self.data_source))):
                 x=data[0].to("cuda")
-                self.reps[i] = rep_model.get_encoding(x)    .cpu().numpy()
+                self.reps[i] = rep_model.get_encoding(x).cpu().numpy()
         self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         self.sample_size = sample_size

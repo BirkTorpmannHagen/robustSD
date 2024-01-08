@@ -34,6 +34,7 @@ class NoisyDataset(data.Dataset):
             x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
         return (x, *rest)
     def __len__(self):
+        # return 1000 #debug
         return self.dataset.__len__()
 
 class KvasirSegmentationDataset(data.Dataset):
@@ -223,6 +224,7 @@ class NICODataset(data.Dataset):
         contexts = os.listdir(context_path)
         self.context_map = dict(zip(contexts, range(len(contexts))))
     def __len__(self):
+        # return 1000 #debug
         return len(self.image_path_list)
 
     def __getitem__(self, index):
