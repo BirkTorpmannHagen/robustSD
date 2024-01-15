@@ -31,7 +31,7 @@ import numpy as np
 import seaborn as sns
 import math
 # pd.set_option('display.precision', 2)
-pd.options.display.float_format = '{:.2f}'.format
+pd.options.display.float_format = '{:.3f}'.format
 
 def open_and_merge():
         # summarize overall results;
@@ -607,7 +607,7 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
     table_data = []
     for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_normal", "Njord_normal", "Polyp_normal", "imagenette_normal"]:
         for sample_size in [50, 100, 200, 500]:
-            for dsd in ["ks", f"ks_5NN", "typicality"]:
+            for dsd in ["ks", f"ks_5NN", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
                 fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
                 data = open_and_process(fname, filter_noise=True)
                 if data is None:
@@ -637,7 +637,7 @@ def get_classification_metrics_for_all_grad_experiments(placeholder=False):
     table_data = []
     for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_normal", "Njord_normal", "Polyp_normal", "imagenette_normal"]:
         for sample_size in [10, 20, 50, 100]:
-            for dsd in ["jacobian", "grad_magnitude", "condition_number"]:
+            for dsd in ["jacobian", "grad_magnitude", "condition_number", "tall_jacobian_eig", "jtjsvd", "jtjmag", "odin", "adv_jacobian"]:
                 fname = f"grad_data/{dataset}_{dsd}{sample_size}.csv"
                 data = open_and_process(fname, filter_noise=True)
                 if data is None:
@@ -656,7 +656,6 @@ def get_classification_metrics_for_all_grad_experiments(placeholder=False):
                                        "FPR": fpr(subset, threshold=threshold),
                                        "FNR": fnr(subset, threshold=threshold),
                                        "DR": balanced_accuracy(subset, threshold=threshold),
-                                       "Risk": risk(subset, threshold=threshold),
                                        "Correlation": correlation(subset)})
     df = pd.DataFrame(data=table_data).replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace(
         "typicality", "Typicality")
@@ -845,16 +844,17 @@ if __name__ == '__main__':
     """
     # Classification
     """
-    df = get_classification_metrics_for_all_grad_experiments()
-    df = df.groupby(["Sample Size", "Dataset", "OOD Detector"])[["FPR", "FNR", "DR", "Risk"]].mean()
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(df)
+    # df = get_classification_metrics_for_all_grad_experiments()
+    # df = df[df["Sampler"]=="ClassOrderSampler"]
+    # df = df.groupby(["Sample Size", "Dataset", "OOD Detector"])[["DR"]].mean()
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(df)
     # def sliding_window_mean(data):
     #     return data.rolling(window=10).mean()
     # # plot_pvaluedist()
     # # input()
-    # from gradientfeatures import *
-    # from testbeds import *
+    from gradientfeatures import *
+    from testbeds import *
     # import time
     # # testbed = NicoTestBed(100, "classifier", mode="normal")
     # testbed= CIFAR10TestBed(100, "classifier", mode="normal")
@@ -869,9 +869,8 @@ if __name__ == '__main__':
     #         loss = criterion(testbed.classifier(x), y)
     #     # jacob = jacobian(testbed.classifier, x)
     #
-    #     jacob = condition_number(sub_classifier, x)
-    #     grad = grad_magnitude(sub_classifier, x)
-    #     ind_norms.append({"fold":"ind", "jnorm":jacob, "gnorm": grad, "loss":loss})
+    #     eig = jjtsvd(testbed.classifier, x)
+    #     ind_norms.append({"fold":"ind", "eig":eig, "loss":loss})
     #
     # for i, (x,y) in tqdm(enumerate(DataLoader(testbed.oods[-1])), total=len(testbed.oods[-1])):
     #     x = x.cuda()
@@ -879,11 +878,11 @@ if __name__ == '__main__':
     #
     #     with torch.no_grad():
     #         loss = criterion(testbed.classifier(x), y)
-    #     ood_norms.append({"fold":"ood", "jnorm":jacobian(sub_classifier, x),"gnorm": grad_magnitude(sub_classifier, x), "loss":loss})
-    #
+    #     ood_norms.append({"fold":"ood", "eig":jjtsvd(testbed.classifier, x), "loss":loss})
+    # #
     # df = pd.DataFrame(ind_norms+ood_norms)
-    # sns.kdeplot(data=df, x="jnorm", hue="fold")
-    # plt.title(f"Jacobian Norms, ks={ks_2samp(df[df['fold']=='ind']['jnorm'], df[df['fold']=='ood']['jnorm'])[1]}")
+    # sns.kdeplot(data=df, x="eig", hue="fold")
+    # plt.title(f"Jacobian Norms, ks={ks_2samp(df[df['fold']=='ind']['eig'], df[df['fold']=='ood']['eig'])[1]}")
     # plt.savefig("figures/jacobian_norms_subclassifier.png")
     # plt.show()
     # plt.close()
@@ -908,10 +907,10 @@ if __name__ == '__main__':
     # compare_organic_and_synthetic_shifts("NICO")
     # plot_lossvp_for_fold()
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
-    # summarize_results()
+    summarize_results()
     # input()
     #sampler_breakdown
-   # breakdown_by_sampler()
+    # breakdown_by_sampler()
     # input()
     #
     #sample_size_breakdown

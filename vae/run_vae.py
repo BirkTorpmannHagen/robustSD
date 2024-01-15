@@ -123,16 +123,16 @@ if __name__ == '__main__':
     default_train_trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
     default_val_trans = transforms.Compose([transforms.Resize((patch_size, patch_size)), transforms.ToTensor()])
-    train, val, test = build_njord_datasets()
+    # train, val, test = build_njord_datasets()
 
     #Polyps
     #
     # train, val, test = build_polyp_dataset("../../Datasets/Polyps/")
     # self.num_classes = num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
 
-    # train, val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, default_train_trans, default_val_trans, context="dim",
-    #                                             seed=0)
-    train_vae_large(train, val, patch_size=patch_size, collate_fn=LoadImagesAndLabels.collate_fn)
+    train, val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, default_train_trans, default_val_trans, context="dim",
+                                                seed=0)
+    train_vae_large(train, val, patch_size=patch_size)
 
 
     #

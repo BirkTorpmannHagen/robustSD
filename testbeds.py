@@ -33,6 +33,7 @@ class BaseTestBed:
         self.sample_size = sample_size
         self.num_workers=num_workers
         self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
+        # self.noise_range = [0.3]
         if self.mode=="severity":
             self.noise_range = [0.2]
             print(self.noise_range)

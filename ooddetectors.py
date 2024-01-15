@@ -304,14 +304,15 @@ class GradientSD(BaseSD):
     General class for gradient-based detectors, including jacobian.
     Computes a gradient norm/jacobian norm/hessian norm/etc
     """
-    def __init__(self, rep_model, norm_fn=grad_magnitude):
+    def __init__(self, rep_model, norm_fn=grad_magnitude, num_features=1):
         super().__init__(rep_model)
         self.norm_fn = norm_fn
+        self.num_features=num_features
     def get_norms(self, dataloader):
         encodings = np.zeros((len(dataloader)))
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0].cuda()
-            encodings[i] = self.norm_fn(self.rep_model, x)
+            encodings[i] = self.norm_fn(self.rep_model, x, self.num_features)
         return encodings
 
     def compute_pvals_and_loss_for_loader(self, ind_norms, dataloaders, sample_size):
@@ -397,7 +398,7 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
         if exclude_sampler!="":
             data = data[data["sampler"]!=exclude_sampler]
         if "noise" in str(pd.unique(data["fold"])) and filter_noise:
-            max_noise = sorted([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "noise" in i])[-3]
+            max_noise = sorted([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "noise" in i])[-1]
             print(max_noise)
             data = data[(data["fold"] == f"noise_{max_noise}") | (data["fold"] == "ind")]
         try:

@@ -78,7 +78,7 @@ class ClusterSamplerWithSeverity(Sampler):
     Returns indices corresponding to a KMeans-clustering of the latent representations.
     (Artificial) selection bias
     """
-    def __init__(self, data_source, encoding_fn, rep_model, sample_size=10, bias_severity=0.5):
+    def __init__(self, data_source, encoding_fn, encoding_size, rep_model, sample_size=10, bias_severity=0.5):
         """
 
         :param data_source:
@@ -89,11 +89,11 @@ class ClusterSamplerWithSeverity(Sampler):
         super(ClusterSamplerWithSeverity, self).__init__(data_source)
         self.data_source = data_source
         self.rep_model = rep_model
-        self.reps = np.zeros((len(data_source), rep_model.latent_dim))
+        self.reps = np.zeros((len(data_source), encoding_size))
         with torch.no_grad():
             for i, data in tqdm(enumerate(DataLoader(self.data_source))):
                 x=data[0].to("cuda")
-                self.reps[i] = rep_model.get_encoding(x).cpu().numpy()
+                self.reps[i] = encoding_fn(x).cpu().numpy()
         self.num_clusters = np.clip(int(len(data_source)//(sample_size+0.1)),4, 20)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         self.sample_size = sample_size

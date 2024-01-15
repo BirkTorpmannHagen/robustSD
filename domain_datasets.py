@@ -19,20 +19,24 @@ from njord.utils.general import check_dataset
 from njord.utils.dataloaders import LoadImagesAndLabels
 from random import shuffle
 
-class NoisyDataset(data.Dataset):
+class TransformedDataset(data.Dataset):
     #generic wrapper for adding noise to datasets
-    def __init__(self, dataset, noise_level):
+    def __init__(self, dataset, transform, transform_param):
         super().__init__()
         self.dataset = dataset
-        self.noise_level = noise_level
+        self.transform = transform
+        self.transform_param = transform_param
     def __getitem__(self, index):
 
         batch = self.dataset.__getitem__(index)
         x = batch[0]
         rest = batch[1:]
-        if self.noise_level!=0:
-            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
+        x = torch.clip(self.transform(x), 0, 1)
         return (x, *rest)
+
+    def __str__(self):
+        return self.dataset.__name__ + self.transform.__name__+str(self.transform_param)
+
     def __len__(self):
         # return 1000 #debug
         return self.dataset.__len__()
