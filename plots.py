@@ -549,7 +549,8 @@ def plot_severity(dataset,sample_size):
     plt.show()
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
-    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR", "Risk"]].mean()
+    # df =  df[df["Sample Size"]==50]
+    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
 
@@ -607,29 +608,30 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
     table_data = []
     for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_normal", "Njord_normal", "Polyp_normal", "imagenette_normal"]:
         for sample_size in [50, 100, 200, 500]:
-            for dsd in ["ks", f"ks_5NN", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
-                fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
-                data = open_and_process(fname, filter_noise=True)
-                if data is None:
-                    if placeholder:
+            for dsd_type in ["ks", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
+                for k in ["", "_5NN"]:
+                    dsd = f"{dsd_type}{k}"
+                    fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
+                    data = open_and_process(fname, filter_noise=True)
+                    if data is None:
+                        if placeholder:
+                            table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
+                                               "FPR": float("nan"),
+                                               "FNR": float("nan"),
+                                               "DR": float("nan"),
+                                               "Risk": float("nan")})
+                        continue
+                    threshold = get_threshold(data)
+                    for sampler in pd.unique(data["sampler"]):
+                        subset = data[data["sampler"] == sampler]
                         table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
-                                           "FPR": -1,
-                                           "FNR": -1,
-                                           "DR": -1,
-                                           "Risk": -1})
-                    continue
-                threshold = get_threshold(data)
-                for sampler in pd.unique(data["sampler"]):
-                    subset = data[data["sampler"] == sampler]
-                    table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size,
-                                       "Sampler": sampler,
-                                       "FPR": fpr(subset, threshold=threshold),
-                                       "FNR": fnr(subset, threshold=threshold),
-                                       "DR": balanced_accuracy(subset, threshold=threshold),
-                                       "Risk": risk(subset, threshold=threshold),
-                                       "Correlation": correlation(subset)})
-    df = pd.DataFrame(data=table_data).replace("ks_5NN", "KNNDSD").replace("ks", "KS").replace(
-        "typicality", "Typicality")
+                                           "Sampler": sampler,
+                                           "FPR": fpr(subset, threshold=threshold),
+                                           "FNR": fnr(subset, threshold=threshold),
+                                           "DR": balanced_accuracy(subset, threshold=threshold),
+                                           "Risk": risk(subset, threshold=threshold),
+                                           "Correlation": correlation(subset)})
+    df = pd.DataFrame(data=table_data)
     return df
 
 def get_classification_metrics_for_all_grad_experiments(placeholder=False):
@@ -853,7 +855,7 @@ if __name__ == '__main__':
     #     return data.rolling(window=10).mean()
     # # plot_pvaluedist()
     # # input()
-    from gradientfeatures import *
+    from features import *
     from testbeds import *
     # import time
     # # testbed = NicoTestBed(100, "classifier", mode="normal")
@@ -907,7 +909,7 @@ if __name__ == '__main__':
     # compare_organic_and_synthetic_shifts("NICO")
     # plot_lossvp_for_fold()
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
-    summarize_results()
+    summarize_results(placeholder=False)
     # input()
     #sampler_breakdown
     # breakdown_by_sampler()

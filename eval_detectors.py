@@ -25,15 +25,22 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
     df.to_csv(fname)
 
 
-def collect_gradient_data(sample_range, testbed_constructor, dataset_name, grad_fn, mode="normal"):
-    print(grad_fn.__name__)
-    print(sample_range)
+def collect_gradient_data(sample_range, testbed_constructor, dataset_name, grad_fn, mode="normal", k=0):
+    print(grad_fn)
     for sample_size in sample_range:
-        bench = testbed_constructor(rep_model="classifier", sample_size=sample_size, mode=mode)
-        tsd = GradientSD(bench.classifier, grad_magnitude)
+        if grad_fn==typicality:
+            bench = testbed_constructor(sample_size, "vae", mode=mode)
+            tsd = FeatureSD(bench.vae, grad_fn, k=k)
+        else:
+            bench = testbed_constructor(sample_size, "classifier", mode=mode)
+            tsd = FeatureSD(bench.classifier, grad_fn,k=k)
         tsd.register_testbed(bench)
+        if k!=0:
+            name = f"new_data/{dataset_name}_{mode}_{grad_fn.__name__}_{k}NN_{sample_size}.csv"
+        else:
+            name = f"new_data/{dataset_name}_{mode}_{grad_fn.__name__}_{sample_size}.csv"
         compute_stats(*tsd.compute_pvals_and_loss(sample_size),
-                      fname=f"new_data/{dataset_name}_{mode}_{grad_fn.__name__}_{sample_size}.csv")
+                      fname=name)
 
 def collect_data(sample_range, testbed_constructor, dataset_name, mode="normal"):
     if testbed_constructor==NjordTestBed:
@@ -65,7 +72,7 @@ def collect_data(sample_range, testbed_constructor, dataset_name, mode="normal")
         #                   fname=f"new_data/{dataset_name}_{mode}_typicality_{sample_size}.csv")
         for sample_size in sample_range:
             bench = testbed_constructor(sample_size, "classifier", mode=mode)
-            tsd = GradientSD(bench.classifier, processes=5)
+            tsd = FeatureSD(bench.classifier, processes=5)
             tsd.register_testbed(bench)
             compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
                           fname=f"new_data/{dataset_name}_{mode}_gradient_{sample_size}.csv")
@@ -115,14 +122,16 @@ def collect_all_data(sample_range):
     # collect_data(sample_range, NicoTestBed, "NICO", mode="severity")
     # collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
 
-def grad_data():
+def grad_data(k=0):
     sample_range = [50, 100, 200, 500]
-    for grad_fn in [cross_entropy, odin, gradnorm]:
-        collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn)
-        collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn)
-        collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn)
-        collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn)
-        # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn)
+
+    for grad_fn in [typicality, odin, cross_entropy]:
+        for k in [0, 5]:
+            collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
+            collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
+            collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn, k=k)
+            collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
+        # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn,k=k)
 
 
   #  sample_range = [100]
@@ -137,9 +146,9 @@ def grad_data():
 
 
 if __name__ == '__main__':
-    from gradientfeatures import *
-    grad_data()
-    # torch.multiprocessing.set_start_method('spawn')
+    from features import *
+    torch.multiprocessing.set_start_method('spawn')
+    grad_data(5)
     # sample_range = [50, 100, 200, 500]
     # sample_range = [100]
     # collect_severitydata()

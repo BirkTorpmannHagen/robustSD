@@ -1,24 +1,28 @@
 import torch
 import torch.nn.functional as F
 
-def fgsm(model, image):
+def odin_fgsm(model, image):
     image.requires_grad = True
     output = model(image)
-    loss = torch.nn.CrossEntropyLoss()(output, torch.ones_like(output))
-    model.zero_grad()
+    nnOutputs = output.data.cpu()
+    nnOutputs = nnOutputs.numpy()
+    nnOutputs = nnOutputs[0]
+    nnOutputs = nnOutputs - torch.max(nnOutputs)
+    nnOutputs = torch.exp(nnOutputs) / torch.sum(torch.exp(nnOutputs))
+    maxIndexTemp = torch.argmax(nnOutputs)
+
+    loss = torch.nn.CrossEntropyLoss()(output, torch.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
     loss.backward()
     data_grad = image.grad.data
+    data_grad = data_grad.squeeze(0)
     # perturb image
     perturbed_image = image + data_grad.sign() * 0.1
     perturbed_image = torch.clamp(perturbed_image, 0, 1)
-    return image
+    return perturbed_image
 def odin(model, image, feature_transform):
-    perturbed_image = fgsm(model, image)
+    perturbed_image = odin_fgsm(model, image)
     return cross_entropy(model, perturbed_image).item()
 
-def adv_jacobian(model, image, num_features=1):
-    perturbed_image = fgsm(model, image)
-    return jacobian(model, perturbed_image).item()
 
 def jacobian(model, image, num_features=1):
     return torch.norm(
@@ -54,6 +58,12 @@ def jjmag(model, image, num_features=1):
     jac = jac.flatten(-3).squeeze()
     jj = jac.T@jac
     return torch.norm(jj, "fro").item()
+
+def typicality(model, image, num_features=1):
+    assert num_features==1
+    return model.estimate_log_likelihood(image)
+
+
 def condition_number(model, image, num_features=1):
     """
     https://books.google.no/books?id=JaPtxOytY7kC&q=978-0898713619&redir_esc=y#v=onepage&q=978-0898713619&f=false
@@ -63,3 +73,6 @@ def condition_number(model, image, num_features=1):
     return torch.norm(
         torch.autograd.functional.jacobian(model, image),"fro").item() / (
         torch.norm(model(image), "fro").item()*torch.norm(image, "fro").item())
+
+if __name__ == '__main__':
+    from classifier.resnetclassifier import ResNetClassifier

@@ -13,29 +13,70 @@ import torchvision.transforms as transforms
 from os import listdir
 import torchvision
 from os.path import join
-from torchvision.datasets import CIFAR10, CIFAR100
+from torchvision.datasets import CIFAR10, CIFAR100, EMNIST, MNIST
 from torchvision.datasets import ImageFolder
 from njord.utils.general import check_dataset
 from njord.utils.dataloaders import LoadImagesAndLabels
 from random import shuffle
+import albumentations
+def additive_noise(x, intensity):
+    noise = torch.randn_like(x) * intensity
+    return x + noise
+
+def targeted_fgsm(model, x, intensity):
+    #adversarial attack to generate high-confidence false predictions
+    input_sample = x.clone().detach().requires_grad_(True)
+    with torch.no_grad():
+        output = model(input_sample)
+    target_label = torch.zeros_like(output)
+    target_label[:, torch.randint(0, output.shape[1], (1,))] = 1
+
+    for _ in range(5):
+        output = model(input_sample)
+        loss = torch.nn.CrossEntropyLoss()(output, target_label)
+
+        model.zero_grad()
+        loss.backward()
+
+        # Apply perturbation
+        input_sample.data = input_sample.data - intensity * input_sample.grad.sign()
+
+        # Check if the sample has crossed the decision boundary
+        if model(input_sample).argmax(1) == target_label:
+            break
+
+    return input_sample
+
+def random_occlusion(x, intensity):
+    img_size = max(x.shape)
+    occlusion = albumentations.Cutout(8, max_h_size=min(x//16, 8))
 
 class TransformedDataset(data.Dataset):
     #generic wrapper for adding noise to datasets
-    def __init__(self, dataset, transform, transform_param):
+    def __init__(self, dataset, transform, transform_name, transform_param):
         super().__init__()
         self.dataset = dataset
         self.transform = transform
         self.transform_param = transform_param
+        self.transform_name = transform_name
+        print(transform_name)
+        print(transform_param)
     def __getitem__(self, index):
 
         batch = self.dataset.__getitem__(index)
         x = batch[0]
         rest = batch[1:]
-        x = torch.clip(self.transform(x), 0, 1)
+        x = torch.clip(self.transform(x, self.transform_param), 0, 1)
+        if index==0:
+            plt.imshow(x.permute(1,2,0))
+            plt.savefig(f"test_plots/{self.transform_name}_{self.transform_param}.png")
+            plt.show()
+            plt.close()
         return (x, *rest)
 
     def __str__(self):
-        return self.dataset.__name__ + self.transform.__name__+str(self.transform_param)
+        print(f"{type(self.dataset).__name__}_{self.transform_name}_{str(self.transform_param)}")
+        return f"{type(self.dataset).__name__}_{self.transform_name}_{str(self.transform_param)}"
 
     def __len__(self):
         # return 1000 #debug
@@ -170,50 +211,6 @@ class Imagenette(torchvision.datasets.ImageFolder):
         self.num_classes = 10
 
 
-class ImagenettewNoise(Imagenette):
-    def __init__(self, root,transform,train, noise_level=0):
-        super().__init__(root, transform, train)
-        self.noise_level = noise_level
-
-    def __getitem__(self, index):
-        x,y = super().__getitem__(index)
-        if self.noise_level!=0:
-            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
-        return x,y
-
-    def __len__(self):
-        # return 10 #debug
-        return super().__len__()
-
-class CIFAR10wNoise(CIFAR10):
-    def __init__(self, root, train, transform, noise_level=0, target_transform=None, download=False):
-        super().__init__(root, train, transform, target_transform, download)
-        self.noise_level = noise_level
-        self.plotted = False
-
-    def __getitem__(self, index):
-        x,y = super().__getitem__(index)
-        if self.noise_level!=0:
-            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
-        return x,y
-
-    def __len__(self):
-        return super().__len__()
-
-class CIFAR100wNoise(CIFAR100):
-    def __init__(self, root, train, transform, noise_level=0, target_transform=None, download=False):
-        super().__init__(root, train, transform, target_transform, download)
-        self.noise_level = noise_level
-        self.plotted = False
-
-    def __getitem__(self, index):
-        x,y = super().__getitem__(index)
-        if self.noise_level!=0:
-            x = torch.clip(x + torch.randn_like(x)*self.noise_level, 0, 1)
-        return x,y
-
-    def __len__(self):
-        return super().__len__()
 class NICODataset(data.Dataset):
     def __init__(self, image_path_list, label_map_json, transform):
         super().__init__()

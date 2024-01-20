@@ -6,12 +6,13 @@ import pandas
 import pandas as pd
 import torch.nn
 import multiprocessing
+import seaborn as sns
 from scipy.stats import ks_2samp
 from sklearn.decomposition import PCA as sklearnPCA
 import metrics
 from bias_samplers import *
 from utils import *
-from gradientfeatures import grad_magnitude
+from features import grad_magnitude
 from tqdm import tqdm
 import pickle as pkl
 from domain_datasets import *
@@ -51,7 +52,27 @@ def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample
     df = df.explode(["pvalue", "loss"])
     return df
 
+def get_debiased_samples(ind_encodings, ind_predictions, ind_features, sample_encodings, sample_predictions, sample_features, k=5, debias_labels=False):
+    """
+        Returns debiased features from the ind set.
+    """
 
+    k_nearest_idx = np.concatenate(
+        [np.argpartition(
+            torch.sum((torch.Tensor(sample_encodings[i]).unsqueeze(0) - ind_encodings) ** 2, dim=-1).numpy(), k)[
+         :k] for i in
+         range(len(sample_encodings))])
+
+    k_nearest_ind = ind_features[k_nearest_idx]
+    if debias_labels:
+        k_nearest_labels = np.concatenate(
+            [np.argpartition(
+                torch.sum((torch.Tensor(sample_predictions[i]).unsqueeze(0) - ind_predictions) ** 2, dim=-1).numpy(), k)[
+             :k] for i in
+             range(len(sample_encodings))])
+        nearest_labels = ind_features[k_nearest_labels]
+        k_nearest_ind = np.concatenate([k_nearest_ind, nearest_labels], axis=-1)
+    return k_nearest_ind
 class BaseSD:
     def __init__(self, rep_model):
         self.rep_model = rep_model
@@ -163,7 +184,6 @@ class RabanserSD(BaseSD):
 
                 args = [   biased_sampler_encodings, ind_encodings, test, fold_name, biased_sampler_name, losses, sample_size]
                 pool = multiprocessing.Pool(processes=self.processes)
-
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
                                    :-1]
@@ -299,31 +319,73 @@ class TypicalitySD(BaseSD):
                                                                          self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
-class GradientSD(BaseSD):
+class FeatureSD(BaseSD):
     """
     General class for gradient-based detectors, including jacobian.
     Computes a gradient norm/jacobian norm/hessian norm/etc
     """
-    def __init__(self, rep_model, norm_fn=grad_magnitude, num_features=1):
+    def __init__(self, rep_model, feature_fn=grad_magnitude, num_features=1, k=0):
         super().__init__(rep_model)
-        self.norm_fn = norm_fn
+        self.k=k
+        self.feature_fn = feature_fn
+        print("init:", self.feature_fn)
         self.num_features=num_features
-    def get_norms(self, dataloader):
-        encodings = np.zeros((len(dataloader)))
+
+    def get_features(self, dataloader):
+        features = torch.zeros((len(dataloader), 1))
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0].cuda()
-            encodings[i] = self.norm_fn(self.rep_model, x, self.num_features)
-        return encodings
+            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
+        return features
+    def get_features_encodings(self, dataloader):
+        features = np.zeros((len(dataloader), 1))
+        encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
+        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+            x = data[0].cuda()
+            with torch.no_grad():
+                encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
+            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
+        return features, encodings
 
-    def compute_pvals_and_loss_for_loader(self, ind_norms, dataloaders, sample_size):
-        norms = dict(
+    def paralell_process(self,start, stop, biased_sampler_encodings, biased_sampler_features, ind_encodings, ind_features, fold_name, biased_sampler_name, losses):
+        sample_norms = biased_sampler_features[start:stop]
+        sample_encodings = biased_sampler_encodings[start:stop]
+
+        if self.k!=0:
+
+            k_nearest_idx = np.concatenate(
+                [np.argpartition(
+                    torch.sum((torch.Tensor(sample_encodings[i]).unsqueeze(0) - ind_encodings) ** 2, dim=-1).numpy(),
+                    self.k)[
+                 :self.k] for i in
+                 range(len(sample_encodings))])
+            k_nearest_ind = ind_features[k_nearest_idx]
+
+            p_value = ks_2samp(k_nearest_ind[:, 0], sample_norms[:, 0])[1]
+            print("\t\t", p_value)
+        else:
+            p_value = ks_2samp(sample_norms, ind_features)[1]
+        return p_value,losses[fold_name][biased_sampler_name][start:stop]
+
+    def compute_pvals_and_loss_for_loader(self, ind_norms, ind_encodings, dataloaders, sample_size):
+
+        features_encodings = dict(
             zip(dataloaders.keys(),
                 [dict(zip(loader_w_sampler.keys(),
-                          [self.get_norms(loader)
+                          [self.get_features_encodings(loader)
                            for sampler_name, loader in loader_w_sampler.items()]
                           )) for
                  loader_w_sampler in
-                 dataloaders.values()]))  # dict of dicts of tensors; sidenote initializing nested dicts sucks
+                 dataloaders.values()]))
+
+        # encodings = dict(
+        #     zip(dataloaders.keys(),
+        #         [dict(zip(loader_w_sampler.keys(),
+        #                   [self.get_encodings(loader)
+        #                    for sampler_name, loader in loader_w_sampler.items()]
+        #                   )) for
+        #          loader_w_sampler in
+        #          dataloaders.values()]))
 
         losses = dict(
             zip(dataloaders.keys(),
@@ -349,21 +411,22 @@ class GradientSD(BaseSD):
                           )) for
                  loader_w_sampler in dataloaders.values()]))
 
-        for fold_name, fold_entropies in norms.items():
+        for fold_name, fold_entropies in features_encodings.items():
             print(fold_name)
-            for biased_sampler_name, biased_sampler_norms in fold_entropies.items():
+            for biased_sampler_name, biased_sampler_norms_encodings in fold_entropies.items():
                 print("\t", biased_sampler_name)
-                for start, stop in list(zip(range(0, len(biased_sampler_norms), sample_size),
-                                            range(sample_size, len(biased_sampler_norms) + sample_size,
-                                                  sample_size)))[
-                                   :-1]:
-                    sample_norms = biased_sampler_norms[start:stop]
-                    p_value = ks_2samp(sample_norms, ind_norms)[1]
-                    print(f"\t\t{p_value}")
-                    p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(
-                        losses[fold_name][biased_sampler_name][start:stop])
+                biased_sampler_norms, biased_sampler_encodings = biased_sampler_norms_encodings
 
+                args = [ biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses]
+                pool = multiprocessing.Pool(processes=10)
+                startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
+                                   :-1]
+                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                pool.close()
+                for p_value, sample_loss in results:
+                    p_values[fold_name][biased_sampler_name].append(p_value)
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
         return p_values, sample_losses
 
     def compute_pvals_and_loss(self, sample_size):
@@ -379,12 +442,13 @@ class GradientSD(BaseSD):
 
         # resubstitution estimation of entropy
 
-        ind_norms = self.get_norms(self.testbed.ind_loader())
-
+        ind_norms, ind_encodings = self.get_features_encodings(self.testbed.ind_loader())
+        print(ind_encodings.shape)
+        print(ind_norms.shape)
         # compute ind_val pvalues for each sampler
-        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_norms, self.testbed.ind_val_loaders(), sample_size)
-
-        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_norms, self.testbed.ood_loaders(), sample_size)
+        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_norms, ind_encodings, self.testbed.ind_val_loaders(), sample_size)
+        #todo: make this use less memory
+        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_norms, ind_encodings, self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 
@@ -409,7 +473,7 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
             if combine_losses:
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))
             else:
-                data=data.explode("loss")
+                data=data.expbrlode("loss")
         data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
 
 

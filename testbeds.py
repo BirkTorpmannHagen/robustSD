@@ -18,6 +18,7 @@ from domain_datasets import *
 from njord.utils.loss import ComputeLoss
 from njord.val import fetch_model
 from njord.utils.dataloaders import LoadImagesAndLabels
+from domain_datasets import *
 # import segmentation_models_pytorch as smp
 DEFAULT_PARAMS = {
     "LR": 0.00005,
@@ -33,6 +34,7 @@ class BaseTestBed:
         self.sample_size = sample_size
         self.num_workers=num_workers
         self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
+        print(self.noise_range)
         # self.noise_range = [0.3]
         if self.mode=="severity":
             self.noise_range = [0.2]
@@ -112,7 +114,7 @@ class NoiseTestBed(BaseTestBed):
                      DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
                      DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for test_dataset in self.oods]
             dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
-            double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
+            double_dicted = dict(zip(["transformed_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
     def compute_losses(self, loader):
         losses = torch.zeros(len(loader) ).to("cuda")
@@ -125,6 +127,7 @@ class NoiseTestBed(BaseTestBed):
             x = data[0].to("cuda")
             y = data[1].to("cuda")
             yhat = self.classifier(x)
+            # preds.append(yhat.detach().cpu().numpy())
             # accs[i] =acc(yhat, y).item()
             losses[i]=criterion(yhat, y).item()
         return losses.cpu().numpy()
@@ -188,21 +191,25 @@ class NjordTestBed(BaseTestBed):
 
     def compute_losses(self, loader):
         losses = np.zeros(len(loader))
+        # preds = []
         for i, data in enumerate(loader):
             (x, targets, paths, shapes) = data
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
+            # preds.append(preds.detach().cpu().numpy())
+
             loss, _ = self.loss(train_out, targets)
             losses[i]=loss.item()
         return losses
+        # return losses, preds
 
     def ind_loader(self):
         return self.loader(self.ind, sampler=RandomSampler(self.ind))
 
     def ood_loaders(self):
         if self.mode=="noise":
-            ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
+            ood_sets = [TransformedDataset(self.ind_val, additive_noise, "noise", noise) for noise in self.noise_range]
             oods = [[self.loader(test_dataset, sampler=SequentialSampler(test_dataset),
                                 num_workers=self.num_workers),
                      self.loader(test_dataset,
@@ -248,8 +255,8 @@ class NicoTestBed(BaseTestBed):
         self.num_classes = len(os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train/dim"))
         self.contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
         self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="dim", seed=0)
-        self.oods = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
         self.contexts.remove("dim")
+        self.oods = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
             # self.classifier = ResNetClassifier.load_from_checkpoint(
             #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
             #     resnet_version=34).to("cuda").eval()
@@ -285,7 +292,7 @@ class NicoTestBed(BaseTestBed):
 
     def ood_loaders(self):
         if self.mode=="noise":
-            ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
+            ood_sets = [TransformedDataset(self.ind_val, noise) for noise in self.noise_range]
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes),
                                 num_workers=self.num_workers),
                      DataLoader(test_dataset,
@@ -317,13 +324,13 @@ class NicoTestBed(BaseTestBed):
         return loaders
 
 
+
 class CIFAR10TestBed(NoiseTestBed):
-    def __init__(self, sample_size, rep_model,mode="normal"):
+    def __init__(self, sample_size, rep_model, mode="normal"):
         super().__init__(sample_size, mode=mode)
         self.trans = transforms.Compose([
                                     transforms.Resize((32, 32)),
                                     transforms.ToTensor(), ])
-
         # classifier = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet32", pretrained=True).to(
         #     "cuda").eval()
         # torch.save(classifier, "cifar10_model.pt")
@@ -339,9 +346,11 @@ class CIFAR10TestBed(NoiseTestBed):
                 "state_dict"])
         self.num_classes = 10
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
-        self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
-        self.oods = [CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=noise_val)
-                                       for noise_val in self.noise_range]
+        self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
+        #self.oods = [TransformedDataset(self.ind_val, transform)]
+        print(self.noise_range)
+        self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise", intensity)
+                                       for intensity in self.noise_range]
         if rep_model=="vae":
             self.rep_model = self.vae
         else:
@@ -363,8 +372,9 @@ class CIFAR100TestBed(NoiseTestBed):
         self.num_classes = 100
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(
-            CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, download=True), [0.5, 0.5])
-        self.oods = [CIFAR100wNoise("../../Datasets/cifar100", train=False, transform=self.trans, noise_level=noise_val)
+            CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True), [0.5, 0.5])
+        self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise",
+                                        noise_val)
                                        for noise_val in self.noise_range]
         if rep_model=="vae":
             config = yaml.safe_load(open("vae/configs/vae.yaml"))
@@ -407,7 +417,7 @@ class ImagenetteTestBed(NoiseTestBed):
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
-        self.oods =  [ImagenettewNoise("../../Datasets/imagenette2", train="val", transform=self.trans, noise_level=noise_val)
+        self.oods =  [TransformedDataset(self.ind_val, additive_noise, "noise", noise_val)
                                        for noise_val in self.noise_range]
         if rep_model=="vae":
             self.rep_model = self.vae
@@ -444,7 +454,7 @@ class PolypTestBed(BaseTestBed):
 
     def ood_loaders(self):
         if self.mode=="noise":
-            ood_sets = [NoisyDataset(self.ind_val, noise) for noise in self.noise_range]
+            ood_sets = [TransformedDataset(self.ind_val, additive_noise, "noise", noise) for noise in self.noise_range]
             oods = [[DataLoader(test_dataset, sampler=SequentialSampler(test_dataset),
                                 num_workers=self.num_workers),
                      DataLoader(test_dataset,
@@ -493,4 +503,28 @@ class PolypTestBed(BaseTestBed):
             y = data[1].to("cuda")
             losses[i]=self.classifier.compute_loss(x,y).item()
         return losses
+
+class SemanticTestBed32x32(BaseTestBed):
+    def __init__(self, sample_size, num_workers, mode="normal", ind_set="CIFAR10"):
+        super().__init__(sample_size, num_workers, mode)
+        self.trans = transforms.Compose([
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(), ])
+        self.oods = {"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
+                "CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
+                "MNIST": MNIST("../../Datasets/mnist", train=False, transform=self.trans, download=True),
+                "EMNIST": EMNIST("../../Datasets/emnist", split="letters", train=False, transform=self.trans, download=True)}
+        ind, ind_val = torch.utils.data.random_split(self.oods.pop(ind_set), [0.5,0.5])
+
+
+
+def create_inherited_transformed_testbed(testbed, transform, sample_size, rep_model, mode, name):
+    class NewTestbed(testbed):
+        def __init__(self, sample_size, rep_model, mode="normal"):
+            super().__init__(sample_size, rep_model, mode="normal")
+            self.oods = [TransformedDataset(self.ind_val, transform, name, 1)]
+
+        def __str__(self):
+            return str(self.oods[0])
+    return NewTestbed(sample_size, rep_model, mode)
 

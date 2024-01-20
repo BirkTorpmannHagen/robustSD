@@ -13,13 +13,14 @@ class WrappedResnet(nn.Module):
         super().__init__()
         self.model = model
         self.latent_dim = self.get_encoding_size(input_size)
+        print(self.latent_dim)
 
     def get_encoding_size(self, input_size):
         dummy = torch.zeros((1, 3, input_size, input_size)).to("cuda")
         return self.get_encoding(dummy).shape[-1]
 
     def get_encoding(self, X):
-        return torch.nn.Sequential(*list(self.model.children())[:-2])(X).flatten(1)
+        return torch.nn.Sequential(*list(self.model.children())[:-1])(X).flatten(1)
 
     def forward(self, x):
         return self.model(x)
