@@ -490,7 +490,7 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     df = df.reset_index()
     g = sns.FacetGrid(data=df, col="Sampler", margin_titles=True)
     g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="OOD Detector")
-    # sns.lineplot(data=df, x="Sample Size", y="DR", hue="OOD Detector")
+    sns.lineplot(data=df, x="Sample Size", y="DR", hue="OOD Detector")
     plt.show()
 
     g = sns.FacetGrid(data=df, col="Dataset", col_wrap=3, sharey=False, sharex=False)
@@ -549,7 +549,7 @@ def plot_severity(dataset,sample_size):
     plt.show()
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
-    # df =  df[df["Sample Size"]==50]
+    # df =  df[df["Sample Size"]==30]
     df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
@@ -607,7 +607,7 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
     #summarize overall results;
     table_data = []
     for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_normal", "Njord_normal", "Polyp_normal", "imagenette_normal"]:
-        for sample_size in [50, 100, 200, 500]:
+        for sample_size in [10, 30, 50, 100, 200, 500]:
             for dsd_type in ["ks", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
                 for k in ["", "_5NN"]:
                     dsd = f"{dsd_type}{k}"

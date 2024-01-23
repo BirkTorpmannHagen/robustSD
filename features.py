@@ -5,13 +5,13 @@ def odin_fgsm(model, image):
     image.requires_grad = True
     output = model(image)
     nnOutputs = output.data.cpu()
-    nnOutputs = nnOutputs.numpy()
+    nnOutputs = nnOutputs
     nnOutputs = nnOutputs[0]
     nnOutputs = nnOutputs - torch.max(nnOutputs)
     nnOutputs = torch.exp(nnOutputs) / torch.sum(torch.exp(nnOutputs))
     maxIndexTemp = torch.argmax(nnOutputs)
 
-    loss = torch.nn.CrossEntropyLoss()(output, torch.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
+    loss = torch.nn.CrossEntropyLoss()(output, torch.autograd.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
     loss.backward()
     data_grad = image.grad.data
     data_grad = data_grad.squeeze(0)
@@ -21,7 +21,7 @@ def odin_fgsm(model, image):
     return perturbed_image
 def odin(model, image, feature_transform):
     perturbed_image = odin_fgsm(model, image)
-    return cross_entropy(model, perturbed_image).item()
+    return cross_entropy(model, perturbed_image)
 
 
 def jacobian(model, image, num_features=1):

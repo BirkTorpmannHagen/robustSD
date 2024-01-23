@@ -364,7 +364,7 @@ class FeatureSD(BaseSD):
             p_value = ks_2samp(k_nearest_ind[:, 0], sample_norms[:, 0])[1]
             print("\t\t", p_value)
         else:
-            p_value = ks_2samp(sample_norms, ind_features)[1]
+            p_value = ks_2samp(sample_norms[:,0], ind_features[:,0])[1]
         return p_value,losses[fold_name][biased_sampler_name][start:stop]
 
     def compute_pvals_and_loss_for_loader(self, ind_norms, ind_encodings, dataloaders, sample_size):
@@ -422,6 +422,9 @@ class FeatureSD(BaseSD):
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
                                    :-1]
+                # results = []
+                # for start, stop in startstop_iterable:
+                #     results.append(self.paralell_process(start, stop, biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses))
                 results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
                 pool.close()
                 for p_value, sample_loss in results:
@@ -463,7 +466,6 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
             data = data[data["sampler"]!=exclude_sampler]
         if "noise" in str(pd.unique(data["fold"])) and filter_noise:
             max_noise = sorted([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "noise" in i])[-1]
-            print(max_noise)
             data = data[(data["fold"] == f"noise_{max_noise}") | (data["fold"] == "ind")]
         try:
             data["loss"] = data["loss"].map(lambda x: float(x))
