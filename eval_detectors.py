@@ -123,16 +123,20 @@ def collect_all_data(sample_range):
     # collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
 
 def grad_data(k=0):
-    sample_range = [10, 30]
+    sample_range = [30]
 
     for grad_fn in [odin, cross_entropy, grad_magnitude]:
         for k in [0, 5]:
-            collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
-            collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
-            if k==0 and grad_fn == odin:
+            if grad_fn==cross_entropy and k==0:
                 continue
-            collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn, k=k)
-            collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
+            print(grad_fn, k)
+            for dataset in ["CIFAR10", "CIFAR100"]:
+                collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, "CIFAR10", k=k)
+            # if grad_fn!=cross_entropy:
+            #     collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
+            # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
+            # collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn, k=k)
+            # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
 
 
         # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn,k=k)

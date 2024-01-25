@@ -549,7 +549,7 @@ def plot_severity(dataset,sample_size):
     plt.show()
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
-    # df =  df[df["Sample Size"]==30]
+    df =  df[df["Sample Size"]==30]
     df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)

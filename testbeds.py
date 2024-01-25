@@ -256,7 +256,12 @@ class NicoTestBed(BaseTestBed):
         self.contexts = os.listdir("../../Datasets/NICO++/track_1/public_dg_0416/train")
         self.ind, self.ind_val = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context="dim", seed=0)
         self.contexts.remove("dim")
-        self.oods = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
+        if mode=="normal":
+            self.oods = [build_nico_dataset(1, "../../Datasets/NICO++", 0.2, self.trans, self.trans, context=context, seed=0)[1] for context in self.contexts]
+        elif mode=="noise":
+            self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise", i) for i in self.noise_range]
+        elif mode=="adv":
+            self.oods = [TransformedDataset(self.ind_val, targeted_fgsm, "adv", 1)]
             # self.classifier = ResNetClassifier.load_from_checkpoint(
             #     "lightning_logs/version_0/checkpoints/epoch=199-step=1998200.ckpt", num_classes=num_classes,
             #     resnet_version=34).to("cuda").eval()
@@ -349,8 +354,13 @@ class CIFAR10TestBed(NoiseTestBed):
         self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
         #self.oods = [TransformedDataset(self.ind_val, transform)]
         print(self.noise_range)
-        self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise", intensity)
+        if mode=="normal" or mode=="noise":
+            self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise", intensity)
                                        for intensity in self.noise_range]
+        elif mode == "adv":
+            self.oods = [TransformedDataset(self.ind_val, targeted_fgsm, "adv", 1)]
+        else:
+            raise NotImplementedError
         if rep_model=="vae":
             self.rep_model = self.vae
         else:
@@ -373,9 +383,15 @@ class CIFAR100TestBed(NoiseTestBed):
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(
             CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True), [0.5, 0.5])
-        self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise",
+
+        if self.mode=="noise" or self.mode=="normal":
+            self.oods = [TransformedDataset(self.ind_val, additive_noise, "noise",
                                         noise_val)
                                        for noise_val in self.noise_range]
+        elif mode == "adv":
+            self.oods = [TransformedDataset(self.ind_val, targeted_fgsm, "adv", 1)]
+        else:
+            raise NotImplementedError
         if rep_model=="vae":
             config = yaml.safe_load(open("vae/configs/vae.yaml"))
             self.vae = CIFARVAE().cuda().eval()
@@ -417,8 +433,13 @@ class ImagenetteTestBed(NoiseTestBed):
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)
-        self.oods =  [TransformedDataset(self.ind_val, additive_noise, "noise", noise_val)
-                                       for noise_val in self.noise_range]
+        if self.mode=="noise" or self.mode=="normal":
+            self.oods =  [TransformedDataset(self.ind_val, additive_noise, "noise", noise_val)
+                                           for noise_val in self.noise_range]
+        elif mode == "adv":
+            self.oods = [TransformedDataset(self.ind_val, targeted_fgsm, "adv", 1)]
+        else:
+            raise NotImplementedError
         if rep_model=="vae":
             self.rep_model = self.vae
         else:
@@ -428,7 +449,7 @@ class PolypTestBed(BaseTestBed):
     def __init__(self, sample_size, rep_model, mode="normal"):
         super().__init__(sample_size)
         self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps", ex=True)
-        self.noise_range = np.arange(0.05, 0.3, 0.05)
+        self.noise_range = np.arange(0.05, 0.3, 0.05)[-1]
         #vae
         self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()
         vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
@@ -505,8 +526,8 @@ class PolypTestBed(BaseTestBed):
         return losses
 
 class SemanticTestBed32x32(BaseTestBed):
-    def __init__(self, sample_size, num_workers, mode="normal", ind_set="CIFAR10"):
-        super().__init__(sample_size, num_workers, mode)
+    def __init__(self, sample_size, num_workers, mode="CIFAR10", rep_model="classifier"):
+        super().__init__(sample_size, num_workers, "normal")
         self.trans = transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor(), ])
@@ -514,8 +535,96 @@ class SemanticTestBed32x32(BaseTestBed):
                 "CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
                 "MNIST": MNIST("../../Datasets/mnist", train=False, transform=self.trans, download=True),
                 "EMNIST": EMNIST("../../Datasets/emnist", split="letters", train=False, transform=self.trans, download=True)}
-        ind, ind_val = torch.utils.data.random_split(self.oods.pop(ind_set), [0.5,0.5])
+        self.ind, self.ind_val = torch.utils.data.random_split(self.oods.pop(mode), [0.5,0.5])
+        if mode=="CIFAR10":
+            self.classifier = get_cifar("resnet32", layers=[5] * 3, model_urls=cifar10_pretrained_weight_urls,
+                                        progress=True, pretrained=True).cuda().eval()
 
+            self.classifier = WrappedResnet(self.classifier)
+            self.vae = CIFARVAE().cuda().eval()
+            vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/CIFAR10/version_35/checkpoints/epoch=121-step=762500.ckpt")[
+                    "state_dict"])
+        elif mode=="CIFAR100":
+            self.classifier = get_cifar("resnet32", layers=[5] * 3, model_urls=cifar100_pretrained_weight_urls,
+                                        progress=True, pretrained=True, num_classes=100).cuda().eval()
+
+            self.classifier = WrappedResnet(self.classifier)
+            config = yaml.safe_load(open("vae/configs/vae.yaml"))
+            self.vae = CIFARVAE().cuda().eval()
+            vae_exp = VAEXperiment(self.vae, config)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/CIFAR100/version_15/checkpoints/epoch=148-step=931250.ckpt")[
+                    "state_dict"])
+        elif mode=="MNIST":
+            raise NotImplementedError
+
+        if rep_model=="vae":
+            self.rep_model=self.vae
+        else:
+            self.rep_model=self.classifier
+
+
+    def ind_loader(self):
+        return DataLoader(self.ind, shuffle=False, num_workers=5)
+
+    def ood_loaders(self):
+        if self.mode == "noise":
+            ood_sets = [TransformedDataset(self.ind_val, additive_noise, "noise", noise) for noise in
+                        self.noise_range]
+            oods = [[DataLoader(test_dataset, sampler=SequentialSampler(test_dataset),
+                                num_workers=self.num_workers),
+                     DataLoader(test_dataset,
+                                sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
+                                num_workers=self.num_workers),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)]
+                    for
+                    test_dataset in ood_sets]
+            dicted = [dict([(sampler, loader) for sampler, loader in
+                            zip(["SequentialSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+            double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
+            return double_dicted
+        elif self.mode == "severity":
+            samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size,
+                                                   bias_severity=severity) for severity in np.linspace(0, 1, 11)]
+            loaders = {
+                "ood": dict([[sampler.__class__.__name__, DataLoader(self.ood, sampler=sampler)] for sampler in
+                             samplers])}
+            return loaders
+        else:
+            samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
+                        SequentialSampler(self.ood), RandomSampler(self.ood)]
+            loaders = {
+                "ood": dict([[sampler.__class__.__name__, DataLoader(self.ood, sampler=sampler)] for sampler in
+                             samplers])}
+            return loaders
+
+    def ind_val_loaders(self):
+        if self.mode == "severity":
+            samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size,
+                                                   bias_severity=severity) for severity in np.linspace(0, 1, 11)]
+            loaders = {
+                "ood": dict([[sampler.__class__.__name__, DataLoader(self.ood, sampler=sampler)] for sampler in
+                             samplers])}
+            return loaders
+        else:
+            samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                        SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
+
+            loaders = {
+                "ind": dict([[sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler)] for sampler in
+                             samplers])}
+            return loaders
+
+    def compute_losses(self, loader):
+        losses = np.zeros(len(loader))
+        print("computing losses")
+        for i, data in tqdm(enumerate(loader), total=len(loader)):
+            x = data[0].to("cuda")
+            y = data[1].to("cuda")
+            losses[i] = self.classifier.compute_loss(x, y).item()
+        return losses
 
 
 def create_inherited_transformed_testbed(testbed, transform, sample_size, rep_model, mode, name):
