@@ -28,8 +28,8 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
 def collect_gradient_data(sample_range, testbed_constructor, dataset_name, grad_fn, mode="normal", k=0):
     print(grad_fn)
     for sample_size in sample_range:
-        if grad_fn==typicality:
-            bench = testbed_constructor(sample_size, "vae", mode=mode)
+        if grad_fn==typicality or testbed_constructor==NjordTestBed:
+            bench = testbed_constructor(sample_size, mode=mode)
             tsd = FeatureSD(bench.vae, grad_fn, k=k)
         else:
             bench = testbed_constructor(sample_size, "classifier", mode=mode)
@@ -123,15 +123,15 @@ def collect_all_data(sample_range):
     # collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
 
 def grad_data(k=0):
-    sample_range = [30]
+    sample_range = [30, 50, 100, 200, 500]
 
-    for grad_fn in [odin, cross_entropy, grad_magnitude]:
+    for grad_fn in [grad_magnitude, odin]:
         for k in [0, 5]:
-            if grad_fn==cross_entropy and k==0:
-                continue
             print(grad_fn, k)
-            for dataset in ["CIFAR10", "CIFAR100"]:
-                collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, "CIFAR10", k=k)
+
+            # collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn, k=k)
+            for dataset in ["MNIST", "EMNIST"]:
+                collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, dataset, k=k)
             # if grad_fn!=cross_entropy:
             #     collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
             # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)

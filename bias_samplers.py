@@ -18,7 +18,8 @@ class ClassOrderSampler(Sampler):
 
         #initial pass to sort the indices by class
         for i, data in enumerate(data_source):
-            self.indices[data[1]].append(i)
+
+            self.indices[min(data[1], num_classes-1)].append(i)
 
 
     def __iter__(self):

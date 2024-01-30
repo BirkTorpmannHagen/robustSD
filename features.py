@@ -3,15 +3,21 @@ import torch.nn.functional as F
 
 def odin_fgsm(model, image):
     image.requires_grad = True
+
     output = model(image)
-    nnOutputs = output.data.cpu()
+    if isinstance(output, list):
+        output = output[1]  #for njord
+    nnOutputs = output
     nnOutputs = nnOutputs
     nnOutputs = nnOutputs[0]
     nnOutputs = nnOutputs - torch.max(nnOutputs)
     nnOutputs = torch.exp(nnOutputs) / torch.sum(torch.exp(nnOutputs))
+    nnOutputs = nnOutputs.unsqueeze(0)
     maxIndexTemp = torch.argmax(nnOutputs)
+    print(output.shape)
+    print(nnOutputs.shape)
 
-    loss = torch.nn.CrossEntropyLoss()(output, torch.autograd.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
+    loss = torch.nn.CrossEntropyLoss()(nnOutputs, torch.autograd.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
     loss.backward()
     data_grad = image.grad.data
     data_grad = data_grad.squeeze(0)
@@ -29,12 +35,17 @@ def jacobian(model, image, num_features=1):
         torch.autograd.functional.jacobian(model, image),"fro").item()
 
 def cross_entropy(model, image, num_features=1):
-    return F.cross_entropy(model(image), torch.ones_like(model(image))).item()
+    out = model(image)
+    if isinstance(out, list):
+        out = out[1]  #for njord
+    return F.cross_entropy(out, torch.ones_like(out)).item()
 
 
 def grad_magnitude(model, image, num_features=1):
     image.requires_grad = True
     output = model(image)
+    if isinstance(output, list):
+        output = output[1]  #for njord
     loss = torch.nn.CrossEntropyLoss()(output, torch.ones_like(output))
     model.zero_grad()
     loss.backward()

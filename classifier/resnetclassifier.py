@@ -45,7 +45,7 @@ class ResNetClassifier(pl.LightningModule):
         self.resnet_model.fc = nn.Linear(linear_size, num_classes)
 
         self.latent_dim = self.get_encoding_size(-2)
-        self.acc = Accuracy(task="binary", num_classes=num_classes)
+        self.acc = Accuracy(task="multiclass", num_classes=num_classes)
 
 
     def forward(self, X):
@@ -82,8 +82,6 @@ class ResNetClassifier(pl.LightningModule):
         x = batch[0]
         y = batch[1]
         preds = self(x)
-        print(y.shape) #y is 16
-        print(preds.shape)
         loss = self.criterion(preds,y)
         acc = self.acc(preds, y)
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)

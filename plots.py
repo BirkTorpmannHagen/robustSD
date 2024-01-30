@@ -99,7 +99,6 @@ def balanced_accuracy(data, threshold):
 
 def auroc(data):
     ood_ps = data[data["oodness"]>1]["pvalue"]
-
     ind_ps = data[data["oodness"]<=1]["pvalue"]
     true = [0]*len(ood_ps)+[1]*len(ind_ps)
     probs = list(ood_ps)+list(ind_ps)
@@ -549,8 +548,8 @@ def plot_severity(dataset,sample_size):
     plt.show()
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
-    df =  df[df["Sample Size"]==30]
-    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
+    # df =  df[df["Sample Size"]==30]
+    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR", "AUROC", "AUPR"]].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
 
@@ -603,11 +602,46 @@ def get_correlation_metrics_for_all_experiments(placeholder=False):
         "typicality", "Typicality")
     return df
 
+def get_semantic_metrics_for_all_experiments(placeholder=False):
+    table_data = []
+
+    for dataset in ["CIFAR10", "CIFAR100", "EMNIST", "MNIST"]:
+        for sample_size in [30, 50, 100, 200, 500]:
+            for dsd_type in ["ks", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
+                for k in ["", "_5NN"]:
+                    dsd = f"{dsd_type}{k}"
+                    fname = f"new_data/Semantic_{dataset}_{dsd}_{sample_size}.csv"
+                    data = open_and_process_semantic(fname, filter_noise=True)
+                    if data is None:
+                        continue
+                    data_cov = open_and_process(f"new_data/{dataset}_normal_{dsd}_{sample_size}.csv", filter_noise=True)
+                    # print(data_cov)
+                    # input(f"new_data/{dataset}_normal_{dsd}_{sample_size}.csv")
+                    if data_cov is not None:
+                        data.loc[data['fold'] == 'ind', 'pvalue'] = data_cov.loc[data_cov['fold'] == 'ind', 'pvalue']
+
+                    threshold = get_threshold(data)
+                    for sampler in pd.unique(data["sampler"]):
+                        for fold in pd.unique(data["fold"]):
+
+                            if fold=="ind":
+                                continue
+                            subset = data[(data["sampler"] == sampler)&((data["fold"] == fold)|(data["fold"] == "ind"))]
+                            table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size, "fold": fold,
+                                               "Sampler": sampler,
+                                               "FPR": fpr(subset, threshold=threshold),
+                                               "FNR": fnr(subset, threshold=threshold),
+                                               "DR": balanced_accuracy(subset, threshold=threshold),
+                                               })
+    df = pd.DataFrame(data=table_data)
+    return df
+
+
 def get_classification_metrics_for_all_experiments(placeholder=False):
     #summarize overall results;
     table_data = []
     for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_normal", "Njord_normal", "Polyp_normal", "imagenette_normal"]:
-        for sample_size in [10, 30, 50, 100, 200, 500]:
+        for sample_size in [30, 50, 100, 200, 500]:
             for dsd_type in ["ks", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
                 for k in ["", "_5NN"]:
                     dsd = f"{dsd_type}{k}"
@@ -619,7 +653,7 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
                                                "FPR": float("nan"),
                                                "FNR": float("nan"),
                                                "DR": float("nan"),
-                                               "Risk": float("nan")})
+                                               "AUROC": float("nan")})
                         continue
                     threshold = get_threshold(data)
                     for sampler in pd.unique(data["sampler"]):
@@ -629,7 +663,8 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
                                            "FPR": fpr(subset, threshold=threshold),
                                            "FNR": fnr(subset, threshold=threshold),
                                            "DR": balanced_accuracy(subset, threshold=threshold),
-                                           "Risk": risk(subset, threshold=threshold),
+                                           "AUROC": auroc(subset),
+                                           "AUPR": aupr(subset),
                                            "Correlation": correlation(subset)})
     df = pd.DataFrame(data=table_data)
     return df
@@ -840,7 +875,14 @@ def plot_pvaluedist():
     sns.kdeplot(data=df, x="pvalue", hue="fold", palette="mako")
     plt.show()
 
+def boxplot_test():
+    data = get_classification_metrics_for_all_experiments()
+    data["KN"] = data["OOD Detector"].apply(lambda x: "5NN" in x)
 
+    sns.boxplot(data=data, x="Sampler", y="DR", hue="KN")
+    plt.savefig("test_plots/boxplot_test.png")
+    plt.show()
+    plt.close()
 
 if __name__ == '__main__':
     """
@@ -909,7 +951,13 @@ if __name__ == '__main__':
     # compare_organic_and_synthetic_shifts("NICO")
     # plot_lossvp_for_fold()
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
-    summarize_results(placeholder=False)
+    boxplot_test()
+    # summarize_results(placeholder=False)
+    df = get_semantic_metrics_for_all_experiments()
+    # df = df[df["Sample Size"]==200]
+    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(df)
     # input()
     #sampler_breakdown
     # breakdown_by_sampler()

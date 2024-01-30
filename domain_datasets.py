@@ -402,10 +402,26 @@ def build_imagenette_dataset(root, train_trans, val_trans):
     val = Imagenette(root, transform=val_trans, split="val")
     return train, val
 
+class MNIST3(MNIST):
+    def __init__(self, root, train, transform, download=False):
+        self.num_classes = 10
+        super().__init__(root, train, transform, download=download)
+
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+        return img.repeat(3,1,1), target
+
+class EMNIST3(EMNIST):
+    def __init__(self, root, train, transform, download=False):
+        super().__init__(root, "letters", train=train, transform=transform, download=download)
+        self.num_classes = 27
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+        return img.repeat(3,1,1), target
 
 if __name__ == '__main__':
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),
                                               # transforms.CenterCrop(148), #2048 with, 4096 without...
-                                              transforms.Resize((256,256)),
+                                              transforms.Resize((32,32)),
                                               transforms.ToTensor(),])
     train, val= build_imagenette_dataset("../../Datasets/imagenette2", trans)

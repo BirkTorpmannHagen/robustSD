@@ -531,11 +531,12 @@ class SemanticTestBed32x32(BaseTestBed):
         self.trans = transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor(), ])
-        self.oods = {"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
+        self.ood_dict = {"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
                 "CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
-                "MNIST": MNIST("../../Datasets/mnist", train=False, transform=self.trans, download=True),
-                "EMNIST": EMNIST("../../Datasets/emnist", split="letters", train=False, transform=self.trans, download=True)}
-        self.ind, self.ind_val = torch.utils.data.random_split(self.oods.pop(mode), [0.5,0.5])
+                "MNIST": MNIST3("../../Datasets/mnist", train=False, transform=self.trans, download=True),
+                "EMNIST": EMNIST3("../../Datasets/emnist", train=False, transform=self.trans, download=True)}
+        self.ind, self.ind_val = torch.utils.data.random_split(self.ood_dict.pop(mode), [0.5, 0.5])
+        self.oods = list(self.ood_dict.values())
         if mode=="CIFAR10":
             self.classifier = get_cifar("resnet32", layers=[5] * 3, model_urls=cifar10_pretrained_weight_urls,
                                         progress=True, pretrained=True).cuda().eval()
@@ -558,73 +559,73 @@ class SemanticTestBed32x32(BaseTestBed):
                 torch.load("vae_logs/CIFAR100/version_15/checkpoints/epoch=148-step=931250.ckpt")[
                     "state_dict"])
         elif mode=="MNIST":
+            self.classifier = ResNetClassifier.load_from_checkpoint("MNIST3_logs/checkpoints/epoch=6-step=26250-v1.ckpt", num_classes=10, resnet_version=101).cuda().eval()
+            config = yaml.safe_load(open("vae/configs/vae.yaml"))
+            self.vae = CIFARVAE().cuda().eval()
+            vae_exp = VAEXperiment(self.vae, config)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/MNIST3/version_0/checkpoints/epoch=30-step=232500.ckpt")[
+                    "state_dict"])
+        elif mode=="EMNIST":
+            self.classifier = ResNetClassifier.load_from_checkpoint("EMNIST3_logs/checkpoints/epoch=30-step=241800.ckpt", num_classes=27, resnet_version=101).cuda().eval()
+            config = yaml.safe_load(open("vae/configs/vae.yaml"))
+            self.vae = CIFARVAE().cuda().eval()
+            vae_exp = VAEXperiment(self.vae, config)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/EMNIST3/version_0/checkpoints/epoch=42-step=670800.ckpt")[
+                    "state_dict"])
+        else:
             raise NotImplementedError
-
         if rep_model=="vae":
             self.rep_model=self.vae
         else:
             self.rep_model=self.classifier
 
+        self.num_classes = 10
+
+
+    def compute_losses(self, loader):
+        return [-1]*len(loader)
 
     def ind_loader(self):
         return DataLoader(self.ind, shuffle=False, num_workers=5)
 
+
     def ood_loaders(self):
-        if self.mode == "noise":
-            ood_sets = [TransformedDataset(self.ind_val, additive_noise, "noise", noise) for noise in
-                        self.noise_range]
-            oods = [[DataLoader(test_dataset, sampler=SequentialSampler(test_dataset),
+        if self.mode=="noise":
+            ood_sets = [TransformedDataset(self.ind_val, noise) for noise in self.noise_range]
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes),
                                 num_workers=self.num_workers),
                      DataLoader(test_dataset,
                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
                                 num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)]
-                    for
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
                     test_dataset in ood_sets]
             dicted = [dict([(sampler, loader) for sampler, loader in
-                            zip(["SequentialSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+                            zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
-        elif self.mode == "severity":
-            samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size,
-                                                   bias_severity=severity) for severity in np.linspace(0, 1, 11)]
-            loaders = {
-                "ood": dict([[sampler.__class__.__name__, DataLoader(self.ood, sampler=sampler)] for sampler in
-                             samplers])}
-            return loaders
+        elif self.mode=="severity":
+            pass
         else:
-            samplers = [ClusterSampler(self.ood, self.rep_model, sample_size=self.sample_size),
-                        SequentialSampler(self.ood), RandomSampler(self.ood)]
-            loaders = {
-                "ood": dict([[sampler.__class__.__name__, DataLoader(self.ood, sampler=sampler)] for sampler in
-                             samplers])}
-            return loaders
+            test_datasets = self.oods
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5),
+                         DataLoader(test_dataset,
+                                    sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=5),
+                         DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=5)] for test_dataset in test_datasets]
+
+            dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
+            double_dicted = dict([(context, dicted) for context, dicted in zip(self.ood_dict.keys(), dicted)])
+            return double_dicted
 
     def ind_val_loaders(self):
-        if self.mode == "severity":
-            samplers = [ClusterSamplerWithSeverity(self.ood, self.rep_model, sample_size=self.sample_size,
-                                                   bias_severity=severity) for severity in np.linspace(0, 1, 11)]
-            loaders = {
-                "ood": dict([[sampler.__class__.__name__, DataLoader(self.ood, sampler=sampler)] for sampler in
-                             samplers])}
-            return loaders
-        else:
-            samplers = [ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
-                        SequentialSampler(self.ind_val), RandomSampler(self.ind_val)]
+        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=5)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
+                                                                              ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
+                                                                              RandomSampler(self.ind_val)]])}
+        return loaders
 
-            loaders = {
-                "ind": dict([[sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler)] for sampler in
-                             samplers])}
-            return loaders
 
-    def compute_losses(self, loader):
-        losses = np.zeros(len(loader))
-        print("computing losses")
-        for i, data in tqdm(enumerate(loader), total=len(loader)):
-            x = data[0].to("cuda")
-            y = data[1].to("cuda")
-            losses[i] = self.classifier.compute_loss(x, y).item()
-        return losses
+
 
 
 def create_inherited_transformed_testbed(testbed, transform, sample_size, rep_model, mode, name):

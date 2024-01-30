@@ -73,6 +73,8 @@ def get_debiased_samples(ind_encodings, ind_predictions, ind_features, sample_en
         nearest_labels = ind_features[k_nearest_labels]
         k_nearest_ind = np.concatenate([k_nearest_ind, nearest_labels], axis=-1)
     return k_nearest_ind
+
+
 class BaseSD:
     def __init__(self, rep_model):
         self.rep_model = rep_model
@@ -456,6 +458,17 @@ class FeatureSD(BaseSD):
 
 
 
+def open_and_process_semantic(fname, filter_noise=False, combine_losses=True, exclude_sampler=""):
+    try:
+        data = pd.read_csv(fname)
+        data.drop(columns="loss", inplace=True)
+        data.loc[data['fold'] == 'ind', 'oodness'] = 0
+        data.loc[data['fold'] != 'ind', 'oodness'] = 2
+        return data
+    except FileNotFoundError:
+        # print(f"File {fname} not found")
+        return None
+
 
 def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sampler=""):
     try:
@@ -476,10 +489,12 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))
             else:
                 data=data.expbrlode("loss")
-        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+        data.loc[data['fold'] == 'ind', 'oodness'] = 0
+        data.loc[data['fold'] != 'ind', 'oodness'] = 2
+        # data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
 
 
         return data
     except FileNotFoundError:
-        print(f"File {fname} not found")
+        # print(f"File {fname} not found")
         return None
