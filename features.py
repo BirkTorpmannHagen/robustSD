@@ -14,9 +14,6 @@ def odin_fgsm(model, image):
     nnOutputs = torch.exp(nnOutputs) / torch.sum(torch.exp(nnOutputs))
     nnOutputs = nnOutputs.unsqueeze(0)
     maxIndexTemp = torch.argmax(nnOutputs)
-    print(output.shape)
-    print(nnOutputs.shape)
-
     loss = torch.nn.CrossEntropyLoss()(nnOutputs, torch.autograd.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
     loss.backward()
     data_grad = image.grad.data

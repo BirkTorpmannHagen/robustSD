@@ -75,7 +75,6 @@ class TransformedDataset(data.Dataset):
         return (x, *rest)
 
     def __str__(self):
-        print(f"{type(self.dataset).__name__}_{self.transform_name}_{str(self.transform_param)}")
         return f"{type(self.dataset).__name__}_{self.transform_name}_{str(self.transform_param)}"
 
     def __len__(self):

@@ -52,27 +52,20 @@ def convert_to_pandas_df(ind_pvalues, ood_pvalues, ind_sample_losses, ood_sample
     df = df.explode(["pvalue", "loss"])
     return df
 
-def get_debiased_samples(ind_encodings, ind_predictions, ind_features, sample_encodings, sample_predictions, sample_features, k=5, debias_labels=False):
+def get_debiased_samples(ind_encodings, ind_features, sample_encodings, sample_features, k=5):
     """
         Returns debiased features from the ind set.
     """
 
     k_nearest_idx = np.concatenate(
         [np.argpartition(
-            torch.sum((torch.Tensor(sample_encodings[i]).unsqueeze(0) - ind_encodings) ** 2, dim=-1).numpy(), k)[
+            torch.sum((torch.Tensor(sample_encodings[i]).unsqueeze(0) - ind_encodings) ** 2, dim=-1).numpy(),
+            k)[
          :k] for i in
          range(len(sample_encodings))])
-
     k_nearest_ind = ind_features[k_nearest_idx]
-    if debias_labels:
-        k_nearest_labels = np.concatenate(
-            [np.argpartition(
-                torch.sum((torch.Tensor(sample_predictions[i]).unsqueeze(0) - ind_predictions) ** 2, dim=-1).numpy(), k)[
-             :k] for i in
-             range(len(sample_encodings))])
-        nearest_labels = ind_features[k_nearest_labels]
-        k_nearest_ind = np.concatenate([k_nearest_ind, nearest_labels], axis=-1)
     return k_nearest_ind
+
 
 
 class BaseSD:
@@ -354,15 +347,7 @@ class FeatureSD(BaseSD):
         sample_encodings = biased_sampler_encodings[start:stop]
 
         if self.k!=0:
-
-            k_nearest_idx = np.concatenate(
-                [np.argpartition(
-                    torch.sum((torch.Tensor(sample_encodings[i]).unsqueeze(0) - ind_encodings) ** 2, dim=-1).numpy(),
-                    self.k)[
-                 :self.k] for i in
-                 range(len(sample_encodings))])
-            k_nearest_ind = ind_features[k_nearest_idx]
-
+            k_nearest_ind = get_debiased_samples(ind_encodings, ind_features, sample_encodings, sample_norms, k=self.k)
             p_value = ks_2samp(k_nearest_ind[:, 0], sample_norms[:, 0])[1]
             print("\t\t", p_value)
         else:
@@ -379,15 +364,6 @@ class FeatureSD(BaseSD):
                           )) for
                  loader_w_sampler in
                  dataloaders.values()]))
-
-        # encodings = dict(
-        #     zip(dataloaders.keys(),
-        #         [dict(zip(loader_w_sampler.keys(),
-        #                   [self.get_encodings(loader)
-        #                    for sampler_name, loader in loader_w_sampler.items()]
-        #                   )) for
-        #          loader_w_sampler in
-        #          dataloaders.values()]))
 
         losses = dict(
             zip(dataloaders.keys(),
@@ -448,11 +424,8 @@ class FeatureSD(BaseSD):
         # resubstitution estimation of entropy
 
         ind_norms, ind_encodings = self.get_features_encodings(self.testbed.ind_loader())
-        print(ind_encodings.shape)
-        print(ind_norms.shape)
         # compute ind_val pvalues for each sampler
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_norms, ind_encodings, self.testbed.ind_val_loaders(), sample_size)
-        #todo: make this use less memory
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_norms, ind_encodings, self.testbed.ood_loaders(), sample_size)
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 

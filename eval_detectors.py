@@ -125,12 +125,14 @@ def collect_all_data(sample_range):
 def grad_data(k=0):
     sample_range = [30, 50, 100, 200, 500]
 
-    for grad_fn in [grad_magnitude, odin]:
+    for grad_fn in [odin]:
         for k in [0, 5]:
             print(grad_fn, k)
 
             # collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn, k=k)
             for dataset in ["MNIST", "EMNIST"]:
+                if dataset == "MNIST" and k==0:
+                    continue
                 collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, dataset, k=k)
             # if grad_fn!=cross_entropy:
             #     collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)

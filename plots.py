@@ -483,19 +483,17 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     # print(df.groupby(["Dataset", "Sample Size"])["DR"].mean())
     # input()
-    df = df.groupby(["Dataset", "OOD Detector", "Sampler", "Sample Size"])[metric].mean()
+    df = df.groupby(["Dataset", "Sampler", "Sample Size", "OOD Detector"])["FPR"].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
     df = df.reset_index()
-    g = sns.FacetGrid(data=df, col="Sampler", margin_titles=True)
-    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="OOD Detector")
-    sns.lineplot(data=df, x="Sample Size", y="DR", hue="OOD Detector")
-    plt.show()
 
-    g = sns.FacetGrid(data=df, col="Dataset", col_wrap=3, sharey=False, sharex=False)
-    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="OOD Detector")
+    df["KN"] = df["OOD Detector"].apply(lambda x: "5NN" in x)
+
+    g = sns.FacetGrid(data=df, col="Sampler", col_wrap=3, sharey=False, sharex=False)
+    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="KN")
     g.add_legend()
-    plt.savefig("figures/samplesizebreakdown.eps")
+    plt.savefig("test_plots/samplesizebreakdown.png")
     plt.show()
 
 def breakdown_by_sampler(placeholder=False, metric="DR"):
@@ -951,7 +949,7 @@ if __name__ == '__main__':
     # compare_organic_and_synthetic_shifts("NICO")
     # plot_lossvp_for_fold()
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
-    boxplot_test()
+    # boxplot_test()
     # summarize_results(placeholder=False)
     df = get_semantic_metrics_for_all_experiments()
     # df = df[df["Sample Size"]==200]
