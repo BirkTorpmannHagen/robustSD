@@ -448,8 +448,8 @@ class ImagenetteTestBed(NoiseTestBed):
 class PolypTestBed(BaseTestBed):
     def __init__(self, sample_size, rep_model, mode="normal"):
         super().__init__(sample_size)
-        self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps", ex=True)
-        self.noise_range = np.arange(0.05, 0.3, 0.05)[-1]
+        self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps", ex=False)
+        self.noise_range = np.arange(0.05, 0.3, 0.05)
         #vae
         if rep_model=="vae":
             self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()

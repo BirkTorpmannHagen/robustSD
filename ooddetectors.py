@@ -246,7 +246,7 @@ class TypicalitySD(BaseSD):
         encodings_entropies = dict(
             zip(dataloaders.keys(),
                 [dict(zip(loader_w_sampler.keys(),
-                          [self.compute_entropy(loader)
+                          [self.compute_encodings_entropy(loader)
                            for sampler_name, loader in loader_w_sampler.items()]
                           )) for
                  loader_w_sampler in
