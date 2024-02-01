@@ -132,8 +132,7 @@ def grad_data(k=0):
             # collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn, k=k)
             for dataset in ["MNIST", "EMNIST"]:
                 if dataset == "MNIST" and k==0:
-                    continue
-                collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, dataset, k=k)
+                    collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, dataset, k=k)
             # if grad_fn!=cross_entropy:
             #     collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
             # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
