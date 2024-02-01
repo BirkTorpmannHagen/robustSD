@@ -227,22 +227,40 @@ class RabanserSD(BaseSD):
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 class TypicalitySD(BaseSD):
-    def __init__(self, rep_model):
+    def __init__(self, rep_model,k=0):
         super().__init__(rep_model)
+        self.k=k
 
-    def compute_entropy(self, data_loader):
+    def compute_encodings_entropy(self, dataloader):
         log_likelihoods = []
-        for i, batch in enumerate(data_loader):
+        encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
+        for i, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = batch[0].to("cuda")
             log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
+            with torch.no_grad():
+                encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
         entropies = -(torch.tensor(log_likelihoods))
-        return entropies
+        return encodings,entropies
 
-    def compute_pvals_and_loss_for_loader(self, bootstrap_entropy_distribution, dataloaders, sample_size):
-        entropies = dict(
+    def paralell_process(self, start, stop, biased_sampler_encodings, biased_sampler_entropies, ind_encodings, ind_entropies, fold_name, biased_sampler_name, losses, sample_size):
+        sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
+        knn_entropies = get_debiased_samples(ind_encodings, ind_entropies, biased_sampler_encodings, sample_entropy,
+                                             k=self.k)
+        if self.k != 0:
+            bootstrap_entropy_distribution = sorted(
+                [np.random.choice(knn_entropies, sample_size).mean().item() for i in range(10000)])
+        else:
+            bootstrap_entropy_distribution = self.bootstrap_entropy_distribution
+        p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+        print("\t",p_value)
+        return p_value, losses[fold_name][biased_sampler_name][start:stop]
+
+
+    def compute_pvals_and_loss_for_loader(self, ind_encodings, ind_entropies, dataloaders, sample_size):
+        encodings_entropies = dict(
             zip(dataloaders.keys(),
                 [dict(zip(loader_w_sampler.keys(),
-                          [self.compute_entropy(loader)
+                          [self.compute_encodings_entropy(loader)
                            for sampler_name, loader in loader_w_sampler.items()]
                           )) for
                  loader_w_sampler in
@@ -271,19 +289,31 @@ class TypicalitySD(BaseSD):
                            for _ in range(len(loader_w_sampler))]
                           )) for
                  loader_w_sampler in dataloaders.values()]))
+        print("computing")
+        self.bootstrap_entropy_distribution = sorted(
+            [np.random.choice(ind_entropies, sample_size).mean().item() for i in range(10000)])
 
-        for fold_name, fold_entropies in entropies.items():
-            for biased_sampler_name, biased_sampler_entropies in fold_entropies.items():
-                for start, stop in list(zip(range(0, len(biased_sampler_entropies), sample_size),
-                                            range(sample_size, len(biased_sampler_entropies) + sample_size,
-                                                  sample_size)))[
-                                   :-1]:
-                    sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
-
-                    p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+        for fold_name, fold_entropies in encodings_entropies.items():
+            print(fold_name)
+            for biased_sampler_name, biased_sampler_encoding_entropies in fold_entropies.items():
+                biased_sampler_encodings, biased_sampler_entropies = biased_sampler_encoding_entropies
+                print(biased_sampler_name)
+                    # print(biased_sampler_encoding_entropies)
+                args = [biased_sampler_encodings, biased_sampler_entropies, ind_encodings, ind_entropies, fold_name,
+                        biased_sampler_name, losses, sample_size]
+                pool = multiprocessing.Pool(processes=20)
+                startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                              range(sample_size, len(biased_sampler_encodings) + sample_size,
+                                                    sample_size)))[
+                                     :-1]
+                # results = []
+                # for start, stop in startstop_iterable:
+                #     results.append(self.paralell_process(start, stop, biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses))
+                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                pool.close()
+                for p_value, sample_loss in results:
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(
-                        losses[fold_name][biased_sampler_name][start:stop])
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
 
         return p_values, sample_losses
 
@@ -299,19 +329,18 @@ class TypicalitySD(BaseSD):
         # sample_size=min(sample_size, len(self.testbed.ind_val_loaders()[0]))
 
         # resubstitution estimation of entropy
+        ind_encodings, ind_entropies = self.compute_encodings_entropy(self.testbed.ind_loader())
+        print("got ind encodings")
 
-        ind_entropies = self.compute_entropy(self.testbed.ind_loader())
-        bootstrap_entropy_distribution = sorted(
-            [np.random.choice(ind_entropies, sample_size).mean().item() for i in range(10000)])
-        entropy_epsilon = np.quantile(bootstrap_entropy_distribution, 0.99)  # alpha of .99 quantile
 
         # compute ind_val pvalues for each sampler
-        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
+        ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_encodings, ind_entropies,
                                                                          self.testbed.ind_val_loaders(), sample_size)
+        print("got ind pvalues")
 
-
-        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(bootstrap_entropy_distribution,
-                                                                         self.testbed.ood_loaders(), sample_size)
+        ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_encodings, ind_entropies,
+                                                                               self.testbed.ood_loaders(), sample_size)
+        print("got ood pvalues")
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 class FeatureSD(BaseSD):
@@ -326,26 +355,20 @@ class FeatureSD(BaseSD):
         print("init:", self.feature_fn)
         self.num_features=num_features
 
-    def get_features(self, dataloader):
-        features = torch.zeros((len(dataloader), 1))
-        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
-            x = data[0].cuda()
-            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
-        return features
     def get_features_encodings(self, dataloader):
         features = np.zeros((len(dataloader), 1))
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0].cuda()
+            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
             with torch.no_grad():
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
-            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
         return features, encodings
 
     def paralell_process(self,start, stop, biased_sampler_encodings, biased_sampler_features, ind_encodings, ind_features, fold_name, biased_sampler_name, losses):
         sample_norms = biased_sampler_features[start:stop]
         sample_encodings = biased_sampler_encodings[start:stop]
-
+        # print(f"{fold_name}: {sample_norms}")
         if self.k!=0:
             k_nearest_ind = get_debiased_samples(ind_encodings, ind_features, sample_encodings, sample_norms, k=self.k)
             p_value = ks_2samp(k_nearest_ind[:, 0], sample_norms[:, 0])[1]
@@ -396,7 +419,7 @@ class FeatureSD(BaseSD):
                 biased_sampler_norms, biased_sampler_encodings = biased_sampler_norms_encodings
 
                 args = [ biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses]
-                pool = multiprocessing.Pool(processes=10)
+                pool = multiprocessing.Pool(processes=1)
                 startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
                                             range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
                                    :-1]
@@ -462,9 +485,9 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))
             else:
                 data=data.expbrlode("loss")
-        data.loc[data['fold'] == 'ind', 'oodness'] = 0
-        data.loc[data['fold'] != 'ind', 'oodness'] = 2
-        # data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+        # data.loc[data['fold'] == 'ind', 'oodness'] = 0
+        # data.loc[data['fold'] != 'ind', 'oodness'] = 2
+        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
 
 
         return data

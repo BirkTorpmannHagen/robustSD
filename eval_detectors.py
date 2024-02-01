@@ -157,7 +157,15 @@ def grad_data(k=0):
 if __name__ == '__main__':
     from features import *
     torch.multiprocessing.set_start_method('spawn')
-    grad_data(5)
+    for testbed_constructor in [CIFAR10TestBed, CIFAR100TestBed, ImagenetteTestBed, NicoTestBed, NjordTestBed]:
+        for sample_size in [30, 50, 100, 200, 500]:
+            bench = testbed_constructor(sample_size, mode="normal", rep_model="vae")
+            tsd = TypicalitySD(bench.vae, k=5)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+
+                          fname=f"new_data/{testbed_constructor.__name__[:-7]}_normal_typicality_5NN_{sample_size}")
+    # grad_data(5)
     # sample_range = [50, 100, 200, 500]
     # sample_range = [100]
     # collect_severitydata()

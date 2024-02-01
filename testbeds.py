@@ -133,7 +133,7 @@ class NoiseTestBed(BaseTestBed):
         return losses.cpu().numpy()
 
 class NjordTestBed(BaseTestBed):
-    def __init__(self, sample_size, mode="normal"):
+    def __init__(self, sample_size, mode="normal", rep_model="vae"):
         super().__init__(sample_size, mode=mode)
         self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
         self.classifier = fetch_model("njord/runs/train/exp8/weights/best.pt").float().cuda()
@@ -451,15 +451,16 @@ class PolypTestBed(BaseTestBed):
         self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps", ex=True)
         self.noise_range = np.arange(0.05, 0.3, 0.05)[-1]
         #vae
-        self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()
-        vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
-        vae_exp.load_state_dict(
-            torch.load("vae_logs/Polyp/version_0/checkpoints/epoch=116-step=75348.ckpt")[
-                "state_dict"])
+        if rep_model=="vae":
+            self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()
+            vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/Polyp/version_0/checkpoints/epoch=116-step=75348.ckpt")[
+                    "state_dict"])
 
         #segmodel
         self.classifier = SegmentationModel.load_from_checkpoint(
-            "segmentation_logs/lightning_logs/version_12/checkpoints/epoch=199-step=64600.ckpt").to("cuda")
+            "segmentation_logs/lightning_logs/version_14/checkpoints/epoch=199-step=64600.ckpt").to("cuda")
         self.classifier.eval()
 
         #assign rep model
