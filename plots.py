@@ -547,7 +547,7 @@ def plot_severity(dataset,sample_size):
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     # df =  df[df["Sample Size"]==30]
-    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR", "AUROC", "AUPR"]].mean()
+    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
 
@@ -661,8 +661,8 @@ def get_classification_metrics_for_all_experiments(placeholder=False):
                                            "FPR": fpr(subset, threshold=threshold),
                                            "FNR": fnr(subset, threshold=threshold),
                                            "DR": balanced_accuracy(subset, threshold=threshold),
-                                           "AUROC": auroc(subset),
-                                           "AUPR": aupr(subset),
+                                           # "AUROC": auroc(subset),
+                                           # "AUPR": aupr(subset),
                                            "Correlation": correlation(subset)})
     df = pd.DataFrame(data=table_data)
     return df
@@ -950,12 +950,12 @@ if __name__ == '__main__':
     # plot_lossvp_for_fold()
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
     # boxplot_test()
-    # summarize_results(placeholder=False)
-    df = get_semantic_metrics_for_all_experiments()
+    summarize_results(placeholder=False)
+    # df = get_semantic_metrics_for_all_experiments()
     # df = df[df["Sample Size"]==200]
-    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(df)
+    # df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(df)
     # input()
     #sampler_breakdown
     # breakdown_by_sampler()
