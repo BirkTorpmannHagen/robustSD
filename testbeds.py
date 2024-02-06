@@ -1,12 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import torch.nn
 from torch.utils.data import ConcatDataset
 
 from vae.vae_experiment import VAEXperiment
 from segmentor.deeplab import SegmentationModel
 from vae.models.vanilla_vae import VanillaVAE, ResNetVAE, CIFARVAE
 import yaml
+from glow.model import Glow
 from torch.utils.data import RandomSampler
 from classifier.resnetclassifier import ResNetClassifier
 from ooddetectors import *
@@ -268,14 +270,18 @@ class NicoTestBed(BaseTestBed):
         self.classifier = ResNetClassifier.load_from_checkpoint(
            "NICODataset_logs/checkpoints/epoch=279-step=175000.ckpt", num_classes=num_classes,
             resnet_version=101).to("cuda").eval()
+        if rep_model == "glow":
+            print("Using glow")
+            self.glow = Glow(3, 32, 4).cuda().eval()
+            self.glow.load_state_dict(torch.load("glow_logs/CIFAR100_checkpoint/model_040001.pt")["state_dict"])
+            self.rep_model = self.glow
 
-        if rep_model=="vae":
+        elif rep_model=="vae":
             self.vae = VanillaVAE(3, 512).to("cuda").eval()
             self.rep_model = self.vae
             self.vae_experiment = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
             self.vae_experiment.load_state_dict(
                 torch.load("/home/birk/Projects/robustSD/vae_logs/NICODataset/version_1/checkpoints/epoch=68-step=86112.ckpt")["state_dict"])
-            print("USING VAE!!")
         else:
             self.rep_model=self.classifier
 
@@ -344,11 +350,21 @@ class CIFAR10TestBed(NoiseTestBed):
         self.classifier = get_cifar("resnet32", layers= [5]*3, model_urls=cifar10_pretrained_weight_urls,progress=True, pretrained=True).cuda().eval()
 
         self.classifier = WrappedResnet(self.classifier)
-        self.vae = CIFARVAE().cuda().eval()
-        vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
-        vae_exp.load_state_dict(
-            torch.load("vae_logs/CIFAR10/version_35/checkpoints/epoch=121-step=762500.ckpt")[
-                "state_dict"])
+        if rep_model=="glow":
+            self.glow = Glow(3, 32, 4).cuda().eval()
+            self.glow.load_state_dict(torch.load("glow_logs/CIFAR10_checkpoint/model_010001.pt")["state_dict"])
+            self.rep_model=self.glow
+        elif rep_model=="vae":
+            self.vae = CIFARVAE().cuda().eval()
+            vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/CIFAR10/version_35/checkpoints/epoch=121-step=762500.ckpt")[
+                    "state_dict"])
+            self.rep_model = self.vae
+        else:
+            self.rep_model=self.classifier
+
+
         self.num_classes = 10
         # self.ind_val = CIFAR10wNoise("../../Datasets/cifar10", train=False, transform=self.trans, noise_level=0)
         self.ind, self.ind_val = torch.utils.data.random_split(CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans),[0.5, 0.5])
@@ -361,10 +377,7 @@ class CIFAR10TestBed(NoiseTestBed):
             self.oods = [TransformedDataset(self.ind_val, targeted_fgsm, "adv", 1)]
         else:
             raise NotImplementedError
-        if rep_model=="vae":
-            self.rep_model = self.vae
-        else:
-            self.rep_model=self.classifier
+
 
         # return 0 #DEBUG
 
@@ -392,7 +405,13 @@ class CIFAR100TestBed(NoiseTestBed):
             self.oods = [TransformedDataset(self.ind_val, targeted_fgsm, "adv", 1)]
         else:
             raise NotImplementedError
-        if rep_model=="vae":
+        if rep_model == "glow":
+            print("Using glow")
+            self.glow = Glow(3, 32, 4).cuda().eval()
+            dict = torch.load("glow_logs/CIFAR100_checkpoint/model_040001.pt")
+            self.glow.load_state_dict(dict)
+            self.rep_model = self.glow
+        elif rep_model=="vae":
             config = yaml.safe_load(open("vae/configs/vae.yaml"))
             self.vae = CIFARVAE().cuda().eval()
             vae_exp = VAEXperiment(self.vae, config)

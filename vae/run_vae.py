@@ -136,9 +136,12 @@ if __name__ == '__main__':
 
 
     #
-    train_set= EMNIST3("../../Datasets/emnist", train=True, transform=default_train_trans, download=True)
-    val_set = EMNIST3("../../Datasets/emnist", train=False, transform=default_val_trans, download=True)
-    train_cifar_model(train_set, val_set, patch_size=32)
-    # train_set =  CIFAR100("../../Datasets/CIFAR100", train=True, transform=default_train_trans, download=True)
-    # val_set = CIFAR100("../../Datasets/CIFAR100", train=False, transform=default_val_trans, download=True)
+    # train_set= EMNIST3("../../Datasets/emnist", train=True, transform=default_train_trans, download=True)
+    # val_set = EMNIST3("../../Datasets/emnist", train=False, transform=default_val_trans, download=True)
     # train_cifar_model(train_set, val_set, patch_size=32)
+    train_set =  CIFAR100("../../Datasets/CIFAR100", train=True, transform=default_train_trans, download=True)
+    val_set = CIFAR100("../../Datasets/CIFAR100", train=False, transform=default_val_trans, download=True)
+    train_cifar_model(train_set, val_set, patch_size=32)
+    train_set =  CIFAR10("../../Datasets/CIFAR10", train=True, transform=default_train_trans, download=True)
+    val_set = CIFAR10("../../Datasets/CIFAR10", train=False, transform=default_val_trans, download=True)
+    train_cifar_model(train_set, val_set, patch_size=32)

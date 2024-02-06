@@ -251,6 +251,7 @@ class TypicalitySD(BaseSD):
                 [np.random.choice(knn_entropies, sample_size).mean().item() for i in range(10000)])
         else:
             bootstrap_entropy_distribution = self.bootstrap_entropy_distribution
+
         p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
         print("\t",p_value)
         return p_value, losses[fold_name][biased_sampler_name][start:stop]
@@ -360,7 +361,7 @@ class FeatureSD(BaseSD):
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0].cuda()
-            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
+            features[i] = self.feature_fn(self.rep_model, x, self.num_features).cpu().numpy()
             with torch.no_grad():
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
         return features, encodings
@@ -487,7 +488,7 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
                 data=data.expbrlode("loss")
         # data.loc[data['fold'] == 'ind', 'oodness'] = 0
         # data.loc[data['fold'] != 'ind', 'oodness'] = 2
-        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].quantile(0.95)
+        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].max()
 
 
         return data

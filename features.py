@@ -67,9 +67,9 @@ def jjmag(model, image, num_features=1):
     jj = jac.T@jac
     return torch.norm(jj, "fro").item()
 
-def typicality(model, image, num_features=1):
+def typicality_ks_glow(model, image, num_features=1):
     assert num_features==1
-    return model.estimate_log_likelihood(image)
+    return -model.estimate_log_likelihood(image)
 
 
 def condition_number(model, image, num_features=1):

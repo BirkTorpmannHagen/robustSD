@@ -146,3 +146,4 @@ njord_vae/*
 njord/runs/*
 *logs*
 .idea
+glow_logs/
