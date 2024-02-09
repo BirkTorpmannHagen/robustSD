@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
@@ -58,7 +59,7 @@ def calc_loss(log_p, logdet, image_size, n_bins):
 
 
 def train(data, model, optimizer, img_size=32):
-    dataset = iter(sample_data(data, 16))
+    dataset = iter(sample_data(data, 8))
     n_bins = 2.0 ** 5
 
     z_sample = []
@@ -67,9 +68,9 @@ def train(data, model, optimizer, img_size=32):
         z_new = torch.randn(20, *z) * 0.7
         z_sample.append(z_new.to(device))
 
-    with tqdm(range(100000)) as pbar:
+    with tqdm(range(42500)) as pbar:
         for i in pbar:
-            image, _ = next(dataset)
+            image = next(dataset)[0]
             image = image.to(device)
 
             image = image * 255
@@ -99,7 +100,7 @@ def train(data, model, optimizer, img_size=32):
             if i % 100 == 0:
                 with torch.no_grad():
                     utils.save_image(
-                        model_single.reverse(z_sample).cpu().data,
+                        model.reverse(z_sample).cpu().data,
                         f"glow_logs/sample/{str(i + 1).zfill(6)}.png",
                         normalize=True,
                         nrow=10,
@@ -118,19 +119,31 @@ def train(data, model, optimizer, img_size=32):
                 )
 
 
-if __name__ == "__main__":
-
+def train_new(dataset, img_size=32):
     model_single = Glow(3, 32, 4)
     # model = nn.DataParallel(model_single)
     model = model_single
     model = model.to(device)
-    trans = transforms.Compose([transforms.Resize(32), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    dataset = CIFAR100("../../Datasets/CIFAR100", train=True, transform=trans, download=True)
-    train(dataset, model, optimizer)
-    dataset = CIFAR10("../../Datasets/CIFAR10", train=True, transform=trans, download=True)
-    train(dataset, model, optimizer)
-    dataset = MNIST3("../../Datasets/MNIST", train=True, transform=trans, download=True)
-    train(dataset, model, optimizer)
-    dataset = EMNIST3("../../Datasets/EMNIST", train=True, transform=trans, download=True)
-    train(dataset, model, optimizer)
+    train(dataset, model, optimizer,img_size)
+
+
+if __name__ == "__main__":
+    trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
+    # dataset = CIFAR100("../../Datasets/CIFAR100", train=True, transform=trans, download=True)
+    # train_new(dataset)
+    # dataset = CIFAR10("../../Datasets/CIFAR10", train=True, transform=trans, download=True)
+    # train_new(dataset)
+    # dataset = MNIST3("../../Datasets/MNIST", train=True, transform=trans, download=True)
+    # train_new(dataset)
+    # dataset = EMNIST3("../../Datasets/EMNIST", train=True, transform=trans, download=True)
+    # train_new(dataset)
+
+    # trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
+    dataset, _ = build_imagenette_dataset("../../Datasets/imagenette2", trans, trans)
+    train_new(dataset, img_size=32)
+
+    # trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
+    dataset, _ = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+
+    train_new(dataset, img_size=32)

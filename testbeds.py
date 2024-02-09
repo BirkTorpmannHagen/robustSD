@@ -41,6 +41,7 @@ class BaseTestBed:
         if self.mode=="severity":
             self.noise_range = [0.2]
             print(self.noise_range)
+        self.batch_size = 32
 
 
 
@@ -67,7 +68,7 @@ class NoiseTestBed(BaseTestBed):
         # return DataLoader(
         #     CIFAR10wNoise("../../Datasets/cifar10", train=True, transform=self.trans,noise_level=0), shuffle=False, num_workers=5)
         return DataLoader(
-            self.ind, shuffle=True, num_workers=self.num_workers)
+            self.ind, shuffle=True, num_workers=self.num_workers, batch_size = self.batch_size, drop_last=True)
 
     def ind_val_loaders(self):
         if self.mode=="severity":
@@ -78,12 +79,12 @@ class NoiseTestBed(BaseTestBed):
                  samplers])}
         elif self.mode=="random":
             loaders = {"ind": dict(
-                [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers))
+                [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers, batch_size = self.batch_size, drop_last=True))
                  for sampler in
                  [RandomSampler(self.ind_val)]])}
         else:
             loaders = {"ind": dict(
-                [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers)) for sampler in
+                [(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=self.num_workers, batch_size = self.batch_size, drop_last=True)) for sampler in
                  [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
                   ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
                   RandomSampler(self.ind_val)]])}
@@ -112,27 +113,22 @@ class NoiseTestBed(BaseTestBed):
             double_dicted = dict(zip(["noise_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
         else:
-            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for test_dataset in self.oods]
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=self.num_workers, batch_size = self.batch_size, drop_last=True),
+                     DataLoader(test_dataset, sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=self.num_workers, batch_size = self.batch_size, drop_last=True),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers, batch_size = self.batch_size, drop_last=True)] for test_dataset in self.oods]
             dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict(zip(["transformed_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
     def compute_losses(self, loader):
-        losses = torch.zeros(len(loader) ).to("cuda")
-        # accs = torch.zeros(len(loader) ).to("cuda")
-        # from torchmetrics import Accuracy
-        # acc = Accuracy("multiclass", num_classes=self.num_classes).cuda()
-        criterion = nn.CrossEntropyLoss()
+        losses = np.zeros((len(loader), 32))
+        criterion = nn.CrossEntropyLoss(reduction="none") #still computing loss for each sample, just batched
         for i, data in tqdm(enumerate(loader), total=len(loader)):
-
-            x = data[0].to("cuda")
-            y = data[1].to("cuda")
-            yhat = self.classifier(x)
-            # preds.append(yhat.detach().cpu().numpy())
-            # accs[i] =acc(yhat, y).item()
-            losses[i]=criterion(yhat, y).item()
-        return losses.cpu().numpy()
+            with torch.no_grad():
+                x = data[0].to("cuda")
+                y = data[1].to("cuda")
+                yhat = self.classifier(x)
+                losses[i]=criterion(yhat, y).cpu().numpy()
+        return losses.flatten()
 
 class NjordTestBed(BaseTestBed):
     def __init__(self, sample_size, mode="normal", rep_model="vae"):
@@ -192,17 +188,17 @@ class NjordTestBed(BaseTestBed):
 
 
     def compute_losses(self, loader):
-        losses = np.zeros(len(loader))
+        losses = np.zeros(len(loader)*self.batch_size)
         # preds = []
         for i, data in enumerate(loader):
             (x, targets, paths, shapes) = data
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
+            for j in range(train_out.shape[0]):
             # preds.append(preds.detach().cpu().numpy())
-
-            loss, _ = self.loss(train_out, targets)
-            losses[i]=loss.item()
+                loss, _ = self.loss(train_out[j], targets[j])
+                losses[i]=loss.item()
         return losses
         # return losses, preds
 
@@ -273,7 +269,7 @@ class NicoTestBed(BaseTestBed):
         if rep_model == "glow":
             print("Using glow")
             self.glow = Glow(3, 32, 4).cuda().eval()
-            self.glow.load_state_dict(torch.load("glow_logs/CIFAR100_checkpoint/model_040001.pt")["state_dict"])
+            self.glow.load_state_dict(torch.load("glow_logs/NICODataset_checkpoint/model_040001.pt"))
             self.rep_model = self.glow
 
         elif rep_model=="vae":
@@ -288,28 +284,29 @@ class NicoTestBed(BaseTestBed):
         self.mode=mode
 
     def compute_losses(self, loader):
-        losses = torch.zeros(len(loader)).to("cuda")
-        print("computing losses")
+        losses = np.zeros((len(loader), 32))
+        criterion = nn.CrossEntropyLoss(reduction="none") #still computing loss for each sample, just batched
         for i, data in tqdm(enumerate(loader), total=len(loader)):
-            x = data[0]  .to("cuda")
-            y = data[1].to("cuda")
-            yhat = self.classifier(x)
-            losses[i]=F.cross_entropy(yhat, y).item()
-        return losses.cpu().numpy()
+            with torch.no_grad():
+                x = data[0].to("cuda")
+                y = data[1].to("cuda")
+                yhat = self.classifier(x)
+                losses[i]=criterion(yhat, y).cpu().numpy()
+        return losses.flatten()
 
     def ind_loader(self):
-        return DataLoader(self.ind, shuffle=False, num_workers=5)
+        return DataLoader(self.ind, shuffle=False, num_workers=5, batch_size=self.batch_size, drop_last=True)
 
 
     def ood_loaders(self):
         if self.mode=="noise":
             ood_sets = [TransformedDataset(self.ind_val, noise) for noise in self.noise_range]
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes),
-                                num_workers=self.num_workers),
+                                num_workers=self.num_workers, batch_size=self.batch_size, drop_last=True),
                      DataLoader(test_dataset,
                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
-                                num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
+                                num_workers=self.num_workers, batch_size=self.batch_size, drop_last=True),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers, batch_size=self.batch_size, drop_last=True)] for
                     test_dataset in ood_sets]
             dicted = [dict([(sampler, loader) for sampler, loader in
                             zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
@@ -319,10 +316,10 @@ class NicoTestBed(BaseTestBed):
             pass
         else:
             test_datasets = self.oods
-            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5),
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5, batch_size=self.batch_size, drop_last=True),
                          DataLoader(test_dataset,
-                                    sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=5),
-                         DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=5)] for test_dataset in test_datasets]
+                                    sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=5, batch_size=self.batch_size, drop_last=True),
+                         DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=5, batch_size=self.batch_size, drop_last=True)] for test_dataset in test_datasets]
 
             dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict([(context, dicted) for context, dicted in zip(self.contexts, dicted)])
@@ -352,7 +349,7 @@ class CIFAR10TestBed(NoiseTestBed):
         self.classifier = WrappedResnet(self.classifier)
         if rep_model=="glow":
             self.glow = Glow(3, 32, 4).cuda().eval()
-            self.glow.load_state_dict(torch.load("glow_logs/CIFAR10_checkpoint/model_010001.pt")["state_dict"])
+            self.glow.load_state_dict(torch.load("glow_logs/CIFAR10_checkpoint/model_040001.pt"))
             self.rep_model=self.glow
         elif rep_model=="vae":
             self.vae = CIFARVAE().cuda().eval()
@@ -442,13 +439,22 @@ class ImagenetteTestBed(NoiseTestBed):
         # self.classifier = ResNetClassifier(num_classes=10, resnet_version=101).cuda().eval()
         self.classifier = ResNetClassifier.load_from_checkpoint("Imagenette_logs/checkpoints/epoch=82-step=24568.ckpt", resnet_version=101,num_classes=10)
         self.classifier.eval().to("cuda")
+        if rep_model == "glow":
+            print("Using glow")
+            self.glow = Glow(3, 32, 4).cuda().eval()
+            dict = torch.load("glow_logs/Imagenette_checkpoint/model_040001.pt")
+            self.glow.load_state_dict(dict)
+            self.rep_model = self.glow
 
-        config = yaml.safe_load(open("vae/configs/vae.yaml"))
-        self.vae = VanillaVAE(3, 512).cuda().eval()
-        vae_exp = VAEXperiment(self.vae, config)
-        # vae_exp.load_state_dict(
-        #     torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
-        #         "state_dict"])
+        elif rep_model=="vae":
+            config = yaml.safe_load(open("vae/configs/vae.yaml"))
+            self.vae = VanillaVAE(3, 512).cuda().eval()
+            vae_exp = VAEXperiment(self.vae, config)
+            vae_exp.load_state_dict(
+                torch.load("vae_logs/Imagenette/version_0/checkpoints/epoch=106-step=126581.ckpt")[
+                    "state_dict"])
+        else:
+            self.rep_model=self.classifier
 
         self.num_classes = 10
         self.ind, self.ind_val = build_imagenette_dataset("../../Datasets/imagenette2", self.trans,self.trans)

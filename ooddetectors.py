@@ -86,14 +86,15 @@ class RabanserSD(BaseSD):
         #     torch.multiprocessing.set_start_method('spawn') #bodge code, sorry.
 
     def get_encodings(self, dataloader):
-        encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
+        encodings = np.zeros((len(dataloader),32, self.rep_model.latent_dim))
         print(encodings.shape)
+
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0]
             with torch.no_grad():
                 x = x.to("cuda").float()
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy() #mu from vae or features from classifier
-        return encodings
+        return encodings.reshape(-1, encodings.shape[-1])
 
     def get_k_nearest(self, ind_samples):
         pass
@@ -357,13 +358,17 @@ class FeatureSD(BaseSD):
         self.num_features=num_features
 
     def get_features_encodings(self, dataloader):
-        features = np.zeros((len(dataloader), 1))
-        encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
+        features = np.zeros((len(dataloader),32))
+        encodings = np.zeros((len(dataloader),32, self.rep_model.latent_dim))
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0].cuda()
             features[i] = self.feature_fn(self.rep_model, x, self.num_features).cpu().numpy()
             with torch.no_grad():
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
+        features = features.flatten()
+        encodings = encodings.reshape(-1, encodings.shape[-1])
+        # print(features)
+        # print(features.shape)
         return features, encodings
 
     def paralell_process(self,start, stop, biased_sampler_encodings, biased_sampler_features, ind_encodings, ind_features, fold_name, biased_sampler_name, losses):
@@ -372,10 +377,10 @@ class FeatureSD(BaseSD):
         # print(f"{fold_name}: {sample_norms}")
         if self.k!=0:
             k_nearest_ind = get_debiased_samples(ind_encodings, ind_features, sample_encodings, sample_norms, k=self.k)
-            p_value = ks_2samp(k_nearest_ind[:, 0], sample_norms[:, 0])[1]
+            p_value = ks_2samp(k_nearest_ind, sample_norms)[1]
             print("\t\t", p_value)
         else:
-            p_value = ks_2samp(sample_norms[:,0], ind_features[:,0])[1]
+            p_value = ks_2samp(sample_norms, ind_features)[1]
         return p_value,losses[fold_name][biased_sampler_name][start:stop]
 
     def compute_pvals_and_loss_for_loader(self, ind_norms, ind_encodings, dataloaders, sample_size):
@@ -474,9 +479,12 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
         # print(pd.unique(data["sampler"]))
         if exclude_sampler!="":
             data = data[data["sampler"]!=exclude_sampler]
-        if "noise" in str(pd.unique(data["fold"])) and filter_noise:
-            max_noise = sorted([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "noise" in i])[-1]
-            data = data[(data["fold"] == f"noise_{max_noise}") | (data["fold"] == "ind")]
+        if "_" in str(pd.unique(data["fold"])) and filter_noise:
+            folds =  pd.unique(data["fold"])
+            prefix = folds[folds != "ind"][0].split("_")[0]
+            max_noise = sorted([float(i.split("_")[1]) for i in pd.unique(data["fold"]) if "_" in i])[-1]
+            data = data[(data["fold"] == f"{prefix}_{max_noise}") | (data["fold"] == "ind")]
+
         try:
             data["loss"] = data["loss"].map(lambda x: float(x))
         except:
@@ -486,11 +494,11 @@ def open_and_process(fname, filter_noise=False, combine_losses=True, exclude_sam
                 data["loss"] = data["loss"].apply(lambda x: np.mean(x))
             else:
                 data=data.expbrlode("loss")
-        # data.loc[data['fold'] == 'ind', 'oodness'] = 0
-        # data.loc[data['fold'] != 'ind', 'oodness'] = 2
-        data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].max()
-
-
+        data.loc[data['fold'] == 'ind', 'oodness'] = 0
+        data.loc[data['fold'] != 'ind', 'oodness'] = 2
+        # data["oodness"] = data["loss"] / data[data["fold"] == "ind"]["loss"].max()
+        if filter_noise and "_" in str(pd.unique(data["fold"])):
+            assert len(pd.unique(data["fold"])) == 2, f"Expected 2 unique folds, got {pd.unique(data['fold'])}"
         return data
     except FileNotFoundError:
         # print(f"File {fname} not found")

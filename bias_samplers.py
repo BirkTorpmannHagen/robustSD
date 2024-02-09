@@ -53,21 +53,21 @@ class ClusterSampler(Sampler):
         self.data_source = data_source
         self.rep_model = rep_model
         self.rep_model.eval()
-        self.reps = np.zeros((len(data_source), rep_model.latent_dim))
-
+        self.loader = DataLoader(data_source, batch_size=32, drop_last=True)
+        self.reps = np.zeros((len(self.loader), 32, rep_model.latent_dim))
         with torch.no_grad():
-            for i, list in tqdm(enumerate(DataLoader(self.data_source))):
+            for i, list in tqdm(enumerate(self.loader)):
                 x=list[0].to("cuda").float()
                 self.reps[i] = rep_model.get_encoding(x).cpu().numpy()
-        np.save("reps.npy", self.reps)
-        self.num_clusters = max(int(len(data_source)//(sample_size+0.1)),4)
+        self.reps = self.reps.reshape(-1, rep_model.latent_dim)
+        self.num_clusters = max(int(len(self.loader)*32//(sample_size+0.1)),4)
         self.kmeans = KMeans(n_clusters=self.num_clusters, random_state=0).fit_predict(self.reps)
         # pca =PCA()
         # pca.fit_transform_show(X=self.reps, y=self.kmeans)
 
 
     def __iter__(self):
-        return iter(np.concatenate([np.arange(len(self.data_source))[self.kmeans==i] for i in range(self.num_clusters)], axis=0))
+        return iter(np.concatenate([np.arange(len(self.loader)*32)[self.kmeans==i] for i in range(self.num_clusters)], axis=0))
 
     def __len__(self):
         return len(self.data_source)

@@ -5,7 +5,8 @@ from math import log, pi, exp
 import numpy as np
 from scipy import linalg as la
 
-logabs = lambda x: torch.log(torch.abs(x))
+def logabs(x):
+    return torch.log(torch.abs(x))
 
 
 class ActNorm(nn.Module):
@@ -346,7 +347,7 @@ class Glow(nn.Module):
             self.blocks.append(Block(n_channel, n_flow, affine=affine, conv_lu=conv_lu))
             n_channel *= 2
         self.blocks.append(Block(n_channel, n_flow, split=False, affine=affine))
-        self.latent_dim = self.get_encoding(torch.zeros(1, in_channel, 32, 32)).shape[1]
+        self.latent_dim = 384 # hard coded due to mysterious bug that causes NaNs in training if this is defined via a forward call
     def forward(self, input):
         log_p_sum = 0
         logdet = 0
@@ -366,7 +367,12 @@ class Glow(nn.Module):
             return self.forward(input)[0]
 
     def get_encoding(self, input):
-        return self.forward(input)[2][-1].flatten(1)
+        print(input.shape)
+        for i in self.forward(input)[2]:
+            print(i.shape)
+        # print(self.forward(input)[2][-1].shape)
+        with torch.no_grad():
+            return self.forward(input)[2][-1].flatten(1)
 
 
     def reverse(self, z_list, reconstruct=False):

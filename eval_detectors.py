@@ -126,12 +126,12 @@ def grad_data(k=0):
     sample_range = [30, 50, 100, 200, 500]
 
     for grad_fn in [typicality_ks_glow]:
-        for k in [0,    5]:
-            print(grad_fn, k)
+        for k in [5]:
             # collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn, k=k)
-            collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
-            # collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
-            # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
+            # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
+
+            collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
+            collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
 
 
         # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn,k=k)
@@ -147,24 +147,20 @@ def grad_data(k=0):
        # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn)
        # collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn)
 
+def collect_semantic_data():
+    for sample_size in [30, 50, 100, 200, 500]:
+        for fold in ["CIFAR10", "CIFAR100", "MNIST", "EMNIST"]:
+            bench = SemanticTestBed32x32(sample_size, 10, mode=fold, rep_model="glow")
+            tsd = FeatureSD(bench.glow, typicality_ks_glow)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+                          fname=f"new_data/Semantic_{fold}_typicality_{sample_size}.csv")
+
 
 if __name__ == '__main__':
     from features import *
     torch.multiprocessing.set_start_method('spawn')
-    # for testbed_constructor in [CIFAR10TestBed, CIFAR100TestBed, ImagenetteTestBed, NicoTestBed, NjordTestBed]:
-    # for testbed_constructor in [CIFAR10TestBed]:
-    #     for sample_size in [30, 50, 100, 200, 500][::-1]:
-    #         for k in [0,5]:
-    #             bench = testbed_constructor(sample_size, mode="normal", rep_model="vae")
-    #             tsd = TypicalitySD(bench.vae, k=k)
-    #             tsd.register_testbed(bench)
-    #             if k==5:
-    #                 fname = f"new_data/{testbed_constructor.__name__[:-7]}_normal_typicality_5NN_{sample_size}.csv"
-    #             else:
-    #                 fname = f"new_data/{testbed_constructor.__name__[:-7]}_normal_typicality_{sample_size}.csv"
-    #
-    #             compute_stats(*tsd.compute_pvals_and_loss(sample_size),
-    #                           fname=fname)
+
     grad_data(5)
     # sample_range = [50, 100, 200, 500]
     # sample_range = [100]
