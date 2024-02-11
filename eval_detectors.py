@@ -122,8 +122,9 @@ def grad_data(k=0):
             print(grad_fn, k)
 
             # collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn, k=k)
-
             collect_gradient_data(sample_range, PolypTestBed, "Polyp", grad_fn, k=k)
+            for dataset in ["MNIST", "EMNIST"]:
+                collect_gradient_data(sample_range, SemanticTestBed32x32, "Semantic", grad_fn, dataset, k=k)
             # if grad_fn!=cross_entropy:
             #     collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
             # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
@@ -151,6 +152,23 @@ if __name__ == '__main__':
 
     # grad_data(5)
     sample_range = [30, 50, 100]
+    for mode in ["MNIST", "EMNIST", "CIFAR10", "CIFAR100"]:
+        for sample_size in [30, 50, 100, 200, 500]:
+            bench = SemanticTestBed32x32(sample_size, mode="normal", rep_model="vae")
+            tsd = TypicalitySD(bench.vae, k=0)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+
+                          fname=f"new_data/Semantic_{mode}_typicality_5NN_{sample_size}")
+
+            bench = SemanticTestBed32x32(sample_size, mode="normal", rep_model="vae")
+            tsd = RabanserSD(bench.classifier)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size),
+
+                          fname=f"new_data/Semantic_{mode}_typicality_5NN_{sample_size}")
+    # grad_data(5)
+    # sample_range = [50, 100, 200, 500]
     # sample_range = [100]
     # collect_severitydata()
     collect_all_data(sample_range)

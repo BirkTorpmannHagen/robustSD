@@ -234,13 +234,27 @@ class TypicalitySD(BaseSD):
     def compute_encodings_entropy(self, dataloader):
         log_likelihoods = []
         encodings = np.zeros((len(dataloader), self.rep_model.latent_dim))
-        for i, batch in enumerate(dataloader):
+        for i, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = batch[0].to("cuda")
             log_likelihoods.append(self.rep_model.estimate_log_likelihood(x))
             with torch.no_grad():
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
         entropies = -(torch.tensor(log_likelihoods))
         return encodings,entropies
+
+    def paralell_process(self, start, stop, biased_sampler_encodings, biased_sampler_entropies, ind_encodings, ind_entropies, fold_name, biased_sampler_name, losses, sample_size):
+        sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
+        knn_entropies = get_debiased_samples(ind_encodings, ind_entropies, biased_sampler_encodings, sample_entropy,
+                                             k=self.k)
+        if self.k != 0:
+            bootstrap_entropy_distribution = sorted(
+                [np.random.choice(knn_entropies, sample_size).mean().item() for i in range(10000)])
+        else:
+            bootstrap_entropy_distribution = self.bootstrap_entropy_distribution
+        p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+        print("\t",p_value)
+        return p_value, losses[fold_name][biased_sampler_name][start:stop]
+
 
     def compute_pvals_and_loss_for_loader(self, ind_encodings, ind_entropies, dataloaders, sample_size):
         encodings_entropies = dict(
@@ -275,26 +289,31 @@ class TypicalitySD(BaseSD):
                            for _ in range(len(loader_w_sampler))]
                           )) for
                  loader_w_sampler in dataloaders.values()]))
+        print("computing")
+        self.bootstrap_entropy_distribution = sorted(
+            [np.random.choice(ind_entropies, sample_size).mean().item() for i in range(10000)])
 
         for fold_name, fold_entropies in encodings_entropies.items():
-
+            print(fold_name)
             for biased_sampler_name, biased_sampler_encoding_entropies in fold_entropies.items():
-                for start, stop in list(zip(range(0, len(biased_sampler_encoding_entropies), sample_size),
-                                            range(sample_size, len(biased_sampler_encoding_entropies) + sample_size,
-                                                  sample_size)))[
-                                   :-1]:
-                    biased_sampler_encodings, biased_sampler_entropies = biased_sampler_encoding_entropies
-                    sample_entropy = torch.mean(biased_sampler_entropies[start:stop])
-                    if self.k==0:
-                        bootstrap_entropy_distribution = sorted(
-                            [np.random.choice(ind_entropies, sample_size).mean().item() for i in range(10000)])
-                    else:
-                        bootstrap_entropy_distribution = sorted(
-                            [np.random.choice(get_debiased_samples(ind_encodings, ind_entropies, biased_sampler_encodings, sample_entropy, k=self.k), sample_size).mean().item() for i in range(10000)])
-                    p_value = 1 - np.mean([1 if sample_entropy > i else 0 for i in bootstrap_entropy_distribution])
+                biased_sampler_encodings, biased_sampler_entropies = biased_sampler_encoding_entropies
+                print(biased_sampler_name)
+                    # print(biased_sampler_encoding_entropies)
+                args = [biased_sampler_encodings, biased_sampler_entropies, ind_encodings, ind_entropies, fold_name,
+                        biased_sampler_name, losses, sample_size]
+                pool = multiprocessing.Pool(processes=20)
+                startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
+                                              range(sample_size, len(biased_sampler_encodings) + sample_size,
+                                                    sample_size)))[
+                                     :-1]
+                # results = []
+                # for start, stop in startstop_iterable:
+                #     results.append(self.paralell_process(start, stop, biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses))
+                results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
+                pool.close()
+                for p_value, sample_loss in results:
                     p_values[fold_name][biased_sampler_name].append(p_value)
-                    sample_losses[fold_name][biased_sampler_name].append(
-                        losses[fold_name][biased_sampler_name][start:stop])
+                    sample_losses[fold_name][biased_sampler_name].append(sample_loss)
 
         return p_values, sample_losses
 
@@ -310,17 +329,18 @@ class TypicalitySD(BaseSD):
         # sample_size=min(sample_size, len(self.testbed.ind_val_loaders()[0]))
 
         # resubstitution estimation of entropy
-
         ind_encodings, ind_entropies = self.compute_encodings_entropy(self.testbed.ind_loader())
+        print("got ind encodings")
 
 
         # compute ind_val pvalues for each sampler
         ind_pvalues, ind_losses = self.compute_pvals_and_loss_for_loader(ind_encodings, ind_entropies,
                                                                          self.testbed.ind_val_loaders(), sample_size)
-
+        print("got ind pvalues")
 
         ood_pvalues, ood_losses = self.compute_pvals_and_loss_for_loader(ind_encodings, ind_entropies,
-                                                                         self.testbed.ood_loaders(), sample_size)
+                                                                               self.testbed.ood_loaders(), sample_size)
+        print("got ood pvalues")
         return ind_pvalues, ood_pvalues, ind_losses, ood_losses
 
 class FeatureSD(BaseSD):

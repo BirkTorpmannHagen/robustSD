@@ -133,7 +133,7 @@ class NoiseTestBed(BaseTestBed):
         return losses.cpu().numpy()
 
 class NjordTestBed(BaseTestBed):
-    def __init__(self, sample_size, mode="normal"):
+    def __init__(self, sample_size, mode="normal", rep_model="vae"):
         super().__init__(sample_size, mode=mode)
         self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
         self.classifier = fetch_model("njord/runs/train/exp8/weights/best.pt").float().cuda()

@@ -31,7 +31,7 @@ import numpy as np
 import seaborn as sns
 import math
 # pd.set_option('display.precision', 2)
-pd.options.display.float_format = '{:.3f}'.format
+pd.options.display.float_format = '{:.2f}'.format
 
 def open_and_merge():
         # summarize overall results;
@@ -951,8 +951,17 @@ if __name__ == '__main__':
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
     # boxplot_test()
     summarize_results(placeholder=False)
-    # df = get_semantic_metrics_for_all_experiments()
+    df = get_semantic_metrics_for_all_experiments()
     # df = df[df["Sample Size"]==200]
+# <<<<<<< HEAD
+#     df["KN"] = df["OOD Detector"].apply(lambda x: "5NN" in x)
+#     g = sns.FacetGrid(data=df, col="Sample Size", col_wrap=2)
+#     g.map_dataframe(sns.boxplot, hue="KN", y="DR", x="Dataset")
+#     plt.savefig("test_plots/semantic.png")
+#     plt.show()
+    df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+        print(df)
     # df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(df)
