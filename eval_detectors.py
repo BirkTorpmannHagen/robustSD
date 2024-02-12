@@ -50,7 +50,6 @@ def collect_data(sample_range, testbed_constructor, dataset_name, mode="normal")
             tsd.register_testbed(bench)
             compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
                           fname=f"new_data/{dataset_name}_{mode}_ks_5NN_{sample_size}.csv")
-
         for sample_size in sample_range:
             bench = testbed_constructor(sample_size, mode=mode)
             tsd = RabanserSD(bench.vae, processes=1)
@@ -70,27 +69,20 @@ def collect_data(sample_range, testbed_constructor, dataset_name, mode="normal")
         #     tsd.register_testbed(bench)
         #     compute_stats(*tsd.compute_pvals_and_loss(sample_size),
         #                   fname=f"new_data/{dataset_name}_{mode}_typicality_{sample_size}.csv")
+
         for sample_size in sample_range:
             bench = testbed_constructor(sample_size, "classifier", mode=mode)
-            tsd = FeatureSD(bench.classifier, processes=5)
+            tsd = RabanserSD(bench.classifier, select_samples=True,k=5, processes=1)
             tsd.register_testbed(bench)
             compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-                          fname=f"new_data/{dataset_name}_{mode}_gradient_{sample_size}.csv")
+                          fname=f"new_data/{dataset_name}_{mode}_ks_5NN_{sample_size}.csv")
 
-
-        # for sample_size in sample_range:
-        #     bench = testbed_constructor(sample_size, "classifier", mode=mode)
-        #     tsd = RabanserSD(bench.classifier, select_samples=True,k=5, processes=1)
-        #     tsd.register_testbed(bench)
-        #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-        #                   fname=f"new_data/{dataset_name}_{mode}_ks_5NN_{sample_size}.csv")
-        #
-        # for sample_size in sample_range:
-        #     bench = testbed_constructor(sample_size, "classifier", mode=mode)
-        #     tsd = RabanserSD(bench.classifier, processes=1)
-        #     tsd.register_testbed(bench)
-        #     compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-        #                   fname=f"new_data/{dataset_name}_{mode}_ks_{sample_size}.csv")
+        for sample_size in sample_range:
+            bench = testbed_constructor(sample_size, "classifier", mode=mode)
+            tsd = RabanserSD(bench.classifier, processes=1)
+            tsd.register_testbed(bench)
+            compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                          fname=f"new_data/{dataset_name}_{mode}_ks_{sample_size}.csv")
 
 
 def collect_severitydata():
@@ -103,14 +95,14 @@ def collect_severitydata():
     # collect_data(sample_range, NjordTestBed, "Njord")
 
 def collect_all_data(sample_range):
-    pass
-    # collect_data(sample_range, PolypTestBed, "Polyp", mode="noise")
+    collect_data(sample_range, SemanticTestBed32x32, "MNIST", mode="MNIST")
+    collect_data(sample_range, PolypTestBed, "Polyp", mode="normal")
     # collect_data(sample_range, NicoTestBed, "NICO", mode="noise")
     # collect_data(sample_range, NjordTestBed, "Njord", mode="noise")
 
-    collect_data(sample_range, CIFAR10TestBed, "CIFAR10")
-    collect_data(sample_range, CIFAR100TestBed, "CIFAR100")
-    collect_data(sample_range, ImagenetteTestBed, "imagenette")
+    # collect_data(sample_range, CIFAR10TestBed, "CIFAR10")
+    # collect_data(sample_range, CIFAR100TestBed, "CIFAR100")
+    # collect_data(sample_range, ImagenetteTestBed, "imagenette")
     # collect_data(sample_range, PolypTestBed, "Polyp")
     #collect_data(sample_range, NicoTestBed, "NICO")
     # collect_data(sample_range, NjordTestBed, "Njord")
@@ -122,14 +114,17 @@ def collect_all_data(sample_range):
     # collect_data(sample_range, NicoTestBed, "NICO", mode="severity")
     # collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
 
-def grad_data(k=0):
-    sample_range = [30, 50, 100, 200, 500]
+def grad_data():
+    sample_range = [30, 50, 100, 200]
 
-    for grad_fn in [typicality_ks_glow]:
-        for k in [0, 5]:
-            # collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn, k=k)
-            # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
-            collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn, k=k)
+    for k in [0, 5]:
+        for dataset in ["MNIST", "EMNIST", "CIFAR10", "CIFAR100"]:
+            for sample_size in sample_range:
+                bench = SemanticTestBed32x32(sample_size, 5, dataset, rep_model="classifier")
+                tsd = RabanserSD(bench.classifier, processes=10, k=k, select_samples=k==5)
+                tsd.register_testbed(bench)
+                compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                              fname=f"new_data/Semantic_{dataset}_ks_{sample_size}.csv")            # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
 
             # collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
             # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
@@ -161,11 +156,6 @@ def collect_semantic_data():
 if __name__ == '__main__':
     from features import *
     torch.multiprocessing.set_start_method('spawn')
-
-    grad_data(5)
-    # sample_range = [50, 100, 200, 500]
-    # sample_range = [100]
-    # collect_severitydata()
-    # collect_all_data(sample_range)
+    grad_data()
 #     bench = NjordTestBed(10)
     # bench.split_datasets()
