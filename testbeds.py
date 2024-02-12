@@ -133,16 +133,23 @@ class NoiseTestBed(BaseTestBed):
 class NjordTestBed(BaseTestBed):
     def __init__(self, sample_size, mode="normal", rep_model="vae"):
         super().__init__(sample_size, mode=mode)
-        self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
         self.classifier = fetch_model("njord/runs/train/exp8/weights/best.pt").float().cuda()
         self.classifier.hyp = yaml.safe_load(open("/home/birk/Projects/robustSD/njord/data/hyps/hyp.scratch-low.yaml", "r"))
         self.loss = ComputeLoss(self.classifier)
-        self.vae_exp = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
-        self.vae_exp.load_state_dict(
+        if rep_model=="vae":
+            self.rep_model = self.vae = VanillaVAE(3, 512).to("cuda").eval()
+            self.vae_exp = VAEXperiment(self.rep_model, DEFAULT_PARAMS)
+            self.vae_exp.load_state_dict(
             torch.load("vae_logs/NjordDataset/version_13/checkpoints/epoch=37-step=119814.ckpt")[
                 "state_dict"])
-        self.ind, self.ind_val, self.ood = build_njord_datasets()
+        elif rep_model=="glow":
+            self.rep_model = self.glow = Glow(3, 32, 4).cuda().eval()
+            self.glow.load_state_dict(torch.load("glow_logs/NjordDataset_checkpoint/model_040001.pt"))
+        else:
+            raise NotImplementedError
+        self.ind, self.ind_val, self.ood = build_njord_datasets(512)
         self.collate_fn = LoadImagesAndLabels.collate_fn
+
 
     def loader(self, dataset, sampler, num_workers=1):
         return DataLoader(dataset, sampler=sampler, collate_fn=self.collate_fn, num_workers=self.num_workers)
@@ -195,10 +202,8 @@ class NjordTestBed(BaseTestBed):
             x = x.cuda()
             targets = targets.cuda()
             preds, train_out = self.classifier(x)
-            for j in range(train_out.shape[0]):
-            # preds.append(preds.detach().cpu().numpy())
-                loss, _ = self.loss(train_out[j], targets[j])
-                losses[i]=loss.item()
+            loss, _ = self.loss(train_out, targets)
+            losses[i]=loss.item()
         return losses
         # return losses, preds
 
@@ -326,7 +331,7 @@ class NicoTestBed(BaseTestBed):
             return double_dicted
 
     def ind_val_loaders(self):
-        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=5)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
+        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=5, batch_size=self.batch_size, drop_last=True)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
                                                                               ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
                                                                               RandomSampler(self.ind_val)]])}
         return loaders
@@ -557,8 +562,8 @@ class SemanticTestBed32x32(BaseTestBed):
         self.trans = transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor(), ])
-        self.ood_dict = {"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
-                "CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
+        self.ood_dict = {#"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
+                #"CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
                 "MNIST": MNIST3("../../Datasets/mnist", train=False, transform=self.trans, download=True),
                 "EMNIST": EMNIST3("../../Datasets/emnist", train=False, transform=self.trans, download=True)}
         self.ind, self.ind_val = torch.utils.data.random_split(self.ood_dict.pop(mode), [0.5, 0.5])
@@ -614,18 +619,18 @@ class SemanticTestBed32x32(BaseTestBed):
         return [-1]*len(loader)
 
     def ind_loader(self):
-        return DataLoader(self.ind, shuffle=False, num_workers=5)
+        return DataLoader(self.ind, shuffle=False, num_workers=5, batch_size=self.batch_size, drop_last=True)
 
 
     def ood_loaders(self):
         if self.mode=="noise":
             ood_sets = [TransformedDataset(self.ind_val, noise) for noise in self.noise_range]
             oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes),
-                                num_workers=self.num_workers),
+                                num_workers=self.num_workers, batch_size=self.batch_size, drop_last=True),
                      DataLoader(test_dataset,
                                 sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size),
-                                num_workers=self.num_workers),
-                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers)] for
+                                num_workers=self.num_workers, batch_size=self.batch_size, drop_last=True),
+                     DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=self.num_workers, batch_size=self.batch_size, drop_last=True)] for
                     test_dataset in ood_sets]
             dicted = [dict([(sampler, loader) for sampler, loader in
                             zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
@@ -635,17 +640,17 @@ class SemanticTestBed32x32(BaseTestBed):
             pass
         else:
             test_datasets = self.oods
-            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5),
+            oods = [[DataLoader(test_dataset, sampler=ClassOrderSampler(test_dataset, num_classes=self.num_classes), num_workers=5, batch_size=self.batch_size, drop_last=True),
                          DataLoader(test_dataset,
-                                    sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=5),
-                         DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=5)] for test_dataset in test_datasets]
+                                    sampler=ClusterSampler(test_dataset, self.rep_model, sample_size=self.sample_size), num_workers=5, batch_size=self.batch_size, drop_last=True),
+                         DataLoader(test_dataset, sampler=RandomSampler(test_dataset), num_workers=5, batch_size=self.batch_size, drop_last=True)] for test_dataset in test_datasets]
 
             dicted = [dict([(sampler, loader) for sampler, loader in zip(["ClassOrderSampler", "ClusterSampler", "RandomSampler"], ood)]) for ood in oods]
             double_dicted = dict([(context, dicted) for context, dicted in zip(self.ood_dict.keys(), dicted)])
             return double_dicted
 
     def ind_val_loaders(self):
-        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=5)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
+        loaders =  {"ind": dict([(sampler.__class__.__name__, DataLoader(self.ind_val, sampler=sampler, num_workers=5, batch_size=self.batch_size, drop_last=True)) for sampler in [ClassOrderSampler(self.ind_val, num_classes=self.num_classes),
                                                                               ClusterSampler(self.ind_val, self.rep_model, sample_size=self.sample_size),
                                                                               RandomSampler(self.ind_val)]])}
         return loaders

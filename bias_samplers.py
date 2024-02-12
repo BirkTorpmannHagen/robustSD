@@ -4,6 +4,7 @@ from torch.utils.data import Sampler, DataLoader
 from sklearn.cluster import KMeans
 import numpy as np
 from tqdm import tqdm
+from njord.utils.dataloaders import LoadImagesAndLabels
 from yellowbrick.features import PCA
 
 class ClassOrderSampler(Sampler):
@@ -53,7 +54,10 @@ class ClusterSampler(Sampler):
         self.data_source = data_source
         self.rep_model = rep_model
         self.rep_model.eval()
-        self.loader = DataLoader(data_source, batch_size=32, drop_last=True)
+        if "jord" in str(data_source):
+            self.loader = DataLoader(data_source, batch_size=32, drop_last=True, collate_fn=LoadImagesAndLabels.collate_fn) #super hacky
+        else:
+            self.loader = DataLoader(data_source, batch_size=32, drop_last=True)
         self.reps = np.zeros((len(self.loader), 32, rep_model.latent_dim))
         with torch.no_grad():
             for i, list in tqdm(enumerate(self.loader)):

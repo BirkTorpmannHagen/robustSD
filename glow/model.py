@@ -1,4 +1,5 @@
 import torch
+import torchvision.transforms
 from torch import nn
 from torch.nn import functional as F
 from math import log, pi, exp
@@ -366,13 +367,11 @@ class Glow(nn.Module):
         with torch.no_grad():
             return self.forward(input)[0]
 
-    def get_encoding(self, input):
-        print(input.shape)
-        for i in self.forward(input)[2]:
-            print(i.shape)
+    def get_encoding(self, x):
+        x_rez = torchvision.transforms.Resize((32, 32))(x)
         # print(self.forward(input)[2][-1].shape)
         with torch.no_grad():
-            return self.forward(input)[2][-1].flatten(1)
+            return self.forward(x_rez)[2][-1].flatten(1)
 
 
     def reverse(self, z_list, reconstruct=False):

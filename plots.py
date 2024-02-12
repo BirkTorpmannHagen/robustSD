@@ -1,5 +1,7 @@
 import copy
 
+import torchvision.transforms
+
 from ooddetectors import open_and_process
 from vae.vae_experiment import VAEXperiment
 from vae.models.vanilla_vae import ResNetVAE
@@ -487,7 +489,7 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     plt.savefig("test_plots/samplesizebreakdown.png")
     plt.show()
 
-def breakdown_by_sampler(placeholder=False, metric="DR"):
+def breakdown_by_sampler(placeholder=False, metric="FPR"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     df = df.groupby(["Dataset", "Sampler", "OOD Detector"])[metric].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
@@ -841,35 +843,45 @@ def illustrate_bias_types():
 
 def compare_testbed_encs():
     testbed1 = SemanticTestBed32x32(100, "classifier", mode="MNIST")
-    ind_val_loaders = testbed1.ind_val_loaders()
-    ood_loaders = testbed1.ood_loaders()
+    trans = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+
+    ind_val_loader = MNIST3("../../Datasets/MNIST", train=False, transform=trans)
+    ood_loader = EMNIST3("../../Datasets/EMNIST", train=False, transform=trans)
     dsd = RabanserSD(testbed1.classifier)
-    val_encodings = dict(
-            zip(ind_val_loaders.keys(),
-                [dict(zip(loader_w_sampler.keys(),
-                         [dsd.get_encodings(loader)
-                          for sampler_name, loader in loader_w_sampler.items()]
-                         )) for
-                     loader_w_sampler in ind_val_loaders.values()]))
-
-    test_encodings = dict(
-            zip(ood_loaders.keys(),
-                [dict(zip(loader_w_sampler.keys(),
-                         [dsd.get_encodings(loader)
-                          for sampler_name, loader in loader_w_sampler.items()]
-                         )) for
-                     loader_w_sampler in ood_loaders.values()]))
-
-
-    val_encodings = val_encodings["ind"]["RandomSampler"]
+    encodings = np.zeros((len(ind_val_loader), 32, dsd.rep_model.latent_dim))
+    ys = np.zeros((len(ind_val_loader), 32))
+    from tqdm import tqdm
+    loader = DataLoader(ind_val_loader, batch_size=32, drop_last=True, shuffle=True)
+    for i, (x,y) in tqdm(enumerate(loader), total=len(loader)):
+        with torch.no_grad():
+            x = x.to("cuda")
+            encodings[i] = dsd.rep_model.get_encoding(x).cpu().numpy()
+            ys[i]=y
+    print(ys)
+    encodings = encodings.reshape(-1, dsd.rep_model.latent_dim)[:500]
+    ys = ys.reshape(-1)[:500]
+    #
+    #
+    #
+    #
+    # test_encodings =
+    #
+    # val_encodings = val_encodings["ind"]["RandomSampler"][:500]
+    # test_encodings = test_encodings["EMNIST"]["RandomSampler"][:500]
+    from sklearn.manifold import Isomap
+    # print("sneeding")
     pca = PCA(n_components=2)
-    mnist = pca.fit_transform(val_encodings)
-    emnist= pca.transform(test_encodings["EMNIST"]["RandomSampler"])
-    sns.scatterplot(x=mnist[:,0],y=mnist[:,1], alpha=0.9, label="MNIST")
-    sns.scatterplot(x=emnist[:,0],y=emnist[:,1], alpha=0.9, label="EMNIST")
-    plt.legend()
+    #
+    trans = pca.fit_transform(encodings)
+    print("sneeeded")
+    sns.scatterplot(x=trans[:len(encodings),0],y=trans[:len(encodings),1], alpha=0.9, hue=ys)
+    plt.xscale("log")
     plt.show()
-    plt.savefig("test_plots/mnist_v_emnist.png")
+    # # sns.scatterplot(x=trans[len(val_encodings):,0],y=trans[len(val_encodings):,1], alpha=0.9, label="EMNIST")
+    # plt.legend()
+    # plt.show()
+    plt.savefig("test_plots/mnist_classes.png")
+    print("all done")
 def plot_pvaluedist():
     df = open_and_process("data/CIFAR10_ks_100_fullloss.csv", combine_losses=False)
     df["pvalue"]=df["pvalue"].apply(lambda x: np.log10(x))
@@ -954,8 +966,9 @@ if __name__ == '__main__':
     # plot_lossvp_for_fold()
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
     # boxplot_test()
-    compare_testbed_encs()
+    # compare_testbed_encs()
     summarize_results(placeholder=False)
+    # input()
     # data_df = aggregate_semantic_data()
     # data_df = data_df[data_df["Sample Size"]==100]
     # # data_df = data_df[data_df["Dataset"]=="CIFAR10"]
@@ -968,13 +981,14 @@ if __name__ == '__main__':
     # plt.savefig("test_plots/semantic_kde.png")
     # plt.show()
 
-    df = get_semantic_metrics_for_all_experiments()
-    df["KN"] = df["OOD Detector"].apply(lambda x: "5NN" in x)
-    df["Base"] = df["OOD Detector"].apply(lambda x: x.split("_5NN")[0] if "5NN" in x else x)
-    g = sns.FacetGrid(data=df, col="Dataset", row="fold")
-    g.map_dataframe(sns.boxplot, hue="KN", y="DR", x="Base")
-    plt.savefig("test_plots/semantic.png")
-    plt.show()
+    # df = get_semantic_metrics_for_all_experiments()
+    # df = df[df["Sample Size"]==30]
+    # df["KN"] = df["OOD Detector"].apply(lambda x: "5NN" in x)
+    # df["Base"] = df["OOD Detector"].apply(lambda x: x.split("_5NN")[0] if "5NN" in x else x)
+    # g = sns.FacetGrid(data=df, col="Dataset", row="fold")
+    # g.map_dataframe(sns.boxplot, hue="KN", y="DR", x="Base")
+    # plt.savefig("test_plots/semantic.png")
+    # plt.show()
     # df = df.groupby(["Sampler", "Dataset", "fold", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(df)

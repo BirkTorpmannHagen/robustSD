@@ -339,15 +339,15 @@ def create_dataset(path,
         prefix=prefix,
         natively_trainable=natively_trainable)
     return dataset
-def build_njord_datasets():
+def build_njord_datasets(img_size):
 
 
     ind = check_dataset("njord/folds/ind_fold.yaml")
     ood = check_dataset("njord/folds/ood_fold.yaml")
 
-    train_set = create_dataset(ind["train"], 512, 16, 32,natively_trainable=True)
-    val_set =  create_dataset(ind["val"], 512, 16, 32, natively_trainable=True)
-    ood_set =  create_dataset(ood["val"], 512, 16, 32, natively_trainable=True)
+    train_set = create_dataset(ind["train"], img_size, 16, 32,natively_trainable=True)
+    val_set =  create_dataset(ind["val"], img_size, 16, 32, natively_trainable=True)
+    ood_set =  create_dataset(ood["val"], img_size, 16, 32, natively_trainable=True)
     return train_set, val_set, ood_set
 
 
@@ -410,6 +410,10 @@ class MNIST3(MNIST):
         img, target = super().__getitem__(index)
         return img.repeat(3,1,1), target
 
+    def __len__(self):
+        # return 1000 #debug
+        return super().__len__()
+
 class EMNIST3(EMNIST):
     def __init__(self, root, train, transform, download=False):
         super().__init__(root, "letters", train=train, transform=transform, download=download)
@@ -417,6 +421,10 @@ class EMNIST3(EMNIST):
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
         return img.repeat(3,1,1), target
+
+    def __len__(self):
+        # return 1000 #debug
+        return super().__len__()
 
 if __name__ == '__main__':
     trans = transforms.Compose([transforms.RandomHorizontalFlip(),

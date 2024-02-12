@@ -3,7 +3,7 @@ from tqdm import tqdm
 import numpy as np
 from PIL import Image
 from math import log, sqrt, pi
-
+from testbeds import LoadImagesAndLabels
 import argparse
 from domain_datasets import *
 import torch
@@ -16,7 +16,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def sample_data(dataset, batch_size):
-    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, num_workers=10)
+    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, num_workers=10, collate_fn=LoadImagesAndLabels.collate_fn)
+
     loader = iter(loader)
 
     while True:
@@ -25,8 +26,8 @@ def sample_data(dataset, batch_size):
 
         except StopIteration:
             loader = DataLoader(
-                dataset, shuffle=True, batch_size=batch_size, num_workers=4
-            )
+                dataset, shuffle=True, batch_size=batch_size, num_workers=4,collate_fn=LoadImagesAndLabels.collate_fn
+             )
             loader = iter(loader)
             yield next(loader)
 
@@ -138,9 +139,9 @@ if __name__ == "__main__":
     # train_new(dataset)
     # dataset = EMNIST3("../../Datasets/EMNIST", train=True, transform=trans, download=True)
     # train_new(dataset)
-
+    dataset,_,_= build_njord_datasets(32)
     # trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
-    dataset, _ = build_imagenette_dataset("../../Datasets/imagenette2", trans, trans)
+    # dataset, _ = build_imagenette_dataset("../../Datasets/imagenette2", trans, trans)
     train_new(dataset, img_size=32)
 
     # trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])

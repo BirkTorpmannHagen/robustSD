@@ -126,12 +126,13 @@ def grad_data(k=0):
     sample_range = [30, 50, 100, 200, 500]
 
     for grad_fn in [typicality_ks_glow]:
-        for k in [5]:
+        for k in [0, 5]:
             # collect_gradient_data(sample_range, CIFAR10TestBed, "CIFAR10", grad_fn, k=k)
             # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
+            collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn, k=k)
 
-            collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
-            collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
+            # collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
+            # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
 
 
         # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn,k=k)

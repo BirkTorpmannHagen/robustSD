@@ -87,8 +87,6 @@ class RabanserSD(BaseSD):
 
     def get_encodings(self, dataloader):
         encodings = np.zeros((len(dataloader),32, self.rep_model.latent_dim))
-        print(encodings.shape)
-
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0]
             with torch.no_grad():

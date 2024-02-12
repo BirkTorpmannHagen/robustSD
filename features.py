@@ -74,11 +74,10 @@ def jvp(model, image, num_features=1):
     jvp_mag = torch.norm(jvp, "fro").item()
     return jvp_mag
 
-def typicality_ks_glow(model, image, num_features=1):
+def typicality_ks_glow(model, img, num_features=1):
     assert num_features==1
-    if image.shape!=torch.Size([3, 32, 32]):
-        #Glow expects 3x32x32 images, otherwise too memory intensive
-        image = torchvision.transforms.Resize((32,32))(image)
+
+    image = torchvision.transforms.Resize((32,32))(img)
     image = image * 255
     n_bins = 2.0 ** 5
     image = torch.floor(image / 2 ** (8 - 5))
