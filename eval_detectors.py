@@ -28,9 +28,9 @@ def compute_stats(ind_pvalues, ood_pvalues_fold, ind_sample_losses, ood_sample_l
 def collect_gradient_data(sample_range, testbed_constructor, dataset_name, grad_fn, mode="normal", k=0):
     print(grad_fn)
     for sample_size in sample_range:
-        if grad_fn==typicality_ks_glow:
-            bench = testbed_constructor(sample_size, mode=mode, rep_model="glow")
-            tsd = FeatureSD(bench.glow, grad_fn, k=k)
+        if grad_fn==typicality_ks_glow or "Njord" in dataset_name:
+            bench = testbed_constructor(sample_size, mode=mode, rep_model="vae")
+            tsd = FeatureSD(bench.vae, grad_fn, k=k)
         else:
             bench = testbed_constructor(sample_size, "classifier", mode=mode)
             tsd = FeatureSD(bench.classifier, grad_fn,k=k)
@@ -115,22 +115,27 @@ def collect_all_data(sample_range):
     # collect_data(sample_range, NjordTestBed, "Njord", mode="severity")
 
 def grad_data():
-    sample_range = [30, 50, 100, 200]
+    sample_range = [500]
+    for k in [0]:
+            # for sample_size in sample_range:
+                # bench = SemanticTestBed32x32(sample_size, 5, dataset, rep_model="classifier")
+                # tsd = RabanserSD(bench.classifier, processes=10, k=k, select_samples=k==5)
+                # tsd.register_testbed(bench)
+                # compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
+                #               fname=f"new_data/Semantic_{dataset}_ks_{sample_size}.csv")            # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
 
-    for k in [0, 5]:
-        for dataset in ["MNIST", "EMNIST", "CIFAR10", "CIFAR100"]:
-            for sample_size in sample_range:
-                bench = SemanticTestBed32x32(sample_size, 5, dataset, rep_model="classifier")
-                tsd = RabanserSD(bench.classifier, processes=10, k=k, select_samples=k==5)
-                tsd.register_testbed(bench)
-                compute_stats(*tsd.compute_pvals_and_loss(sample_size, test="ks"),
-                              fname=f"new_data/Semantic_{dataset}_ks_{sample_size}.csv")            # collect_gradient_data(sample_range, CIFAR100TestBed, "CIFAR100", grad_fn, k=k)
+        # collect_gradient_data(sample_range, PolypTestBed, "Polyp", grad_fn=grad_magnitude, k=k, mode="normal")
+        if k==0:
+            # collect_gradient_data(sample_range[3:], NjordTestBed, "Njord", odin, k=k, mode="normal")
+            # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn=typicality_ks_glow, k=k, mode="normal")
+            #
+            # collect_gradient_data(sample_range, PolypTestBed, "Polyp", grad_fn=typicality_ks_glow, k=k, mode="normal")
+            collect_gradient_data(sample_range, NjordTestBed, "Njord", grad_fn=grad_magnitude, k=k, mode="normal")
+            # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k),
+        # else:
+            # collect_gradient_data([500], NjordTestBed, "Njord", grad_fn=typicality_ks_glow, k=k, mode="normal")
 
-            # collect_gradient_data(sample_range, NicoTestBed, "NICO", grad_fn, k=k)
-            # collect_gradient_data(sample_range, ImagenetteTestBed, "imagenette", grad_fn, k=k)
-
-
-        # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn,k=k)
+            # collect_gradient_data(sample_range, NjordTestBed, "NICO", grad_fn,k=k)
 
 
   #  sample_range = [100]

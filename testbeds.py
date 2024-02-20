@@ -35,13 +35,14 @@ class BaseTestBed:
         self.mode=mode
         self.sample_size = sample_size
         self.num_workers=num_workers
-        self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
-        print(self.noise_range)
-        # self.noise_range = [0.3]
+        # self.noise_range = np.arange(0.0, 0.35, 0.05)[1:]
+        #
+        # print(self.noise_range)
+        self.noise_range = [0.3]
         if self.mode=="severity":
             self.noise_range = [0.2]
             print(self.noise_range)
-        self.batch_size = 32
+        self.batch_size = 16
 
 
 
@@ -120,7 +121,7 @@ class NoiseTestBed(BaseTestBed):
             double_dicted = dict(zip(["transformed_{}".format(noise_val) for noise_val in self.noise_range], dicted))
             return double_dicted
     def compute_losses(self, loader):
-        losses = np.zeros((len(loader), 32))
+        losses = np.zeros((len(loader), self.batch_size))
         criterion = nn.CrossEntropyLoss(reduction="none") #still computing loss for each sample, just batched
         for i, data in tqdm(enumerate(loader), total=len(loader)):
             with torch.no_grad():
@@ -149,6 +150,7 @@ class NjordTestBed(BaseTestBed):
             raise NotImplementedError
         self.ind, self.ind_val, self.ood = build_njord_datasets(512)
         self.collate_fn = LoadImagesAndLabels.collate_fn
+        self.batch_size=1
 
 
     def loader(self, dataset, sampler, num_workers=1):
@@ -480,12 +482,13 @@ class PolypTestBed(BaseTestBed):
         super().__init__(sample_size)
         self.ind, self.ind_val, self.ood = build_polyp_dataset("../../Datasets/Polyps", ex=False)
         self.noise_range = np.arange(0.05, 0.3, 0.05)
+        self.batch_size=1
         #vae
         if rep_model=="vae":
             self.vae = VanillaVAE(in_channels=3, latent_dim=512).to("cuda").eval()
             vae_exp = VAEXperiment(self.vae, DEFAULT_PARAMS)
             vae_exp.load_state_dict(
-                torch.load("vae_logs/Polyp/version_0/checkpoints/epoch=116-step=75348.ckpt")[
+                torch.load("vae_logs/PolypDataset/version_0/checkpoints/epoch=180-step=7240.ckpt")[
                     "state_dict"])
 
         #segmodel
@@ -496,6 +499,10 @@ class PolypTestBed(BaseTestBed):
         #assign rep model
         if rep_model == "vae":
             self.rep_model = self.vae
+        elif rep_model=="glow":
+            self.glow = Glow(3, 32, 4).cuda().eval()
+            self.glow.load_state_dict(torch.load("glow_logs/Polyp_checkpoint/model_040001.pt"))
+            self.rep_model = self.glow
         else:
             self.rep_model = self.classifier
 
@@ -562,8 +569,8 @@ class SemanticTestBed32x32(BaseTestBed):
         self.trans = transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor(), ])
-        self.ood_dict = {#"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
-                #"CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
+        self.ood_dict = {"CIFAR10": CIFAR10("../../Datasets/cifar10", train=False, transform=self.trans, download=True),
+                "CIFAR100": CIFAR100("../../Datasets/cifar100", train=False, transform=self.trans, download=True),
                 "MNIST": MNIST3("../../Datasets/mnist", train=False, transform=self.trans, download=True),
                 "EMNIST": EMNIST3("../../Datasets/emnist", train=False, transform=self.trans, download=True)}
         self.ind, self.ind_val = torch.utils.data.random_split(self.ood_dict.pop(mode), [0.5, 0.5])
@@ -584,6 +591,7 @@ class SemanticTestBed32x32(BaseTestBed):
 
             self.classifier = WrappedResnet(self.classifier)
             config = yaml.safe_load(open("vae/configs/vae.yaml"))
+
             self.vae = CIFARVAE().cuda().eval()
             vae_exp = VAEXperiment(self.vae, config)
             vae_exp.load_state_dict(
@@ -609,8 +617,14 @@ class SemanticTestBed32x32(BaseTestBed):
             raise NotImplementedError
         if rep_model=="vae":
             self.rep_model=self.vae
-        else:
+        elif rep_model=="classifier":
             self.rep_model=self.classifier
+        elif rep_model=="glow":
+            self.glow = Glow(3, 32, 4).cuda().eval()
+            if mode=="MNIST" or mode=="EMNIST":
+                mode = mode+"3" #hacky
+            self.glow.load_state_dict(torch.load(f"glow_logs/{mode}_checkpoint/model_040001.pt"))
+            self.rep_model=self.glow
 
         self.num_classes = 10
 

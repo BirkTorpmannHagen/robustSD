@@ -272,16 +272,16 @@ def build_nico_dataset(use_track, root, val_ratio, train_transform, val_transfor
     val_dataset = NICODataset(image_path_list[:n], label_map_json, val_transform)
     return train_dataset, val_dataset
 
-def build_polyp_dataset(root, ex=False):
+def build_polyp_dataset(root, ex=False, img_size=512):
     if ex:
         translist = [alb.Compose([
             i,
-            alb.Resize(512, 512)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True),
+            alb.Resize(img_size, img_size)]) for i in [alb.HorizontalFlip(p=0), alb.HorizontalFlip(always_apply=True),
                                              alb.VerticalFlip(always_apply=True), alb.RandomRotate90(always_apply=True),
                                              ]]
     else:
         translist = [alb.Compose([
-            alb.Resize(512, 512)])]
+            alb.Resize(img_size, img_size)])]
     inds = []
     vals = []
     oods = []
@@ -380,6 +380,9 @@ class NjordDataset(LoadImagesAndLabels):
     def __getitem__(self, item):
         x, targets, paths, shapes = super().__getitem__(item)
         return x, targets, paths, shapes
+
+    def __len__(self):
+        return min(super().__len__(), 10000)
 class NICOTestDataset(data.Dataset):
     def __init__(self, image_path_list, transform):
         super().__init__()

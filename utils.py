@@ -39,10 +39,11 @@ class ArgumentIterator:
 
     def __next__(self):
         if self.index >= len(self.iterable):
+            # print("stopping")
             raise StopIteration
         else:
             self.index += 1
-            return *self.iterable[self.index-1], *self.variables
+            return self.iterable[self.index-1], *self.variables
 
     def __iter__(self):
         return self

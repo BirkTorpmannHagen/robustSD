@@ -16,7 +16,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def sample_data(dataset, batch_size):
-    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, num_workers=10, collate_fn=LoadImagesAndLabels.collate_fn)
+    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, num_workers=3)
 
     loader = iter(loader)
 
@@ -26,7 +26,7 @@ def sample_data(dataset, batch_size):
 
         except StopIteration:
             loader = DataLoader(
-                dataset, shuffle=True, batch_size=batch_size, num_workers=4,collate_fn=LoadImagesAndLabels.collate_fn
+                dataset, shuffle=True, batch_size=batch_size, num_workers=3
              )
             loader = iter(loader)
             yield next(loader)
@@ -139,12 +139,13 @@ if __name__ == "__main__":
     # train_new(dataset)
     # dataset = EMNIST3("../../Datasets/EMNIST", train=True, transform=trans, download=True)
     # train_new(dataset)
-    dataset,_,_= build_njord_datasets(32)
+    # dataset,_,_= build_njord_datasets(32)
+    dataset, _, _ = build_polyp_dataset("../../Datasets/Polyps", img_size=32)
     # trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
     # dataset, _ = build_imagenette_dataset("../../Datasets/imagenette2", trans, trans)
     train_new(dataset, img_size=32)
 
     # trans = transforms.Compose([transforms.Resize((32,32)), transforms.RandomHorizontalFlip(), transforms.ToTensor()])
-    dataset, _ = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
+    # dataset, _ = build_nico_dataset(1, "../../Datasets/NICO++", 0.2, trans, trans, context="dim", seed=0)
 
-    train_new(dataset, img_size=32)
+    # train_new(dataset, img_size=32)

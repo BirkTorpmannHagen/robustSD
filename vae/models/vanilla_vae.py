@@ -330,7 +330,7 @@ class VanillaVAE(BaseVAE):
         modules = []
         if hidden_dims is None:
             hidden_dims = [4, 8, 16, 32, 64, 128, 256, 512]
-
+        self.criterion = nn.CrossEntropyLoss()
 
         # Build Encoder
         for h_dim in hidden_dims:

@@ -86,7 +86,7 @@ class RabanserSD(BaseSD):
         #     torch.multiprocessing.set_start_method('spawn') #bodge code, sorry.
 
     def get_encodings(self, dataloader):
-        encodings = np.zeros((len(dataloader),32, self.rep_model.latent_dim))
+        encodings = np.zeros((len(dataloader),self.testbed.batch_size, self.rep_model.latent_dim))
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0]
             with torch.no_grad():
@@ -356,11 +356,12 @@ class FeatureSD(BaseSD):
         self.num_features=num_features
 
     def get_features_encodings(self, dataloader):
-        features = np.zeros((len(dataloader),32))
-        encodings = np.zeros((len(dataloader),32, self.rep_model.latent_dim))
+        features = np.zeros((len(dataloader),self.testbed.batch_size))
+        encodings = np.zeros((len(dataloader),self.testbed.batch_size, self.rep_model.latent_dim))
+        print(encodings.shape)
         for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
             x = data[0].cuda()
-            features[i] = self.feature_fn(self.rep_model, x, self.num_features).cpu().numpy()
+            features[i] = self.feature_fn(self.rep_model, x, self.num_features)
             with torch.no_grad():
                 encodings[i] = self.rep_model.get_encoding(x).cpu().numpy()
         features = features.flatten()
@@ -369,9 +370,10 @@ class FeatureSD(BaseSD):
         # print(features.shape)
         return features, encodings
 
-    def paralell_process(self,start, stop, biased_sampler_encodings, biased_sampler_features, ind_encodings, ind_features, fold_name, biased_sampler_name, losses):
-        sample_norms = biased_sampler_features[start:stop]
-        sample_encodings = biased_sampler_encodings[start:stop]
+    def paralell_process(self,size, biased_sampler_encodings, biased_sampler_features, ind_encodings, ind_features, fold_name, biased_sampler_name, losses):
+        rand_idx = np.random.randint(0, len(biased_sampler_features), size)
+        sample_norms = biased_sampler_features[rand_idx]
+        sample_encodings = biased_sampler_encodings[rand_idx]
         # print(f"{fold_name}: {sample_norms}")
         if self.k!=0:
             k_nearest_ind = get_debiased_samples(ind_encodings, ind_features, sample_encodings, sample_norms, k=self.k)
@@ -379,7 +381,8 @@ class FeatureSD(BaseSD):
             print("\t\t", p_value)
         else:
             p_value = ks_2samp(sample_norms, ind_features)[1]
-        return p_value,losses[fold_name][biased_sampler_name][start:stop]
+            print("\t\t", p_value)
+        return p_value,losses[fold_name][biased_sampler_name][rand_idx]
 
     def compute_pvals_and_loss_for_loader(self, ind_norms, ind_encodings, dataloaders, sample_size):
 
@@ -423,13 +426,12 @@ class FeatureSD(BaseSD):
                 biased_sampler_norms, biased_sampler_encodings = biased_sampler_norms_encodings
 
                 args = [ biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses]
-                pool = multiprocessing.Pool(processes=1)
-                startstop_iterable = list(zip(range(0, len(biased_sampler_encodings), sample_size),
-                                            range(sample_size, len(biased_sampler_encodings) + sample_size, sample_size)))[
-                                   :-1]
-                # results = []
-                # for start, stop in startstop_iterable:
-                #     results.append(self.paralell_process(start, stop, biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses))
+                pool = multiprocessing.Pool(processes=10)
+                startstop_iterable = [sample_size for _ in range(100)]
+                results = []
+                # print(f"iterating over {startstop_iterable}")
+                # for size in startstop_iterable:
+                #     results.append(self.paralell_process(size, biased_sampler_encodings, biased_sampler_norms, ind_encodings, ind_norms, fold_name, biased_sampler_name, losses))
                 results = pool.starmap(self.paralell_process, ArgumentIterator(startstop_iterable, args))
                 pool.close()
                 for p_value, sample_loss in results:

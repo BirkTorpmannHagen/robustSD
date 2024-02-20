@@ -35,6 +35,8 @@ import math
 # pd.set_option('display.precision', 2)
 pd.options.display.float_format = '{:.2f}'.format
 
+
+
 def aggregate_semantic_data():
     table_data = []
 
@@ -62,7 +64,7 @@ def aggregate_semantic_data():
     df = pd.concat(table_data)
     return df
 
-def aggregate_covariate_data():
+def aggregate_covariate_data(mode="normal"):
     table_data = []
 
     for dataset in ["CIFAR10", "CIFAR100", "imagenette", "NICO", "Njord", "Polyp"]:
@@ -70,33 +72,18 @@ def aggregate_covariate_data():
             for dsd_type in ["ks", "typicality_ks_glow", "grad_magnitude", "odin", "cross_entropy"]:
                 for k in ["", "_5NN"]:
                     dsd = f"{dsd_type}{k}"
-                    fname = f"new_data/{dataset}_normal_{dsd}_{sample_size}.csv"
+                    fname = f"new_data/{dataset}_{mode}_{dsd}_{sample_size}.csv"
                     data = open_and_process(fname, filter_noise=False)
                     if data is None:
                         continue
                     data["Dataset"] = dataset
                     data["OOD Detector"] = dsd
                     data["Sample Size"] = sample_size
+                    data["Type"] = data["OOD Detector"].apply(lambda x: "kNNDSD" if "5NN" in x else "Vanilla")
+                    data["Base"] = data["OOD Detector"].apply(lambda x: x.split("_5NN")[0] if "5NN" in x else x)
                     table_data.append(data)
     df = pd.concat(table_data)
     return df
-def open_and_merge():
-        # summarize overall results;
-    table_data = []
-    for dataset in ["CIFAR10_normal", "CIFAR100_normal", "NICO_noise", "Njord_noise", "Polyp_noise",
-                    "imagenette_normal"]:
-        for dsd in ["ks", "ks_5NN", "typicality"]:
-            for sample_size in [50, 100, 200, 500]:
-                fname = f"new_data/{dataset}_{dsd}_{sample_size}.csv"
-                data = open_and_process(fname)
-                if data is None:
-                    continue
-                data["Dataset"] = dataset
-                data["OOD Detector"] = dsd
-                data["Sample Size"] = sample_size
-                table_data.append(data)
-    merged = pd.concat(table_data)
-    return merged
 def get_threshold(data):
     ood = data[data["oodness"]>1]
     ind = data[data["oodness"]<=1]
@@ -105,8 +92,6 @@ def get_threshold(data):
         random_sampler_ind_data = ind[(ind["sampler"] == "ClusterSamplerWithSeverity_1.0")]
     threshold = random_sampler_ind_data["pvalue"].min()
     return threshold
-
-
 
 def fpr(data, threshold):
     """
@@ -360,58 +345,61 @@ def plot_regplots_organic_shifts():
 
 
 def plot_regplots():
-    # summarize overall results;
     merged = aggregate_covariate_data()
-
-    # random_merged = merged[merged["sampler"]=="RandomSampler"]
-    # print(merged.head(10))
-    # smapes = merged.groupby(["Dataset", "sampler", "OOD Detector", "fold"]).apply(lambda x: linreg_smape(x, random_merged))
-    correlations = merged.groupby(["Dataset","Sample Size", "OOD Detector"]).apply(lambda x: correlation(x))
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(correlations)
-    input()
-    # smapes = smapes.reset_index()
-    # print_smapes = smapes[smapes["fold"]=="ind"]
-    # print(print_smapes.groupby(["Dataset", "sampler", "OOD Detector"])[0].mean())
-
-    # smapes["fold"] = smapes["fold"].apply(lambda x: 0 if x=="ind" else round(float(x.split("_")[-1]),3))
-
-    # g = sns.FacetGrid(data=smapes, col="Dataset", margin_titles=True, sharey=False)
-    # g.map_dataframe(sns.lineplot, x="fold", y=0, hue="OOD Detector")
-    # g.set(ylim=(0, 1.5))
-    # g.add_legend(bbox_to_anchor=(1.05, 0.6), loc='upper left')
-    # plt.tight_layout()
-    # plt.show()
-    # print(smapes)
     merged.replace(["RandomSampler", "ClassOrderSampler", "SequentialSampler", "ClusterSampler"],
                              ["None", "Class", "Temporal", "Synthetic"], inplace=True)
     palette = sns.color_palette("muted", n_colors=10)
     colors = dict(zip(["None", "Class", "Temporal", "Synthetic"], [palette[7], palette[0], palette[2], palette[8]]))
 
-    g = sns.FacetGrid(data=merged, col="OOD Detector", row="Dataset", sharey=False, sharex=False, margin_titles=True, height=2.5, aspect=0.5)
-    g.map_dataframe(sns.scatterplot, x="pvalue", y="loss", hue="sampler", palette=colors)
-    g.set(xscale="log").set(xlim=0)
+    merged = merged[merged["Dataset"]=="CIFAR10"]
+    merged = merged[merged["Sample Size"]==100]
+    merged = merged[merged["Base"]=="ks"]
+    # print(merged[(merged['fold'] == 'ind')]['pvalue'])
 
-    g.add_legend(bbox_to_anchor=(0.75,0.05), fontsize=12, ncol=4)
-    plt.tight_layout()
-    # def annotate(data, **kws):
-    #     r = correlation(data)
-    #     ax = plt.gca()
-    #     ax.text(0.05, 0.8, 'r={:.2f}'.format(r), fontsize=10, fontweight="bold",
-    #                  transform=ax.transAxes)
+    min_value = merged[(merged['fold'] == 'ind') & (merged['sampler'] == 'None')]['pvalue'].min()
 
-    # g.map_dataframe(annotate)
-    plt.subplots_adjust(bottom=0.1)
-    plt.savefig("figures/regplots.eps")
+    g = sns.FacetGrid(data=merged, col="KNNDSD", row="sampler", sharey=False, sharex=False, margin_titles=True, height=2.5, aspect=2)
+    g.map_dataframe(sns.scatterplot, y="pvalue", x="loss", hue="fold", palette="mako")
+    # g.map_dataframe(sns.kdeplot, x="pvalue", hue="fold", palette="mako")
+    merged.rename(columns={"sampler":"Bias"}, inplace=True)
+    print(merged[merged['fold'] == 'ind'])
+    print(min_value)
+    def draw_min_line(*args, **kwargs):
+        plt.axhline(y=min_value, color='red', linestyle='--', lw=2)
+
+    g.map(draw_min_line)
+    g.set(yscale="log").set(ylim=0)
+
+    plt.savefig("figures/regplots.png")
     plt.show()
 
-    # def annotate(data, **kws):
-    #     r = correlation(data)
-    #     ax = plt.gca()
-    #     ax.set_title('r={:.2f}'.format(r), fontsize=10, fontweight="bold",
-    #             transform=ax.transAxes)
-    # g.map_dataframe(annotate)
+def plot_variances():
+    merged = aggregate_covariate_data()
+    merged.replace(["RandomSampler", "ClassOrderSampler", "SequentialSampler", "ClusterSampler"],
+                             ["None", "Class", "Temporal", "Synthetic"], inplace=True)
+    palette = sns.color_palette("muted", n_colors=10)
+    colors = dict(zip(["None", "Class", "Temporal", "Synthetic"], [palette[7], palette[0], palette[2], palette[8]]))
+    print(merged.head(20))
+    merged = merged[merged["Dataset"]=="CIFAR10"]
+    print("dataset")
+    print(merged.head(20))
+    print("sample size")
+    merged = merged[merged["Sample Size"]==100]
+    print(merged.head(20))
 
+    merged = merged[merged["Base"]=="ks"]
+    merged = merged[merged["fold"]=="ind"]
+    merged["pvalue"] = merged["pvalue"].apply(lambda x: math.log(x, 10) if x!=0 else -255)
+    print(merged.columns)
+    print(merged.head(20))
+    g = sns.FacetGrid(data=merged, row="Type", sharey=False, sharex=False, margin_titles=True, height=2.5, aspect=2)
+    g.map_dataframe(sns.kdeplot, x="pvalue", hue="sampler", palette="mako")
+    merged.rename(columns={"sampler":"Bias"}, inplace=True)
+    print(merged[merged['fold'] == 'ind'])
+    # g.set(xscale="log")
+    plt.legend()
+    plt.savefig("figures/kn_kdes.png")
+    plt.show()
 
 def illustrate_clustersampler():
     fig, ax = plt.subplots(5,1, sharex=False, sharey=Fa)
@@ -434,6 +422,7 @@ def illustrate_clustersampler():
         ax[i].patch.set_visible(False)
     fig.text(0.5, 0.05, 'Index Order', ha='center')
     fig.text(0.1, 0.5, 'Bias Severity', va='center', rotation='vertical')
+
     plt.savefig("bias_severity.eps")
     plt.show()
 
@@ -476,20 +465,18 @@ def breakdown_by_sample_size(placeholder=False, metric="DR"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     # print(df.groupby(["Dataset", "Sample Size"])["DR"].mean())
     # input()
-    df["KN"] = df["OOD Detector"].apply(lambda x: "kNDSD" if "5NN" in x else "Vanilla")
-    df["Base"] = df["OOD Detector"].apply(lambda x: x.split("_5NN")[-1] if "5NN" in x else x)
+    df["Type"] = df["OOD Detector"].apply(lambda x: "kNNDSD" if "5NN" in x else "Vanilla")
+    df["Base"] = df["OOD Detector"].apply(lambda x: x.split("_5NN")[0] if "5NN" in x else x)
     df["Dataset"]=df["Dataset"].apply(lambda x: x.split("_")[0].capitalize())
     # df = df[df["Sampler"]=="RandomSampler"]
-    print(df.groupby(["Dataset", "Sample Size", "KN"]).head(10))
-    g = sns.FacetGrid(data=df, col="Dataset", sharey=False, sharex=False)
-
-    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="KN")
-    # g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="KN")
+    g = sns.FacetGrid(data=df, col="Dataset", row="Base", sharey=True, sharex=False)
+    g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="Type")
+    # g.map_dataframe(sns.lineplot, x="Sample Size", y="DR", hue="KNNDSD")
     g.add_legend()
     plt.savefig("test_plots/samplesizebreakdown.png")
     plt.show()
 
-def breakdown_by_sampler(placeholder=False, metric="FPR"):
+def breakdown_by_sampler(placeholder=False, metric="DR"):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
     df = df.groupby(["Dataset", "Sampler", "OOD Detector"])[metric].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
@@ -539,7 +526,6 @@ def plot_severity(dataset,sample_size):
     plt.show()
 def summarize_results(placeholder=False):
     df = get_classification_metrics_for_all_experiments(placeholder=placeholder)
-    # df =  df[df["Sample Size"]==500]
     df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR", "AUROC", "AUPR"]].mean()
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
@@ -579,7 +565,7 @@ def get_semantic_metrics_for_all_experiments(placeholder=False):
 
     for dataset in ["CIFAR10", "CIFAR100", "EMNIST", "MNIST"]:
         for sample_size in [30, 50, 100, 200, 500]:
-            for dsd_type in ["ks", "typicality", "grad_magnitude", "odin", "cross_entropy"]:
+            for dsd_type in ["ks", "typicality_ks_glow", "grad_magnitude", "odin", "cross_entropy"]:
                 for k in ["", "_5NN"]:
                     dsd = f"{dsd_type}{k}"
                     fname = f"new_data/Semantic_{dataset}_{dsd}_{sample_size}.csv"
@@ -601,9 +587,12 @@ def get_semantic_metrics_for_all_experiments(placeholder=False):
                             subset = data[(data["sampler"] == sampler)&((data["fold"] == fold)|(data["fold"] == "ind"))]
                             table_data.append({"Dataset": dataset, "OOD Detector": dsd, "Sample Size": sample_size, "fold": fold,
                                                "Sampler": sampler,
+                                               "KNNDSD": "KNNDSD" if "5NN" in dsd else "Baseline",
                                                "FPR": fpr(subset, threshold=threshold),
                                                "FNR": fnr(subset, threshold=threshold),
                                                "DR": balanced_accuracy(subset, threshold=threshold),
+                                               "AUROC": auroc(subset),
+                                               "AUPR": aupr(subset),
                                                })
     df = pd.DataFrame(data=table_data)
     return df
@@ -732,49 +721,36 @@ def experiment_prediction(fname):
     plt.show()
 
 def plot_lossvp_for_fold():
-    def wasserstein_from_random(data):
-
-        random = np.array(data[data["sampler"]=="RandomSampler"]["pvalue"]).reshape(-1,1)
-        # print(data["sampler"].unique())
-        bias = np.array(
-            data[(data["sampler"]!="RandomSampler")&(data["sampler"]!="ClusterSampler")]["pvalue"]
-
-            ).reshape(-1,1)
-        s = MinMaxScaler()
-        random = s.fit_transform(random)
-        bias = s.transform(bias)
-        return np.abs(random.mean()-bias.mean())
-        # return
-        # return ks_2samp(random["pvalue"], cluster["pvalue"])[1]
-    def fold_to_float(fold):
-        return round(float(fold.split("_")[-1]),2) if fold!="ind" else 0
-
-    df = open_and_merge()
-    # df = df[df["sampler"]!="ClassOrderSampler"]
-    df = df[df["Sample Size"]==100]
-    df["fold"]=df["fold"].apply(fold_to_float)
-    df_g = df.groupby(["Dataset", "OOD Detector"]).apply(wasserstein_from_random)
-    print(df_g)
-    input()
-    df_g = df_g.reset_index()
-
-    # g = sns.FacetGrid(df_g,col="Dataset", sharex=False, sharey=False, margin_titles=True)
-    # g = sns.FacetGrid(df,col="Dataset", row="OOD Detector", sharex=False, sharey=False, margin_titles=True)
-    # g.map_dataframe(sns.scatterplot, y="loss", x="pvalue", hue="sampler", palette="mako")
-    # g.set(xscale="log")
-    # plt.show()
-    # g.map_dataframe(sns.lineplot, x="fold", y=0, hue="OOD Detector")
-    # g.set(yscale="log")
-    # g.add_legend(bbox_to_anchor=(1.05, 0.6), loc='upper left')
-    # plt.legend(bbox_to_anchor=(1.05, 0.6), loc='upper left')
-    # g.tight_layout()
-    # plt.show()
+    # def wasserstein_from_random(data):
     #
-    # df["pvalue"]=df["pvalue"].apply(lambda x: np.log(x))
-
-
-    # g.set(ylim=(0, df["loss"].max()))
-    # g.set(xscale="log")
+    #     random = np.array(data[data["sampler"]=="RandomSampler"]["pvalue"]).reshape(-1,1)
+    #     # print(data["sampler"].unique())
+    #     bias = np.array(
+    #         data[(data["sampler"]!="RandomSampler")&(data["sampler"]!="ClusterSampler")]["pvalue"]
+    #
+    #         ).reshape(-1,1)
+    #     s = MinMaxScaler()
+    #     random = s.fit_transform(random)
+    #     bias = s.transform(bias)
+    #     return np.abs(random.mean()-bias.mean())
+    #     # return
+    #     # return ks_2samp(random["pvalue"], cluster["pvalue"])[1]
+    # def fold_to_float(fold):
+    #     return round(float(fold.split("_")[-1]),2) if fold!="ind" else 0
+    #
+    df = aggregate_covariate_data()
+    njord = df[df["Dataset"]=="Njord"]
+    njord = njord[njord["Sample Size"]==200]
+    print(njord)
+    g = sns.FacetGrid(data=njord,col="OOD Detector", row="sampler", sharex=False, sharey=False, margin_titles=True)
+    g.map_dataframe(sns.scatterplot, y="loss", x="pvalue", hue="fold", palette="mako")
+    g.set(xscale="log")
+    plt.show()
+    g.add_legend(bbox_to_anchor=(1.05, 0.6), loc='upper left')
+    plt.legend(bbox_to_anchor=(1.05, 0.6), loc='upper left')
+    g.tight_layout()
+    plt.savefig("test_plots/lossvp_fold.png")
+    plt.show()
 
 def plot_severities():
     dfs = []
@@ -891,12 +867,27 @@ def plot_pvaluedist():
 
 def boxplot_test():
     data = get_classification_metrics_for_all_experiments()
-    data["KN"] = data["OOD Detector"].apply(lambda x: "5NN" in x)
+    data["Type"] = data["OOD Detector"].apply(lambda x: "5NN" in x)
 
-    sns.boxplot(data=data, x="Sampler", y="DR", hue="KN")
+    sns.boxplot(data=data, x="Sampler", y="DR", hue="KNNDSD")
     plt.savefig("test_plots/boxplot_test.png")
     plt.show()
     plt.close()
+
+def test_simple_regressor():
+    pass
+
+def plot_semantic_kdes():
+    df = aggregate_semantic_data()
+    df = df[df["Sample Size"]==100]
+    df = df[df["Dataset"]=="MNIST"]
+    g = sns.FacetGrid(data=df, col="OOD Detector", sharey=False, sharex=False, margin_titles=True)
+    g.map_dataframe(sns.histplot, x="pvalue", hue="fold", palette="mako", bins=50).set(xscale="log", yscale="log")
+    g.add_legend()
+    plt.savefig("test_plots/semantic_kde.png")
+    plt.show()
+
+
 
 if __name__ == '__main__':
     """
@@ -967,31 +958,37 @@ if __name__ == '__main__':
     # collect_losswise_metrics("data/imagenette_ks_5NN_100_fullloss.csv")
     # boxplot_test()
     # compare_testbed_encs()
-    summarize_results(placeholder=False)
+    # summarize_results(placeholder=False)
     # input()
     # data_df = aggregate_semantic_data()
     # data_df = data_df[data_df["Sample Size"]==100]
     # # data_df = data_df[data_df["Dataset"]=="CIFAR10"]
-    # data_df["KN"] = data_df["OOD Detector"].apply(lambda x: "5NN" in x)
+    # data_df["Type"] = data_df["OOD Detector"].apply(lambda x: "5NN" in x)
     # data_df["Base"] = data_df["OOD Detector"].apply(lambda x: x.split("_5NN")[0] if "5NN" in x else x)
     # data_df["pvalue"] = data_df["pvalue"].apply(lambda x: np.log10(x))
-    # print(data_df.groupby(["Base", "KN"])["pvalue"].mean())
-    # g = sns.FacetGrid(data=data_df, col="Base", row="KN", margin_titles=True, sharex=False, sharey=False, height=3, aspect=1.5)
+    # print(data_df.groupby(["Base", "Type"])["pvalue"].mean())
+    # g = sns.FacetGrid(data=data_df, col="Base", row="KNNDSD", margin_titles=True, sharex=False, sharey=False, height=3, aspect=1.5)
     # g.map_dataframe(sns.histplot, x="pvalue", hue="sampler")
     # plt.savefig("test_plots/semantic_kde.png")
     # plt.show()
 
     # df = get_semantic_metrics_for_all_experiments()
     # df = df[df["Sample Size"]==30]
-    # df["KN"] = df["OOD Detector"].apply(lambda x: "5NN" in x)
+    # df["Type"] = df["OOD Detector"].apply(lambda x: "5NN" in x)
     # df["Base"] = df["OOD Detector"].apply(lambda x: x.split("_5NN")[0] if "5NN" in x else x)
     # g = sns.FacetGrid(data=df, col="Dataset", row="fold")
-    # g.map_dataframe(sns.boxplot, hue="KN", y="DR", x="Base")
+    # g.map_dataframe(sns.boxplot, hue="KNNDSD", y="DR", x="Base")
     # plt.savefig("test_plots/semantic.png")
     # plt.show()
-    # df = df.groupby(["Sampler", "Dataset", "fold", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
+    # df = df.groupby(["Dataset", "fold", "Type"])[["FPR", "FNR", "DR", "AUROC", "AUPR"]].mean()
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(df)
+
+    # df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR", "AUROC", "AUPR"]].mean()
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(df)
+    # plot_semantic_kdes()
+    # plot_semantic_kdes()
 
 
     # df = df.groupby(["Dataset", "OOD Detector"])[["FPR", "FNR", "DR"]].mean()
@@ -1002,7 +999,8 @@ if __name__ == '__main__':
     # breakdown_by_sampler()
     # input()
     #
-    #sample_size_breakdown
+    # sample_size_breakdown
+    # test_simple_regressor()
     # breakdown_by_sample_size()
 
     # thresholding_plots
@@ -1017,6 +1015,7 @@ if __name__ == '__main__':
     """
     # correlation_summary()
     # plot_regplots()
+    # plot_variances()
     # plot_regplots_organic_shifts()
     # get_kl()
     # df1 = pd.read_csv("new_ind_njord.csv")

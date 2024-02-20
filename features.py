@@ -16,7 +16,7 @@ def odin_fgsm(model, image):
     nnOutputs = torch.exp(nnOutputs) / torch.sum(torch.exp(nnOutputs))
     nnOutputs = nnOutputs.unsqueeze(0)
     maxIndexTemp = torch.argmax(nnOutputs)
-    loss = torch.nn.CrossEntropyLoss()(nnOutputs, torch.autograd.Variable(torch.LongTensor([maxIndexTemp]).cuda()))
+    loss = model.criterion(nnOutputs, torch.ones_like(output)*maxIndexTemp)
     loss.backward()
     data_grad = image.grad.data
     data_grad = data_grad.squeeze(0)
@@ -26,8 +26,8 @@ def odin_fgsm(model, image):
     return perturbed_image
 def odin(model, image, feature_transform):
     perturbed_image = odin_fgsm(model, image)
-    return cross_entropy(model, perturbed_image)
-
+    val =  cross_entropy(model, perturbed_image)
+    return val
 
 def jacobian(model, image, num_features=1):
     return torch.norm(
@@ -37,7 +37,7 @@ def cross_entropy(model, image, num_features=1):
     out = model(image)
     if isinstance(out, list):
         out = out[1]  #for njord
-    return F.cross_entropy(out, torch.ones_like(out)).item()
+    return model.criterion(out, torch.ones_like(out)).item()
 
 
 def grad_magnitude(model, image, num_features=1):
@@ -45,7 +45,7 @@ def grad_magnitude(model, image, num_features=1):
     output = model(image)
     if isinstance(output, list):
         output = output[1]  #for njord
-    loss = torch.nn.CrossEntropyLoss()(output, torch.ones_like(output))
+    loss = model.criterion(output, torch.ones_like(output))
     model.zero_grad()
     loss.backward()
     data_grad = image.grad.data
@@ -76,13 +76,13 @@ def jvp(model, image, num_features=1):
 
 def typicality_ks_glow(model, img, num_features=1):
     assert num_features==1
-
-    image = torchvision.transforms.Resize((32,32))(img)
-    image = image * 255
-    n_bins = 2.0 ** 5
-    image = torch.floor(image / 2 ** (8 - 5))
-
-    image = image / n_bins - 0.5
+    image = img
+    # image = torchvision.transforms.Resize((32,32))(img)
+    # image = image * 255
+    # n_bins = 2.0 ** 5
+    # image = torch.floor(image / 2 ** (8 - 5))
+    #
+    # image = image / n_bins - 0.5
     return -model.estimate_log_likelihood(image)
 
 
